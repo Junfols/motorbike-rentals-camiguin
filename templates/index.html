@@ -356,7 +356,20 @@
 </div>
 
 <!-- Booking Confirmation Modal -->
-  <div id="confirm-summary" class="confirm-summary-card"></div>
+<div id="confirmation-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+  <div class="modal-card modal-md">
+    <div class="modal-header">
+      <h3 id="confirm-modal-title">Booking Request Submitted!</h3>
+      <button type="button" class="icon-btn" data-close-modal="confirmation-modal" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body text-center">
+      <div class="success-circle">&#10003;</div>
+      <p class="text-muted">Save your reference code below to check approval from the rental shop anytime.</p>
+      <div class="booking-code-banner">
+        <span id="confirm-booking-code">MR-0000-0000</span>
+        <button type="button" id="copy-code-btn" class="btn btn-sm btn-outline">Copy</button>
+      </div>
+      <div id="confirm-summary" class="confirm-summary-card"></div>
       <div class="confirm-actions">
         <a id="confirm-track-link" href="/bookings" class="btn btn-primary">Track My Booking</a>
         <a id="confirm-whatsapp-link" href="#" target="_blank" rel="noopener" class="btn btn-outline">Message Shop on WhatsApp</a>
@@ -364,4 +377,8 @@
     </div>
   </div>
 </div>
-	{% endblock %}
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/storefront.js?v=8"></script>
+{% endblock %}
