@@ -368,6 +368,7 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             payment_reference TEXT NOT NULL DEFAULT '',
             payment_proof_url TEXT NOT NULL DEFAULT '',
             payment_status TEXT NOT NULL DEFAULT 'unpaid',
+            balance_paid INTEGER NOT NULL DEFAULT 0,
             deposit_amount REAL NOT NULL,
             notes TEXT NOT NULL DEFAULT '',
             admin_notes TEXT NOT NULL DEFAULT '',
@@ -469,6 +470,7 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
             payment_reference TEXT NOT NULL DEFAULT '',
             payment_proof_url TEXT NOT NULL DEFAULT '',
             payment_status TEXT NOT NULL DEFAULT 'unpaid',
+            balance_paid INTEGER NOT NULL DEFAULT 0,
             deposit_amount DOUBLE PRECISION NOT NULL,
             notes TEXT NOT NULL DEFAULT '',
             admin_notes TEXT NOT NULL DEFAULT '',
@@ -532,7 +534,7 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
                 "extra_helmet_fee": "50",
                 "top_box_fee": "100",
                 "opening_hours": "Daily, 7:00 AM – 8:00 PM",
-                "terms_note": "Valid Driver's License and refundable security deposit required upon pickup.",
+                "terms_note": "1 valid ID required upon pickup. Reservation fee is credited toward rental. Remaining balance & security deposit are settled at pickup.",
                 "telegram_bot_token": os.environ.get("TELEGRAM_BOT_TOKEN", ""),
                 "admin_telegram_chat_id": os.environ.get("ADMIN_TELEGRAM_CHAT_ID", ""),
                 "admin_notify_email": os.environ.get("ADMIN_NOTIFY_EMAIL", ""),
@@ -674,7 +676,10 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
                 conn.execute(
                     "ALTER TABLE bookings ADD COLUMN payment_status TEXT NOT NULL DEFAULT 'unpaid'"
                 )
-
+            if "balance_paid" not in booking_cols:
+                conn.execute(
+                    "ALTER TABLE bookings ADD COLUMN balance_paid INTEGER NOT NULL DEFAULT 0"
+                )
             _create_indexes(conn)
 
             existing_bikes = conn.execute("SELECT COUNT(*) FROM bikes").fetchone()[0]
