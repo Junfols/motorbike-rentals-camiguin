@@ -232,6 +232,23 @@
           actions.push(`<button type="button" class="btn btn-sm btn-success" data-booking-action="completed" data-id="${b.id}">Mark Returned</button>`);
         }
 
+        const showBalanceTools = ["confirmed", "active", "completed"].includes(b.status);
+        const balanceOwed = Number(b.balance_due !== undefined && b.balance_due !== null ? b.balance_due : b.total_amount) > 0;
+        if (showBalanceTools && balanceOwed) {
+          actions.push(
+            b.balance_paid
+              ? `<button type="button" class="btn btn-sm btn-outline" data-balance-paid="0" data-id="${b.id}">Undo Balance Paid</button>`
+              : `<button type="button" class="btn btn-sm btn-primary" data-balance-paid="1" data-id="${b.id}">Mark Balance Paid</button>`
+          );
+        }
+        const balanceBadge = !showBalanceTools
+          ? ""
+          : !balanceOwed
+          ? `<span class="badge badge-verified">Paid in full</span>`
+          : b.balance_paid
+          ? `<span class="badge badge-verified">Balance Paid</span>`
+          : `<span class="badge badge-submitted">Balance Unpaid</span>`;
+
         const payStatus = b.payment_status || "unpaid";
         const payLabel = window.MotoRide && window.MotoRide.paymentStatusLabel
           ? window.MotoRide.paymentStatusLabel(payStatus)
@@ -278,7 +295,7 @@
               </div>
               <div>
                 <span class="trip-detail-label">Collect on Pickup / Deposit</span>
-                <strong>${escapeHtml(formatMoney(collectDue))}</strong>
+                <strong>${escapeHtml(formatMoney(collectDue))}</strong> ${balanceBadge}
                 <div class="text-muted">${hasOnlineFee && payStatus !== "rejected" && payStatus !== "refunded" ? `Paid online: -${escapeHtml(formatMoney(b.reservation_fee))} (${escapeHtml(payChannelLabel)})` : "Full rental due"} &bull; Dep: ${escapeHtml(formatMoney(b.deposit_amount))}</div>
               </div>
               <div>
@@ -486,6 +503,26 @@
   });
 
   bookingsList.addEventListener("click", async (event) => {
+    const balanceBtn = event.target.closest("[data-balance-paid]");
+    if (balanceBtn) {
+      const id = balanceBtn.getAttribute("data-id");
+      const paid = balanceBtn.getAttribute("data-balance-paid") === "1";
+      balanceBtn.disabled = true;
+      try {
+        await apiJson(`/api/partner/bookings/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ balance_paid: paid }),
+        });
+        await Promise.all([loadDashboard(), loadBookings()]);
+        showToast(paid ? "Balance marked as paid." : "Balance marked as unpaid.", "success");
+      } catch (err) {
+        showToast(err.message, "error");
+        balanceBtn.disabled = false;
+      }
+      return;
+    }
+
     const actionBtn = event.target.closest("[data-booking-action]");
     if (actionBtn) {
       const id = actionBtn.getAttribute("data-id");
