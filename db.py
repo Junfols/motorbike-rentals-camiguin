@@ -163,6 +163,7 @@ class DatabaseConnection:
         self._raw = raw_conn
         self.backend = backend
         self._tx_stack: list = []
+        self._manual_tx = None
 
     def execute(self, sql: str, params: tuple | list = ()) -> CompatCursor:
         if self.backend == "postgresql":
@@ -194,7 +195,13 @@ class DatabaseConnection:
     def begin_booking_lock(self, bike_id: int):
         """Acquire a write/row lock on a bike before availability counting and insert."""
         if self.backend == "postgresql":
-            self._raw.rollback()
+            if self._manual_tx is not None:
+                self.rollback()
+            elif not getattr(self._raw, "autocommit", False):
+                self._raw.rollback()
+            tx = self._raw.transaction()
+            tx.__enter__()
+            self._manual_tx = tx
             return self.execute(
                 "SELECT * FROM bikes WHERE id = ? FOR UPDATE", (bike_id,)
             ).fetchone()
@@ -202,13 +209,27 @@ class DatabaseConnection:
         return self.execute("SELECT * FROM bikes WHERE id = ?", (bike_id,)).fetchone()
 
     def commit(self):
+        if self.backend == "postgresql" and self._manual_tx is not None:
+            tx = self._manual_tx
+            self._manual_tx = None
+            tx.__exit__(None, None, None)
+            return
         self._raw.commit()
 
     def rollback(self):
+        if self.backend == "postgresql" and self._manual_tx is not None:
+            tx = self._manual_tx
+            self._manual_tx = None
+            tx.__exit__(RuntimeError, RuntimeError("rollback"), None)
+            return
         self._raw.rollback()
 
     def close(self):
-        self._raw.close()
+        try:
+            if self.backend == "postgresql" and self._manual_tx is not None:
+                self.rollback()
+        finally:
+            self._raw.close()
 
     def __enter__(self):
         if self.backend == "postgresql":
@@ -240,7 +261,7 @@ def get_connection(
     if is_postgres_url(target_url):
         import psycopg
 
-        raw = psycopg.connect(target_url, connect_timeout=15)
+        raw = psycopg.connect(target_url, connect_timeout=15, autocommit=True)
         return DatabaseConnection(raw, backend="postgresql")
 
     path = db_path or os.environ.get("MOTORIDE_DB_PATH") or DEFAULT_DB_PATH
