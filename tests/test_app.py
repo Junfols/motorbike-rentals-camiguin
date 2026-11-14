@@ -720,6 +720,330 @@ class MotorbikeRentalPWATests(unittest.TestCase):
             self.assertEqual(book.status_code, 201)
             self.assertEqual(book.get_json()["booking"]["total_amount"], 800.0)
 
+    def test_alert_settings_masking_and_secret_isolation(self):
+        from db import SECRET_SETTING_KEYS
+
+        # Unauthenticated requests cannot read or test admin alert secrets
+        self.assertEqual(self.client.get("/api/admin/settings").status_code, 401)
+        self.assertEqual(self.client.post("/api/admin/settings/test-alert", json={}).status_code, 401)
+
+        self.client.post("/api/admin/login", json={"password": "admin1234"})
+        put_resp = self.client.put(
+            "/api/admin/settings",
+            json={
+                "telegram_bot_token": "123456:TEST_BOT_TOKEN",
+                "admin_telegram_chat_id": "987654321",
+                "admin_notify_email": "owner@camiguin.ph",
+                "smtp_host": "smtp.gmail.com",
+                "smtp_port": "465",
+                "smtp_username": "owner@gmail.com",
+                "smtp_password": "app-secret-password",
+                "smtp_from_email": "noreply@camiguin.ph",
+                "notify_partner_email": True,
+                "notify_customer_email": True,
+            },
+        )
+        self.assertEqual(put_resp.status_code, 200)
+        admin_cfg = put_resp.get_json()["settings"]
+        self.assertTrue(admin_cfg["has_telegram_bot_token"])
+        self.assertTrue(admin_cfg["has_smtp_password"])
+        self.assertEqual(admin_cfg["admin_telegram_chat_id"], "987654321")
+        self.assertEqual(admin_cfg["smtp_port"], "465")
+        self.assertEqual(admin_cfg["notify_customer_email"], "1")
+        self.assertNotIn("telegram_bot_token", admin_cfg)
+        self.assertNotIn("smtp_password", admin_cfg)
+
+        # Updating non-secret field with blank token must keep saved token intact
+        keep_resp = self.client.put(
+            "/api/admin/settings",
+            json={"shop_name": "Motorbike Rentals Camiguin", "telegram_bot_token": ""},
+        )
+        self.assertEqual(keep_resp.status_code, 200)
+        self.assertTrue(keep_resp.get_json()["settings"]["has_telegram_bot_token"])
+
+        # Public endpoints must never leak secret settings or tokens
+        pub_settings = self.client.get("/api/settings").get_json()["settings"]
+        for key in SECRET_SETTING_KEYS:
+            self.assertNotIn(key, pub_settings)
+        home_html = self.client.get("/").get_data(as_text=True)
+        self.assertNotIn("TEST_BOT_TOKEN", home_html)
+        self.assertNotIn("app-secret-password", home_html)
+
+        # Public shop list must not expose partner telegram_chat_id
+        for shop in self.client.get("/api/shops").get_json()["shops"]:
+            self.assertNotIn("telegram_chat_id", shop)
+
+        # Invalid SMTP port is rejected
+        bad_port = self.client.put("/api/admin/settings", json={"smtp_port": "99999"})
+        self.assertEqual(bad_port.status_code, 400)
+
+        # Explicit clear flag wipes saved token
+        cleared = self.client.put(
+            "/api/admin/settings",
+            json={"clear_telegram_bot_token": True, "clear_smtp_password": True},
+        )
+        self.assertEqual(cleared.status_code, 200)
+        cleared_cfg = cleared.get_json()["settings"]
+        self.assertFalse(cleared_cfg["has_telegram_bot_token"])
+        self.assertFalse(cleared_cfg["has_smtp_password"])
+
+    def test_alert_dispatch_on_partner_and_booking_events(self):
+        dispatched = []
+
+        def _capture_dispatcher(fn, *args):
+            dispatched.append((fn.__name__, args))
+
+        alert_db = os.path.join(self.temp_dir.name, "alerts.db")
+        alert_app = create_app(
+            {
+                "TESTING": True,
+                "DB_PATH": alert_db,
+                "UPLOAD_FOLDER": self.upload_dir,
+                "SKIP_ICONS": True,
+                "NOTIFICATION_DISPATCHER": _capture_dispatcher,
+            }
+        )
+        client = alert_app.test_client()
+
+        client.post("/api/admin/login", json={"password": "admin1234"})
+        client.put(
+            "/api/admin/settings",
+            json={
+                "telegram_bot_token": "999:FAKE_TOKEN",
+                "admin_telegram_chat_id": "111222333",
+            },
+        )
+
+        # 1. Partner registration dispatches new partner alert and stores telegram_chat_id
+        reg = client.post(
+            "/api/partner/register",
+            json={
+                "shop_name": "Mantigue Scooters",
+                "owner_name": "Carlo Reyes",
+                "email": "carlo@mantigue.ph",
+                "phone": "09175551234",
+                "telegram_chat_id": "99887766",
+                "municipality": "Mahinog",
+                "password": "password123",
+            },
+        )
+        self.assertEqual(reg.status_code, 201)
+        reg_data = reg.get_json()
+        self.assertTrue(reg_data["platform_telegram_enabled"])
+        self.assertEqual(reg_data["shop"]["telegram_chat_id"], "99887766")
+        self.assertEqual(dispatched[-1][0], "notify_new_partner_registration")
+        self.assertEqual(dispatched[-1][1][1]["shop_name"], "Mantigue Scooters")
+        shop_id = reg_data["shop"]["id"]
+
+        # 2. Admin approves partner -> dispatches partner status change alert
+        upd = client.patch(f"/api/admin/shops/{shop_id}", json={"status": "approved"})
+        self.assertEqual(upd.status_code, 200)
+        self.assertEqual(dispatched[-1][0], "notify_partner_status_change")
+        self.assertEqual(dispatched[-1][1][1]["status"], "approved")
+
+        # 3. Partner updates telegram_chat_id and adds a bike
+        prof = client.put("/api/partner/profile", json={"telegram_chat_id": "55443322"})
+        self.assertEqual(prof.status_code, 200)
+        self.assertEqual(prof.get_json()["shop"]["telegram_chat_id"], "55443322")
+
+        add_bike = client.post(
+            "/api/partner/bikes",
+            data={
+                "name": "Yamaha Mio Gear",
+                "category": "Scooter",
+                "engine_cc": "125",
+                "transmission": "Automatic",
+                "daily_rate": "450",
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(add_bike.status_code, 201)
+        bike_id = add_bike.get_json()["bike"]["id"]
+
+        # 4. New customer booking dispatches notify_new_booking
+        book_resp = client.post(
+            "/api/bookings",
+            json={
+                "bike_id": bike_id,
+                "customer_name": "Liza Sober",
+                "customer_phone": "09181112222",
+                "customer_email": "liza@example.com",
+                "license_number": "G01-24-556677",
+                "pickup_date": self._future_str(3),
+                "return_date": self._future_str(5),
+            },
+        )
+        self.assertEqual(book_resp.status_code, 201)
+        booking_code = book_resp.get_json()["booking"]["booking_code"]
+        self.assertEqual(dispatched[-1][0], "notify_new_booking")
+        self.assertEqual(dispatched[-1][1][1]["telegram_chat_id"], "55443322")
+        self.assertEqual(dispatched[-1][1][2]["booking_code"], booking_code)
+
+        # 5. Customer pending cancellation dispatches notify_booking_cancelled_by_customer
+        cancel_resp = client.post(
+            "/api/bookings/cancel",
+            json={"booking_code": booking_code, "customer_phone": "09181112222"},
+        )
+        self.assertEqual(cancel_resp.status_code, 200)
+        self.assertEqual(dispatched[-1][0], "notify_booking_cancelled_by_customer")
+        self.assertEqual(dispatched[-1][1][2]["booking_code"], booking_code)
+
+    def test_notifications_delivery_and_test_alert_endpoints(self):
+        import json as _json
+        from unittest.mock import MagicMock, patch
+        import notifications
+
+        class _FakeHTTPResp:
+            def __init__(self, payload: dict):
+                self._raw = _json.dumps(payload).encode("utf-8")
+
+            def read(self):
+                return self._raw
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        telegram_calls = []
+
+        def _fake_urlopen(req, timeout=8):
+            telegram_calls.append(
+                {
+                    "url": req.full_url,
+                    "body": _json.loads(req.data.decode("utf-8")),
+                }
+            )
+            return _FakeHTTPResp({"ok": True, "result": {"message_id": 1}})
+
+        smtp_server = MagicMock()
+        smtp_ctx = MagicMock()
+        smtp_ctx.__enter__.return_value = smtp_server
+
+        settings = {
+            "shop_name": "Motorbike Rentals Camiguin",
+            "currency": "₱",
+            "telegram_bot_token": "bot123:XYZ",
+            "admin_telegram_chat_id": "10001",
+            "admin_notify_email": "admin@camiguin.ph",
+            "smtp_host": "smtp.example.com",
+            "smtp_port": "587",
+            "smtp_username": "mailer@example.com",
+            "smtp_password": "secret",
+            "smtp_from_email": "noreply@camiguin.ph",
+            "notify_partner_email": "1",
+            "notify_customer_email": "1",
+        }
+        shop = {
+            "shop_name": "Island Rides",
+            "municipality": "Mambajao",
+            "address": "National Hwy",
+            "email": "partner@islandrides.ph",
+            "telegram_chat_id": "20002",
+        }
+        booking = {
+            "booking_code": "MRC-TEST01",
+            "bike_name": "Honda ADV 160",
+            "pickup_date": self._future_str(1),
+            "return_date": self._future_str(3),
+            "rental_days": 2,
+            "pickup_time": "09:00",
+            "pickup_method": "shop",
+            "customer_name": "Marco Polo",
+            "customer_phone": "+639171234567",
+            "customer_email": "marco@example.com",
+            "total_amount": 1800,
+        }
+
+        with (
+            patch("urllib.request.urlopen", side_effect=_fake_urlopen),
+            patch("smtplib.SMTP", return_value=smtp_ctx) as mock_smtp,
+        ):
+            res = notifications.notify_new_booking(settings, shop, booking)
+
+        self.assertTrue(res["admin_telegram"]["ok"])
+        self.assertTrue(res["partner_telegram"]["ok"])
+        self.assertTrue(res["admin_email"]["ok"])
+        self.assertTrue(res["partner_email"]["ok"])
+        self.assertTrue(res["customer_email"]["ok"])
+        self.assertEqual([c["body"]["chat_id"] for c in telegram_calls], ["10001", "20002"])
+        mock_smtp.assert_called()
+        self.assertEqual(smtp_server.send_message.call_count, 3)
+
+        # Endpoint tests: /api/admin/settings/test-alert and /api/partner/profile/test-alert
+        self.client.post("/api/admin/login", json={"password": "admin1234"})
+        no_cfg = self.client.post("/api/admin/settings/test-alert", json={})
+        self.assertEqual(no_cfg.status_code, 400)
+        self.assertFalse(no_cfg.get_json()["ok"])
+
+        self.client.put(
+            "/api/admin/settings",
+            json={"telegram_bot_token": "bot123:XYZ", "admin_telegram_chat_id": "10001"},
+        )
+        with patch("urllib.request.urlopen", side_effect=_fake_urlopen):
+            admin_test = self.client.post("/api/admin/settings/test-alert", json={})
+        self.assertEqual(admin_test.status_code, 200)
+        self.assertTrue(admin_test.get_json()["results"]["telegram"]["ok"])
+
+        self.client.post(
+            "/api/partner/register",
+            json={
+                "shop_name": "Sunken Cemetery Bikes",
+                "owner_name": "Maya Lim",
+                "email": "maya@sunken.ph",
+                "phone": "09176667777",
+                "telegram_chat_id": "30003",
+                "password": "password123",
+            },
+        )
+        with patch("urllib.request.urlopen", side_effect=_fake_urlopen):
+            partner_test = self.client.post("/api/partner/profile/test-alert", json={})
+        self.assertEqual(partner_test.status_code, 200)
+        self.assertTrue(partner_test.get_json()["results"]["telegram"]["ok"])
+
+    def test_legacy_db_migrates_telegram_chat_id(self):
+        legacy_db = os.path.join(self.temp_dir.name, "legacy.db")
+        raw_conn = sqlite3.connect(legacy_db)
+        raw_conn.execute(
+            """
+            CREATE TABLE shops (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                shop_name TEXT NOT NULL,
+                slug TEXT NOT NULL UNIQUE,
+                owner_name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                phone TEXT NOT NULL,
+                whatsapp_number TEXT NOT NULL DEFAULT '',
+                municipality TEXT NOT NULL DEFAULT 'Mambajao',
+                address TEXT NOT NULL DEFAULT '',
+                description TEXT NOT NULL DEFAULT '',
+                delivery_fee REAL NOT NULL DEFAULT 200,
+                password_hash TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                is_main INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        raw_conn.commit()
+        raw_conn.close()
+
+        migrated_app = create_app(
+            {
+                "TESTING": True,
+                "DB_PATH": legacy_db,
+                "UPLOAD_FOLDER": self.upload_dir,
+                "SKIP_ICONS": True,
+            }
+        )
+        self.assertEqual(migrated_app.test_client().get("/api/health").status_code, 200)
+
+        check_conn = sqlite3.connect(legacy_db)
+        cols = [r[1] for r in check_conn.execute("PRAGMA table_info(shops)").fetchall()]
+        check_conn.close()
+        self.assertIn("telegram_chat_id", cols)
+
 
 if __name__ == "__main__":
     unittest.main()
