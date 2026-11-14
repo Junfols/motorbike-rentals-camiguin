@@ -1,4 +1,4 @@
-const CACHE_VERSION = "motoride-pwa-v5";
+const CACHE_VERSION = "motoride-pwa-v6";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -7,11 +7,11 @@ const PRECACHE_URLS = [
   "/bookings",
   "/offline",
   "/manifest.webmanifest",
-  "/static/css/style.css",
-  "/static/js/pwa.js",
-  "/static/js/storefront.js",
-  "/static/js/bookings.js",
-  "/static/js/partner.js",
+  "/static/css/style.css?v=6",
+  "/static/js/pwa.js?v=6",
+  "/static/js/storefront.js?v=6",
+  "/static/js/bookings.js?v=6",
+  "/static/js/partner.js?v=6",
   "/static/icons/icon-192.png",
   "/static/icons/icon-512.png",
   "/static/icons/icon.svg",
@@ -102,7 +102,23 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Static assets: cache-first with background refresh
+  // App scripts & stylesheets: network-first so UI deploys never run stale JS behind fresh HTML
+  if (url.pathname.startsWith("/static/js/") || url.pathname.startsWith("/static/css/")) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // Media assets (icons/images): cache-first with background refresh
   if (url.pathname.startsWith("/static/")) {
     event.respondWith(
       caches.match(request).then((cached) => {
