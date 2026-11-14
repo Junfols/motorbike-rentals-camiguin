@@ -60,7 +60,7 @@ from notifications import (
     send_test_alert,
 )
 
-ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
+ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "jfif", "webp"}
 
 
 def _normalize_phone(phone: str) -> str:
@@ -98,14 +98,14 @@ def _as_bool(value, default: bool = False) -> bool:
 def _validate_image_upload(
     image_file,
     prefix: str = "",
-    max_bytes: int = 4 * 1024 * 1024,
+    max_bytes: int = 8 * 1024 * 1024,
 ) -> tuple[str, bytes, str | None] | None:
     """Validate an uploaded image file and prepare its storage tuple without touching DB."""
     if not image_file or not getattr(image_file, "filename", ""):
         return None
     orig_name = str(image_file.filename)
     if not _allowed_image(orig_name):
-        raise ValueError("Uploaded image must be PNG, JPG, JPEG, or WEBP.")
+        raise ValueError("Uploaded image must be PNG, JPG, JPEG, JFIF, or WEBP.")
     raw_bytes = image_file.read()
     if not raw_bytes:
         raise ValueError("Uploaded image file is empty.")
