@@ -663,11 +663,6 @@
   }
 
   async function uploadQrImageFile(file) {
-    const validationError = validateQrImageFile(file);
-    if (validationError) {
-        throw new Error(validationError);
-    }
-
     const formData = new FormData();
     formData.append("qr_image", file);
     const data = await apiJson("/api/admin/settings/qr", {
@@ -679,6 +674,52 @@
       applyPaymentSettingsToForm(data.settings);
     }
     return data;
+  }
+  async function runQrUpload(file, { showSuccessToast = true } = {}) {
+    if (activeQrUploadPromise) {
+      return activeQrUploadPromise;
+    }
+    const validationErr = validateQrFileClient(file);
+    if (validationErr) {
+      qrAutoUploadedDone = false;
+      setQrHint(validationErr, "error");
+      showToast(validationErr, "error");
+      throw new Error(validationErr);
+    }
+
+    const uploadBtn = document.getElementById("upload-qr-btn");
+    const qrFileInput = document.getElementById("set-qr-image-file");
+    if (uploadBtn) {
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = "Uploading...";
+    }
+    setQrHint(`Uploading "${file.name}"...`, "neutral");
+
+    activeQrUploadPromise = (async () => {
+      try {
+        const data = await uploadQrImageFile(file);
+        qrAutoUploadedDone = true;
+        if (qrFileInput) qrFileInput.value = "";
+        if (showSuccessToast) {
+          showToast("GCash / Maya QR uploaded!", "success");
+        }
+        return data;
+      } catch (err) {
+        qrAutoUploadedDone = false;
+        const msg = err?.message || "Could not upload QR image.";
+        setQrHint(`Upload failed: ${msg}`, "error");
+        showToast(msg, "error");
+        throw err;
+      } finally {
+        activeQrUploadPromise = null;
+        if (uploadBtn) {
+          uploadBtn.disabled = false;
+          uploadBtn.textContent = "Upload QR Image";
+        }
+      }
+    })();
+
+    return activeQrUploadPromise;
   }
 
   async function loadSettings() {
@@ -1105,9 +1146,10 @@
 
     try {
       const qrFileInput = document.getElementById("set-qr-image-file");
-      if (qrFileInput && qrFileInput.files && qrFileInput.files[0]) {
-        await uploadQrImageFile(qrFileInput.files[0]);
-        qrFileInput.value = "";
+      if (activeQrUploadPromise) {
+        await activeQrUploadPromise;
+      } else if (qrFileInput && qrFileInput.files && qrFileInput.files[0]) {
+        await runQrUpload(qrFileInput.files[0], { showSuccessToast: false });
       }
       const data = await apiJson("/api/admin/settings", {
         method: "PUT",
