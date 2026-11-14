@@ -1865,3 +1865,164 @@ textarea:focus {
 .alert-test-result.err {
   color: var(--danger);
 }
+/* --- GCash / Maya Reservation Fee & Payment Verification --- */
+.payment-qr-section {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  margin: 14px 0;
+}
+
+.payment-qr-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.payment-qr-header h4 {
+  margin: 0;
+  font-size: 0.96rem;
+}
+
+.payment-fee-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.payment-qr-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+
+.payment-qr-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.payment-qr-img {
+  width: 156px;
+  height: 156px;
+  object-fit: contain;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px;
+}
+
+.payment-account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  font-size: 0.88rem;
+}
+
+.payment-channel-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+
+.payment-channel-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface, #ffffff);
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.payment-channel-chip input[type="radio"] {
+  width: auto;
+  margin: 0;
+}
+
+.payment-proof-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.admin-qr-preview-wrap {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px;
+  margin: 10px 0 14px;
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.admin-qr-preview-img {
+  width: 112px;
+  height: 112px;
+  object-fit: contain;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+}
+
+.badge-verified {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.badge-submitted {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.badge-rejected {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.badge-unpaid {
+  background: var(--surface-alt);
+  color: var(--muted);
+}
+
+.payment-proof-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+@media (max-width: 600px) {
+  .payment-qr-grid,
+  .payment-proof-inputs {
+    grid-template-columns: 1fr;
+  }
+}
