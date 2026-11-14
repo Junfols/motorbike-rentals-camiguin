@@ -11,7 +11,11 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="CamiguinMoto">
 
+  {% if active_nav == 'admin' %}
+  <link rel="manifest" href="/admin.webmanifest">
+  {% else %}
   <link rel="manifest" href="/manifest.webmanifest">
+  {% endif %}
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg">
   <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
