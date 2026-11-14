@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+
+{% block title %}Partner Rental Portal — {{ shop.shop_name }}{% endblock %}
+
+{% block content %}
+<section class="section container">
+  <!-- Auth View -->
+  <div id="partner-auth-view" class="partner-auth-wrap hidden">
+    <div class="card partner-auth-card">
+      <div class="admin-login-head">
+        <img src="/static/icons/icon.svg" alt="" width="44" height="44">
+        <div>
+          <h1>Partner Rental Portal</h1>
+          <p class="text-muted">Log in or register your motorbike rental shop on {{ shop.shop_name }}.</p>
+        </div>
+      </div>
+
+      <div class="auth-switch-tabs" role="tablist">
+        <button type="button" class="pill active" data-partner-auth-tab="login">Sign In</button>
+        <button type="button" class="pill" data-partner-auth-tab="register">Register Your Shop</button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="partner-login-form">
+        <div class="form-group">
+          <label for="partner-login-email">Email Address</label>
+          <input type="email" id="partner-login-email" required autocomplete="email" placeholder="you@yourshop.ph">
+        </div>
+        <div class="form-group">
+          <label for="partner-login-password">Password</label>
+          <input type="password" id="partner-login-password" required autocomplete="current-password" placeholder="Enter your password">
+        </div>
+        <div id="partner-login-error" class="alert-error hidden"></div>
+        <button type="submit" class="btn btn-primary btn-block">Sign In to Partner Portal</button>
+      </form>
+
+      <!-- Register Form -->
+      <form id="partner-register-form" class="hidden">
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="reg-shop-name">Rental Shop Name *</label>
+            <input type="text" id="reg-shop-name" required placeholder="e.g., Hibok Scooters Camiguin">
+          </div>
+          <div class="form-group">
+            <label for="reg-owner-name">Owner Full Name *</label>
+            <input type="text" id="reg-owner-name" required placeholder="Juan Dela Cruz">
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="reg-email">Email Address *</label>
+            <input type="email" id="reg-email" required autocomplete="email" placeholder="owner@shop.ph">
+          </div>
+          <div class="form-group">
+            <label for="reg-phone">Mobile / WhatsApp Number *</label>
+            <input type="tel" id="reg-phone" required placeholder="0917 123 4567">
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="reg-municipality">Municipality *</label>
+            <select id="reg-municipality" required>
+              {% for m in municipalities %}
+              <option value="{{ m }}">{{ m }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="reg-delivery-fee">Delivery Fee ({{ shop.currency }})</label>
+            <input type="number" id="reg-delivery-fee" min="0" step="1" value="200">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="reg-address">Shop Pickup Address</label>
+          <input type="text" id="reg-address" placeholder="e.g., Yumbing Road near White Island Boat Terminal">
+        </div>
+
+        <div class="form-group">
+          <label for="reg-description">Short Shop Description</label>
+          <textarea id="reg-description" rows="2" placeholder="Well-maintained scooters, free helmets, fast pickup..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="reg-password">Create Password (min 6 characters) *</label>
+          <input type="password" id="reg-password" required minlength="6" autocomplete="new-password" placeholder="At least 6 characters">
+        </div>
+
+        <div id="partner-register-error" class="alert-error hidden"></div>
+        <button type="submit" class="btn btn-primary btn-block">Create Partner Account</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Dashboard View -->
+  <div id="partner-dashboard-view" class="hidden">
+    <div id="partner-status-banner" class="status-notice hidden"></div>
+
+    <div class="admin-top-bar">
+      <div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <h1 id="partner-shop-title" style="margin:0;">Partner Shop</h1>
+          <span id="partner-status-badge" class="badge"></span>
+        </div>
+        <p class="text-muted" id="partner-shop-subtitle"></p>
+      </div>
+      <div class="admin-top-actions">
+        <button type="button" id="partner-refresh-btn" class="btn btn-outline btn-sm">Refresh</button>
+        <button type="button" id="partner-logout-btn" class="btn btn-outline btn-sm">Sign Out</button>
+      </div>
+    </div>
+
+    <div class="admin-tabs" role="tablist">
+      <button type="button" class="tab-btn active" data-partner-tab="overview">Overview</button>
+      <button type="button" class="tab-btn" data-partner-tab="bookings">
+        Bookings <span id="partner-pending-badge" class="badge-count hidden">0</span>
+      </button>
+      <button type="button" class="tab-btn" data-partner-tab="fleet">My Motorbikes</button>
+      <button type="button" class="tab-btn" data-partner-tab="profile">Shop Profile</button>
+    </div>
+
+    <!-- Tab 1: Overview -->
+    <div id="ptab-overview" class="partner-tab-panel">
+      <div id="partner-kpi-grid" class="kpi-grid"></div>
+      <div class="card">
+        <div class="card-header-row">
+          <h3>Upcoming &amp; Active Rentals</h3>
+          <button type="button" class="link-btn" id="partner-jump-bookings-btn">View All &rarr;</button>
+        </div>
+        <div id="partner-upcoming-list" class="upcoming-list"></div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Bookings -->
+    <div id="ptab-bookings" class="partner-tab-panel hidden">
+      <div class="admin-toolbar">
+        <div class="category-pills" id="partner-booking-status-pills">
+          <button type="button" class="pill active" data-status="all">All</button>
+          <button type="button" class="pill" data-status="pending">Pending</button>
+          <button type="button" class="pill" data-status="confirmed">Confirmed</button>
+          <button type="button" class="pill" data-status="active">Active</button>
+          <button type="button" class="pill" data-status="completed">Completed</button>
+          <button type="button" class="pill" data-status="cancelled">Cancelled</button>
+        </div>
+        <div class="search-input-wrap">
+          <input type="search" id="partner-booking-search" placeholder="Search code, rider, phone, bike...">
+        </div>
+      </div>
+      <div id="partner-bookings-list" class="admin-bookings-list"></div>
+    </div>
+
+    <!-- Tab 3: My Fleet -->
+    <div id="ptab-fleet" class="partner-tab-panel hidden">
+      <div class="admin-toolbar">
+        <div>
+          <h3>My Shop Motorbikes</h3>
+          <p class="text-muted">Upload photos from your phone, set rates, and manage unit availability.</p>
+        </div>
+        <button type="button" id="partner-add-bike-btn" class="btn btn-primary">+ Add Motorbike</button>
+      </div>
+      <div id="partner-fleet-list" class="admin-fleet-grid"></div>
+    </div>
+
+    <!-- Tab 4: Shop Profile -->
+    <div id="ptab-profile" class="partner-tab-panel hidden">
+      <form id="partner-profile-form" class="card settings-form">
+        <h3>Shop Information</h3>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="prof-shop-name">Shop Name *</label>
+            <input type="text" id="prof-shop-name" required>
+          </div>
+          <div class="form-group">
+            <label for="prof-owner-name">Owner Name *</label>
+            <input type="text" id="prof-owner-name" required>
+          </div>
+        </div>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="prof-phone">Mobile Phone *</label>
+            <input type="text" id="prof-phone" required>
+          </div>
+          <div class="form-group">
+            <label for="prof-whatsapp">WhatsApp Digits (e.g., 63917...)</label>
+            <input type="text" id="prof-whatsapp">
+          </div>
+        </div>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="prof-municipality">Camiguin Municipality *</label>
+            <select id="prof-municipality" required>
+              {% for m in municipalities %}
+              <option value="{{ m }}">{{ m }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="prof-delivery-fee">Delivery Fee ({{ shop.currency }})</label>
+            <input type="number" id="prof-delivery-fee" min="0" step="1">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="prof-address">Pickup Address</label>
+          <input type="text" id="prof-address">
+        </div>
+        <div class="form-group">
+          <label for="prof-description">Shop Description</label>
+          <textarea id="prof-description" rows="2"></textarea>
+        </div>
+
+        <hr class="form-divider">
+        <h3>Change Password (Optional)</h3>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="prof-current-password">Current Password</label>
+            <input type="password" id="prof-current-password" autocomplete="current-password" placeholder="Leave blank to keep existing">
+          </div>
+          <div class="form-group">
+            <label for="prof-new-password">New Password (min 6 chars)</label>
+            <input type="password" id="prof-new-password" autocomplete="new-password" placeholder="Enter new password">
+          </div>
+        </div>
+        <div id="partner-profile-error" class="alert-error hidden"></div>
+        <button type="submit" class="btn btn-primary">Save Shop Profile</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- Partner Add/Edit Bike Modal -->
+<div id="partner-bike-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="partner-bike-modal-title">
+  <div class="modal-card modal-lg">
+    <div class="modal-header">
+      <h3 id="partner-bike-modal-title">Add Motorbike</h3>
+      <button type="button" class="icon-btn" data-close-modal="partner-bike-modal" aria-label="Close">&times;</button>
+    </div>
+    <form id="partner-bike-form" class="modal-body" enctype="multipart/form-data">
+      <input type="hidden" id="p-bike-id" name="id">
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label for="p-bike-name">Model Name *</label>
+          <input type="text" id="p-bike-name" name="name" required placeholder="e.g., Honda Click 125i">
+        </div>
+        <div class="form-group">
+          <label for="p-bike-category">Category *</label>
+          <select id="p-bike-category" name="category" required>
+            <option value="Scooter">Scooter</option>
+            <option value="Maxi Scooter">Maxi Scooter</option>
+            <option value="Adventure">Adventure</option>
+            <option value="Big Bike">Big Bike</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-grid-4">
+        <div class="form-group">
+          <label for="p-bike-cc">Engine CC *</label>
+          <input type="number" id="p-bike-cc" name="engine_cc" required min="50" step="1" value="125">
+        </div>
+        <div class="form-group">
+          <label for="p-bike-transmission">Transmission *</label>
+          <select id="p-bike-transmission" name="transmission" required>
+            <option value="Automatic">Automatic</option>
+            <option value="Manual">Manual</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="p-bike-units">Units Available *</label>
+          <input type="number" id="p-bike-units" name="units_count" required min="1" step="1" value="1">
+        </div>
+        <div class="form-group">
+          <label for="p-bike-status">Status *</label>
+          <select id="p-bike-status" name="status" required>
+            <option value="available">Available</option>
+            <option value="maintenance">Maintenance</option>
+            <option value="hidden">Hidden</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-grid-3">
+        <div class="form-group">
+          <label for="p-bike-daily">Daily Rate *</label>
+          <input type="number" id="p-bike-daily" name="daily_rate" required min="1" step="1" value="450">
+        </div>
+        <div class="form-group">
+          <label for="p-bike-weekly">Weekly Rate (7 days)</label>
+          <input type="number" id="p-bike-weekly" name="weekly_rate" min="0" step="1" value="2700">
+        </div>
+        <div class="form-group">
+          <label for="p-bike-deposit">Security Deposit</label>
+          <input type="number" id="p-bike-deposit" name="deposit" min="0" step="1" value="1500">
+        </div>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label for="p-bike-plate">Plate / Unit Code</label>
+          <input type="text" id="p-bike-plate" name="plate_number" placeholder="e.g., GA-1234">
+        </div>
+        <div class="form-group">
+          <label for="p-bike-fuel">Fuel Type</label>
+          <input type="text" id="p-bike-fuel" name="fuel_type" value="Gasoline">
+        </div>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label for="p-bike-image-file">Upload Photo (Phone Camera / Gallery)</label>
+          <input type="file" id="p-bike-image-file" name="image" accept="image/png,image/jpeg,image/webp">
+        </div>
+        <div class="form-group">
+          <label for="p-bike-image-url">Or Default / Photo URL</label>
+          <input type="text" id="p-bike-image-url" name="image_url" placeholder="/static/images/bike-click125.jpg">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="p-bike-inclusions">Inclusions</label>
+        <input type="text" id="p-bike-inclusions" name="inclusions" value="2 Helmets, Phone Mount, Rain Poncho">
+      </div>
+
+      <div class="form-group">
+        <label for="p-bike-description">Description</label>
+        <textarea id="p-bike-description" name="description" rows="2"></textarea>
+      </div>
+
+      <div id="partner-bike-error" class="alert-error hidden"></div>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn btn-outline" data-close-modal="partner-bike-modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Motorbike</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/partner.js"></script>
+{% endblock %}

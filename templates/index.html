@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+
+{% block title %}{{ shop.shop_name }} — Centralized Island Motorbike Rentals{% endblock %}
+
+{% block content %}
+<section class="hero-section">
+  <div class="hero-bg">
+    <img src="/static/images/hero-scooter.jpg" alt="Motorbike parked along tropical coastal road" class="hero-img">
+    <div class="hero-overlay"></div>
+  </div>
+
+  <div class="container hero-content">
+    <div class="hero-badge">
+      <span class="dot-live"></span>
+      <span>Verified Local Shops &bull; {{ shop.location }}</span>
+    </div>
+    <h1 class="hero-title">One Island App. Every Verified Bike.</h1>
+    <p class="hero-subtitle">{{ shop.tagline }}</p>
+
+    <div class="hero-perks">
+      <span class="perk-pill">Compare Verified Camiguin Shops</span>
+      <span class="perk-pill">Weekly Rate Discounts</span>
+      <span class="perk-pill">Installable Mobile App</span>
+    </div>
+
+    <form id="availability-search-form" class="search-bar-card search-bar-5">
+      <div class="search-field">
+        <label for="search-pickup-date">Pickup Date</label>
+        <input type="date" id="search-pickup-date" name="pickup_date" required>
+      </div>
+      <div class="search-field">
+        <label for="search-return-date">Return Date</label>
+        <input type="date" id="search-return-date" name="return_date" required>
+      </div>
+      <div class="search-field">
+        <label for="search-municipality">Camiguin Area</label>
+        <select id="search-municipality" name="municipality">
+          <option value="All">All Municipalities</option>
+          {% for m in municipalities %}
+          <option value="{{ m }}">{{ m }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="search-field">
+        <label for="search-transmission">Transmission</label>
+        <select id="search-transmission" name="transmission">
+          <option value="All">All Transmissions</option>
+          <option value="Automatic">Automatic</option>
+          <option value="Manual">Manual</option>
+        </select>
+      </div>
+      <div class="search-submit-wrap">
+        <button type="submit" class="btn btn-primary btn-lg btn-block">Check Availability</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<section id="fleet" class="section container">
+  <div class="section-header-row">
+    <div>
+      <h2 class="section-title">Available Motorbikes Across Camiguin</h2>
+      <p id="fleet-date-summary" class="section-subtitle">Showing live availability</p>
+    </div>
+    <div class="fleet-controls-right">
+      <select id="filter-shop" class="select-compact" aria-label="Filter by rental shop">
+        <option value="">All Rental Shops</option>
+      </select>
+      <label class="toggle-chip">
+        <input type="checkbox" id="filter-available-only">
+        <span>Available only</span>
+      </label>
+      <select id="filter-sort" class="select-compact" aria-label="Sort motorbikes">
+        <option value="featured">Sort: Featured</option>
+        <option value="price_asc">Price: Low to High</option>
+        <option value="price_desc">Price: High to Low</option>
+        <option value="cc_desc">Engine CC: High to Low</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <div class="category-pills" id="category-pills" role="tablist" aria-label="Filter by category">
+      <button type="button" class="pill active" data-category="All">All Bikes</button>
+      <button type="button" class="pill" data-category="Scooter">Scooter</button>
+      <button type="button" class="pill" data-category="Maxi Scooter">Maxi Scooter</button>
+      <button type="button" class="pill" data-category="Adventure">Adventure</button>
+      <button type="button" class="pill" data-category="Big Bike">Big Bike</button>
+    </div>
+    <div class="search-input-wrap">
+      <input type="search" id="filter-search-q" placeholder="Search bike, shop, or Mambajao..." aria-label="Search motorbikes">
+    </div>
+  </div>
+
+  <div id="fleet-grid" class="fleet-grid">
+    <div class="loading-state">Loading motorbikes...</div>
+  </div>
+</section>
+
+<section class="section how-section">
+  <div class="container">
+    <h2 class="section-title text-center">Rent in 3 Easy Steps</h2>
+    <p class="section-subtitle text-center">Centralized booking from verified Camiguin rental owners.</p>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <h3>Pick Your Area &amp; Bike</h3>
+        <p>Filter by pickup date, Camiguin municipality, or rental shop and check live availability.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <h3>Book in One Place</h3>
+        <p>Reserve online with transparent daily/weekly rates and receive your instant tracking code.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <h3>Pick Up &amp; Explore</h3>
+        <p>Present your valid Driver's License and refundable deposit to the partner shop and ride safely.</p>
+      </div>
+    </div>
+
+    <div class="partner-cta-banner">
+      <div>
+        <h3>Have Motorbikes for Rent in Camiguin?</h3>
+        <p class="text-muted">Register your shop for free, list your units from your phone, and manage all bookings in one centralized portal.</p>
+      </div>
+      <div class="partner-cta-actions">
+        <a href="/partner" class="btn btn-primary">Partner Login / Register</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Bike Detail & Booking Modal -->
+<div id="booking-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-bike-name">
+  <div class="modal-card modal-xl">
+    <div class="modal-header">
+      <div>
+        <span id="modal-bike-category" class="badge badge-soft">Scooter</span>
+        <h3 id="modal-bike-name">Motorbike Details</h3>
+      </div>
+      <button type="button" class="icon-btn" data-close-modal="booking-modal" aria-label="Close">&times;</button>
+    </div>
+
+    <div class="modal-body booking-modal-grid">
+      <!-- Left Column: Specs & Owning Shop -->
+      <div class="booking-bike-summary">
+        <div class="modal-bike-img-wrap">
+          <img id="modal-bike-img" src="" alt="">
+        </div>
+
+        <div class="info-box shop-highlight-box">
+          <h4>Rental Shop</h4>
+          <div id="modal-shop-name" style="font-weight:800;font-size:1rem;"></div>
+          <div id="modal-shop-location" class="text-muted"></div>
+          <div id="modal-shop-phone" class="text-muted"></div>
+        </div>
+
+        <div class="spec-chips" id="modal-bike-specs"></div>
+
+        <p id="modal-bike-desc" class="bike-modal-desc"></p>
+
+        <div class="info-box">
+          <h4>Included Free</h4>
+          <p id="modal-bike-inclusions"></p>
+        </div>
+
+        <div class="info-box">
+          <h4>Rates &amp; Deposit</h4>
+          <div class="rate-summary-row">
+            <span>Daily Rate:</span>
+            <strong id="modal-daily-rate"></strong>
+          </div>
+          <div class="rate-summary-row">
+            <span>Weekly Rate (7 days):</span>
+            <strong id="modal-weekly-rate"></strong>
+          </div>
+          <div class="rate-summary-row">
+            <span>Refundable Deposit:</span>
+            <strong id="modal-deposit-rate"></strong>
+          </div>
+        </div>
+
+        <div class="info-box">
+          <h4>Upcoming Booked Dates</h4>
+          <div id="modal-booked-ranges" class="booked-ranges-list"></div>
+        </div>
+      </div>
+
+      <!-- Right Column: Interactive Booking Form -->
+      <form id="booking-form" class="booking-form">
+        <input type="hidden" id="booking-bike-id" name="bike_id">
+
+        <div class="form-section-title">1. Rental Schedule</div>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="booking-pickup-date">Pickup Date *</label>
+            <input type="date" id="booking-pickup-date" name="pickup_date" required>
+          </div>
+          <div class="form-group">
+            <label for="booking-return-date">Return Date *</label>
+            <input type="date" id="booking-return-date" name="return_date" required>
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="booking-pickup-time">Pickup Time *</label>
+            <select id="booking-pickup-time" name="pickup_time">
+              <option value="07:00">07:00 AM</option>
+              <option value="08:00">08:00 AM</option>
+              <option value="09:00" selected>09:00 AM</option>
+              <option value="10:00">10:00 AM</option>
+              <option value="11:00">11:00 AM</option>
+              <option value="12:00">12:00 PM</option>
+              <option value="13:00">01:00 PM</option>
+              <option value="14:00">02:00 PM</option>
+              <option value="15:00">03:00 PM</option>
+              <option value="16:00">04:00 PM</option>
+              <option value="17:00">05:00 PM</option>
+              <option value="18:00">06:00 PM</option>
+              <option value="19:00">07:00 PM</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="booking-pickup-method">Pickup Method *</label>
+            <select id="booking-pickup-method" name="pickup_method">
+              <option value="shop">Shop Pickup (Free)</option>
+              <option id="delivery-option-label" value="delivery">Resort / Port Delivery (+{{ shop.currency }}{{ shop.delivery_fee }})</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="delivery-address-group" class="form-group hidden">
+          <label for="booking-delivery-address">Delivery Address (Resort / Port / Airport) *</label>
+          <input type="text" id="booking-delivery-address" name="delivery_address" placeholder="e.g., Mambajao Resort / Benoni Port / Camiguin Airport">
+        </div>
+
+        <div class="addons-row">
+          <label class="checkbox-card">
+            <input type="checkbox" id="booking-extra-helmet" name="extra_helmet">
+            <span>Extra Helmet (+{{ shop.currency }}{{ shop.extra_helmet_fee }}/day)</span>
+          </label>
+          <label class="checkbox-card">
+            <input type="checkbox" id="booking-top-box" name="top_box">
+            <span>Rear Top Box (+{{ shop.currency }}{{ shop.top_box_fee }}/day)</span>
+          </label>
+        </div>
+
+        <div id="quote-box" class="quote-box">
+          <div class="quote-availability" id="quote-availability">Checking availability...</div>
+          <div class="quote-lines" id="quote-lines"></div>
+        </div>
+
+        <div class="form-section-title">2. Rider Information</div>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="booking-customer-name">Full Name *</label>
+            <input type="text" id="booking-customer-name" name="customer_name" required placeholder="Juan Dela Cruz">
+          </div>
+          <div class="form-group">
+            <label for="booking-customer-phone">Mobile / WhatsApp Number *</label>
+            <input type="tel" id="booking-customer-phone" name="customer_phone" required placeholder="0917 123 4567">
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="booking-license-number">Driver's License Number *</label>
+            <input type="text" id="booking-license-number" name="license_number" required placeholder="e.g., G01-23-456789">
+          </div>
+          <div class="form-group">
+            <label for="booking-customer-email">Email (Optional)</label>
+            <input type="email" id="booking-customer-email" name="customer_email" placeholder="juan@example.com">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="booking-notes">Notes / Special Requests</label>
+          <textarea id="booking-notes" name="notes" rows="2" placeholder="Helmet size (M/L), ferry arrival time, etc."></textarea>
+        </div>
+
+        <div id="booking-form-error" class="alert-error hidden"></div>
+
+        <button type="submit" id="booking-submit-btn" class="btn btn-primary btn-lg btn-block">
+          Confirm Booking Request
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Booking Confirmation Modal -->
+<div id="confirmation-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+  <div class="modal-card modal-md">
+    <div class="modal-header">
+      <h3 id="confirm-modal-title">Booking Request Submitted!</h3>
+      <button type="button" class="icon-btn" data-close-modal="confirmation-modal" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body text-center">
+      <div class="success-circle">&#10003;</div>
+      <p class="text-muted">Save your reference code below to check approval from the rental shop anytime.</p>
+      <div class="booking-code-banner">
+        <span id="confirm-booking-code">MR-0000-0000</span>
+        <button type="button" id="copy-code-btn" class="btn btn-sm btn-outline">Copy</button>
+      </div>
+      <div id="confirm-summary" class="confirm-summary-card"></div>
+      <div class="confirm-actions">
+        <a id="confirm-track-link" href="/bookings" class="btn btn-primary">Track My Booking</a>
+        <a id="confirm-whatsapp-link" href="#" target="_blank" rel="noopener" class="btn btn-outline">Message Shop on WhatsApp</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/storefront.js"></script>
+{% endblock %}

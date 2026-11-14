@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Offline — {{ shop.shop_name }}{% endblock %}
+
+{% block content %}
+<section class="section container page-narrow text-center">
+  <div class="card offline-card">
+    <img src="/static/icons/icon-192.png" alt="{{ shop.shop_name }}" width="72" height="72" class="offline-icon">
+    <h1>You're Currently Offline</h1>
+    <p class="text-muted">No internet connection detected. Cached motorbike listings may still be available on the Fleet page, and you can retry once back online.</p>
+    <div class="offline-actions">
+      <a href="/" class="btn btn-primary">Return to Fleet</a>
+      <button type="button" onclick="window.location.reload()" class="btn btn-outline">Try Again</button>
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}My Bookings — {{ shop.shop_name }}{% endblock %}
+
+{% block content %}
+<section class="section container page-narrow">
+  <div class="page-head">
+    <h1>Track Your Booking</h1>
+    <p class="text-muted">Enter your booking reference code and phone number to check approval status and pickup details.</p>
+  </div>
+
+  <form id="lookup-form" class="card lookup-card">
+    <div class="form-grid-2">
+      <div class="form-group">
+        <label for="lookup-code">Booking Reference Code</label>
+        <input type="text" id="lookup-code" name="code" placeholder="e.g., MR-2611-4821" required>
+      </div>
+      <div class="form-group">
+        <label for="lookup-phone">Mobile / WhatsApp Number (or last 4 digits)</label>
+        <input type="tel" id="lookup-phone" name="phone" placeholder="e.g., 09171234567 or 4567" required>
+      </div>
+    </div>
+    <div id="lookup-error" class="alert-error hidden"></div>
+    <button type="submit" class="btn btn-primary">Check Booking Status</button>
+  </form>
+
+  <div id="lookup-result" class="hidden"></div>
+
+  <section class="recent-trips-section">
+    <div class="section-header-row">
+      <div>
+        <h2>Recent Bookings on This Device</h2>
+        <p class="text-muted">Saved locally for quick one-tap status checks.</p>
+      </div>
+      <button type="button" id="clear-saved-trips-btn" class="btn btn-sm btn-outline hidden">Clear List</button>
+    </div>
+    <div id="saved-trips-list" class="saved-trips-list"></div>
+  </section>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/bookings.js"></script>
+{% endblock %}

@@ -1,0 +1,426 @@
+{% extends "base.html" %}
+
+{% block title %}Main Admin — {{ shop.shop_name }}{% endblock %}
+
+{% block content %}
+<section class="section container">
+  <!-- Login View -->
+  <div id="admin-login-view" class="admin-login-wrap hidden">
+    <form id="admin-login-form" class="card admin-login-card">
+      <div class="admin-login-head">
+        <img src="/static/icons/icon.svg" alt="" width="44" height="44">
+        <div>
+          <h1>Main Platform Admin</h1>
+          <p class="text-muted">Verify partner shops, oversee all bookings, and configure platform commission.</p>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="admin-password">Admin Password</label>
+        <input type="password" id="admin-password" name="password" autocomplete="current-password" required placeholder="Enter admin password">
+      </div>
+      <div id="admin-login-error" class="alert-error hidden"></div>
+      <button type="submit" class="btn btn-primary btn-block">Sign In to Main Admin</button>
+    </form>
+  </div>
+
+  <!-- Authenticated Dashboard View -->
+  <div id="admin-dashboard-view" class="hidden">
+    <div class="admin-top-bar">
+      <div>
+        <h1>Platform Control Center</h1>
+        <p class="text-muted" id="admin-shop-subtitle">{{ shop.shop_name }} &bull; {{ shop.location }}</p>
+      </div>
+      <div class="admin-top-actions">
+        <button type="button" id="admin-share-btn" class="btn btn-outline btn-sm">Share Link</button>
+        <button type="button" id="admin-refresh-btn" class="btn btn-outline btn-sm">Refresh</button>
+        <button type="button" id="admin-logout-btn" class="btn btn-outline btn-sm">Sign Out</button>
+      </div>
+    </div>
+
+    <div class="admin-tabs" role="tablist">
+      <button type="button" class="tab-btn active" data-admin-tab="overview">Overview</button>
+      <button type="button" class="tab-btn" data-admin-tab="partners">
+        Partner Shops <span id="tab-partner-badge" class="badge-count hidden">0</span>
+      </button>
+      <button type="button" class="tab-btn" data-admin-tab="bookings">
+        All Bookings <span id="tab-pending-badge" class="badge-count hidden">0</span>
+      </button>
+      <button type="button" class="tab-btn" data-admin-tab="fleet">All Fleet</button>
+      <button type="button" class="tab-btn" data-admin-tab="settings">Platform Settings</button>
+    </div>
+
+    <!-- Tab 1: Overview -->
+    <div id="tab-overview" class="admin-tab-panel">
+      <div id="admin-kpi-grid" class="kpi-grid"></div>
+
+      <div class="admin-overview-grid">
+        <div class="card">
+          <div class="card-header-row">
+            <h3>Revenue &amp; Commission by Partner Shop</h3>
+            <button type="button" class="link-btn" id="jump-partners-btn">Manage Shops &rarr;</button>
+          </div>
+          <div id="revenue-bars" class="revenue-bars"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header-row">
+            <h3>Upcoming &amp; Active Rides (All Shops)</h3>
+            <button type="button" class="link-btn" id="jump-bookings-btn">View All &rarr;</button>
+          </div>
+          <div id="upcoming-rides-list" class="upcoming-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Partner Shops -->
+    <div id="tab-partners" class="admin-tab-panel hidden">
+      <div class="admin-toolbar">
+        <div class="category-pills" id="admin-shop-status-pills">
+          <button type="button" class="pill active" data-shop-status="all">All Shops</button>
+          <button type="button" class="pill" data-shop-status="pending">Pending Approval</button>
+          <button type="button" class="pill" data-shop-status="approved">Approved</button>
+          <button type="button" class="pill" data-shop-status="suspended">Suspended</button>
+        </div>
+        <button type="button" id="add-partner-btn" class="btn btn-primary">+ Add Partner Shop</button>
+      </div>
+
+      <div id="admin-partners-list" class="admin-bookings-list"></div>
+    </div>
+
+    <!-- Tab 3: All Bookings -->
+    <div id="tab-bookings" class="admin-tab-panel hidden">
+      <div class="admin-toolbar">
+        <div class="category-pills" id="admin-booking-status-pills">
+          <button type="button" class="pill active" data-status="all">All</button>
+          <button type="button" class="pill" data-status="pending">Pending</button>
+          <button type="button" class="pill" data-status="confirmed">Confirmed</button>
+          <button type="button" class="pill" data-status="active">Active</button>
+          <button type="button" class="pill" data-status="completed">Completed</button>
+          <button type="button" class="pill" data-status="cancelled">Cancelled</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;flex:1;justify-content:flex-end;">
+          <select id="admin-booking-shop-filter" class="select-compact" aria-label="Filter bookings by shop">
+            <option value="">All Partner Shops</option>
+          </select>
+          <div class="search-input-wrap">
+            <input type="search" id="admin-booking-search" placeholder="Search code, rider, bike, shop...">
+          </div>
+        </div>
+      </div>
+
+      <div id="admin-bookings-list" class="admin-bookings-list"></div>
+    </div>
+
+    <!-- Tab 4: All Fleet -->
+    <div id="tab-fleet" class="admin-tab-panel hidden">
+      <div class="admin-toolbar">
+        <div>
+          <h3>Centralized Fleet Inventory</h3>
+          <p class="text-muted">Manage motorbikes across the main hub and all partner shops.</p>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <select id="admin-fleet-shop-filter" class="select-compact" aria-label="Filter fleet by shop">
+            <option value="">All Partner Shops</option>
+          </select>
+          <button type="button" id="add-bike-btn" class="btn btn-primary">+ Add Motorbike</button>
+        </div>
+      </div>
+
+      <div id="admin-fleet-list" class="admin-fleet-grid"></div>
+    </div>
+
+    <!-- Tab 5: Platform Settings -->
+    <div id="tab-settings" class="admin-tab-panel hidden">
+      <form id="admin-settings-form" class="card settings-form">
+        <h3>Central Platform Identity &amp; Contact</h3>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="set-shop-name">Platform Name *</label>
+            <input type="text" id="set-shop-name" name="shop_name" required>
+          </div>
+          <div class="form-group">
+            <label for="set-location">Island / Location</label>
+            <input type="text" id="set-location" name="location">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="set-tagline">Tagline / Hero Description</label>
+          <input type="text" id="set-tagline" name="tagline">
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="set-address">Main Hub Address</label>
+            <input type="text" id="set-address" name="address">
+          </div>
+          <div class="form-group">
+            <label for="set-opening-hours">Operating Hours</label>
+            <input type="text" id="set-opening-hours" name="opening_hours">
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="set-phone">Support Phone</label>
+            <input type="text" id="set-phone" name="phone">
+          </div>
+          <div class="form-group">
+            <label for="set-email">Support Email</label>
+            <input type="email" id="set-email" name="email">
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="set-whatsapp">Support WhatsApp (digits only, e.g. 63917...)</label>
+            <input type="text" id="set-whatsapp" name="whatsapp_number">
+          </div>
+          <div class="form-group">
+            <label for="set-messenger">Messenger Link</label>
+            <input type="url" id="set-messenger" name="messenger_url">
+          </div>
+        </div>
+
+        <hr class="form-divider">
+        <h3>Commission &amp; Fee Defaults</h3>
+        <div class="form-grid-4">
+          <div class="form-group">
+            <label for="set-commission-rate">Platform Commission (%)</label>
+            <input type="number" id="set-commission-rate" name="commission_rate" min="0" max="100" step="0.5">
+          </div>
+          <div class="form-group">
+            <label for="set-currency">Currency Symbol</label>
+            <input type="text" id="set-currency" name="currency" maxlength="6" required>
+          </div>
+          <div class="form-group">
+            <label for="set-delivery-fee">Default Delivery Fee</label>
+            <input type="number" id="set-delivery-fee" name="delivery_fee" min="0" step="1">
+          </div>
+          <div class="form-group">
+            <label for="set-helmet-fee">Extra Helmet / Day</label>
+            <input type="number" id="set-helmet-fee" name="extra_helmet_fee" min="0" step="1">
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="set-topbox-fee">Top Box / Day</label>
+            <input type="number" id="set-topbox-fee" name="top_box_fee" min="0" step="1">
+          </div>
+          <div class="form-group">
+            <label for="set-terms-note">Platform Rental Terms Note</label>
+            <input type="text" id="set-terms-note" name="terms_note">
+          </div>
+        </div>
+
+        <hr class="form-divider">
+        <h3>Change Main Admin Password (Optional)</h3>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="set-current-password">Current Password</label>
+            <input type="password" id="set-current-password" name="current_password" autocomplete="current-password" placeholder="Leave blank to keep existing">
+          </div>
+          <div class="form-group">
+            <label for="set-new-password">New Password (min 6 chars)</label>
+            <input type="password" id="set-new-password" name="new_password" autocomplete="new-password" placeholder="Enter new password">
+          </div>
+        </div>
+
+        <div id="settings-error" class="alert-error hidden"></div>
+        <button type="submit" class="btn btn-primary">Save Platform Settings</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- Add Partner Shop Modal -->
+<div id="partner-creator-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="partner-creator-title">
+  <div class="modal-card modal-md">
+    <div class="modal-header">
+      <h3 id="partner-creator-title">Add Partner Rental Shop</h3>
+      <button type="button" class="icon-btn" data-close-modal="partner-creator-modal" aria-label="Close">&times;</button>
+    </div>
+    <form id="partner-creator-form" class="modal-body">
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label for="new-shop-name">Shop Name *</label>
+          <input type="text" id="new-shop-name" required placeholder="e.g., Catarman Bike Hub">
+        </div>
+        <div class="form-group">
+          <label for="new-shop-owner">Owner Name *</label>
+          <input type="text" id="new-shop-owner" required placeholder="Pedro Santos">
+        </div>
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label for="new-shop-email">Login Email *</label>
+          <input type="email" id="new-shop-email" required placeholder="owner@shop.ph">
+        </div>
+        <div class="form-group">
+          <label for="new-shop-phone">Mobile / WhatsApp *</label>
+          <input type="tel" id="new-shop-phone" required placeholder="09171234567">
+        </div>
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label for="new-shop-municipality">Municipality *</label>
+          <select id="new-shop-municipality" required>
+            {% for m in municipalities %}
+            <option value="{{ m }}">{{ m }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="new-shop-delivery">Delivery Fee ({{ shop.currency }})</label>
+          <input type="number" id="new-shop-delivery" min="0" step="1" value="200">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="new-shop-address">Pickup Address</label>
+        <input type="text" id="new-shop-address" placeholder="Street / Barangay / Landmark">
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label for="new-shop-password">Initial Password (min 6 chars) *</label>
+          <input type="password" id="new-shop-password" required minlength="6" value="partner1234">
+        </div>
+        <div class="form-group">
+          <label for="new-shop-status">Account Status *</label>
+          <select id="new-shop-status">
+            <option value="approved" selected>Approved (Live immediately)</option>
+            <option value="pending">Pending Approval</option>
+          </select>
+        </div>
+      </div>
+      <div id="partner-creator-error" class="alert-error hidden"></div>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn btn-outline" data-close-modal="partner-creator-modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create Partner Shop</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add/Edit Bike Modal -->
+<div id="bike-editor-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="bike-editor-title">
+  <div class="modal-card modal-lg">
+    <div class="modal-header">
+      <h3 id="bike-editor-title">Add Motorbike</h3>
+      <button type="button" class="icon-btn" data-close-modal="bike-editor-modal" aria-label="Close">&times;</button>
+    </div>
+    <form id="bike-editor-form" class="modal-body" enctype="multipart/form-data">
+      <input type="hidden" id="edit-bike-id" name="id">
+
+      <div class="form-group">
+        <label for="edit-bike-shop-id">Owning Rental Shop *</label>
+        <select id="edit-bike-shop-id" name="shop_id" required></select>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label for="edit-bike-name">Model Name *</label>
+          <input type="text" id="edit-bike-name" name="name" required placeholder="e.g., Honda Click 160">
+        </div>
+        <div class="form-group">
+          <label for="edit-bike-category">Category *</label>
+          <select id="edit-bike-category" name="category" required>
+            <option value="Scooter">Scooter</option>
+            <option value="Maxi Scooter">Maxi Scooter</option>
+            <option value="Adventure">Adventure</option>
+            <option value="Big Bike">Big Bike</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-grid-4">
+        <div class="form-group">
+          <label for="edit-bike-cc">Engine CC *</label>
+          <input type="number" id="edit-bike-cc" name="engine_cc" required min="50" step="1" value="125">
+        </div>
+        <div class="form-group">
+          <label for="edit-bike-transmission">Transmission *</label>
+          <select id="edit-bike-transmission" name="transmission" required>
+            <option value="Automatic">Automatic</option>
+            <option value="Manual">Manual</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="edit-bike-units">Units Available *</label>
+          <input type="number" id="edit-bike-units" name="units_count" required min="1" step="1" value="1">
+        </div>
+        <div class="form-group">
+          <label for="edit-bike-status">Status *</label>
+          <select id="edit-bike-status" name="status" required>
+            <option value="available">Available</option>
+            <option value="maintenance">Maintenance</option>
+            <option value="hidden">Hidden</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-grid-3">
+        <div class="form-group">
+          <label for="edit-bike-daily">Daily Rate *</label>
+          <input type="number" id="edit-bike-daily" name="daily_rate" required min="1" step="1" value="500">
+        </div>
+        <div class="form-group">
+          <label for="edit-bike-weekly">Weekly Rate (7 days)</label>
+          <input type="number" id="edit-bike-weekly" name="weekly_rate" min="0" step="1" value="3000">
+        </div>
+        <div class="form-group">
+          <label for="edit-bike-deposit">Security Deposit</label>
+          <input type="number" id="edit-bike-deposit" name="deposit" min="0" step="1" value="2000">
+        </div>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label for="edit-bike-plate">Plate Number / Unit Code</label>
+          <input type="text" id="edit-bike-plate" name="plate_number" placeholder="e.g., GA-1234">
+        </div>
+        <div class="form-group">
+          <label for="edit-bike-fuel">Fuel Type</label>
+          <input type="text" id="edit-bike-fuel" name="fuel_type" value="Gasoline">
+        </div>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label for="edit-bike-image-file">Upload Photo (PNG/JPG/WEBP)</label>
+          <input type="file" id="edit-bike-image-file" name="image" accept="image/png,image/jpeg,image/webp">
+        </div>
+        <div class="form-group">
+          <label for="edit-bike-image-url">Or Photo Path / URL</label>
+          <input type="text" id="edit-bike-image-url" name="image_url" placeholder="/static/images/bike-click125.jpg">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="edit-bike-inclusions">Inclusions</label>
+        <input type="text" id="edit-bike-inclusions" name="inclusions" value="2 Helmets, Phone Mount, Rain Poncho">
+      </div>
+
+      <div class="form-group">
+        <label for="edit-bike-description">Description</label>
+        <textarea id="edit-bike-description" name="description" rows="2"></textarea>
+      </div>
+
+      <label class="checkbox-inline">
+        <input type="checkbox" id="edit-bike-featured" name="featured">
+        <span>Highlight as Featured Bike</span>
+      </label>
+
+      <div id="bike-editor-error" class="alert-error hidden"></div>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn btn-outline" data-close-modal="bike-editor-modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Motorbike</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/admin.js"></script>
+{% endblock %}
