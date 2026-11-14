@@ -184,16 +184,42 @@
     return `${y}-${m}-${d}`;
   }
 
-  function initDefaultDates() {
-    const today = new Date();
-    const returnDt = new Date(today);
-    returnDt.setDate(today.getDate() + 2);
+  function syncDateWrap(input) {
+    if (!input) return;
+    const wrap = input.closest(".date-input-wrap");
+    if (wrap) {
+      wrap.classList.toggle("is-empty", !input.value);
+    }
+  }
 
-    const todayStr = toIsoLocal(today);
-    const returnStr = toIsoLocal(returnDt);
+  function syncReturnDateUi() {
+    syncDateWrap(searchReturnInput);
+    syncDateWrap(bookingReturn);
+  }
+
+  function bindDatePickerPlaceholder(input) {
+    if (!input) return;
+    syncDateWrap(input);
+    input.addEventListener("input", () => syncDateWrap(input));
+    input.addEventListener("change", () => syncDateWrap(input));
+    input.addEventListener("click", (event) => {
+      if (typeof input.showPicker !== "function") return;
+      const rect = input.getBoundingClientRect();
+      // Preserve native browser handling when user clicks the right-side calendar icon directly
+      if (event.clientX && rect.right - event.clientX <= 34) return;
+      try {
+        input.showPicker();
+      } catch (_) {
+        // Fallback silently if browser blocks programmatic showPicker
+      }
+    });
+  }
+
+  function initDefaultDates() {
+    const todayStr = toIsoLocal(new Date());
 
     state.pickupDate = todayStr;
-    state.returnDate = returnStr;
+    state.returnDate = "";
 
     [searchPickupInput, bookingPickup].forEach((el) => {
       if (el) {
@@ -204,9 +230,10 @@
     [searchReturnInput, bookingReturn].forEach((el) => {
       if (el) {
         el.min = todayStr;
-        el.value = returnStr;
+        el.value = "";
       }
     });
+    syncReturnDateUi();
   }
 
   function calcDaysDiff(pStr, rStr) {
@@ -240,14 +267,17 @@
   }
 
   async function loadFleet() {
+    const todayStr = toIsoLocal(new Date());
+    const pickupDate = state.pickupDate || todayStr;
+    const returnDate = state.returnDate || pickupDate;
     const params = new URLSearchParams({
       category: state.category,
       transmission: state.transmission,
       municipality: state.municipality,
       q: state.q,
       sort: state.sort,
-      pickup_date: state.pickupDate,
-      return_date: state.returnDate,
+      pickup_date: pickupDate,
+      return_date: returnDate,
       available_only: state.availableOnly ? "1" : "0",
     });
     if (state.shopId) {
@@ -268,11 +298,17 @@
   }
 
   function renderFleet() {
-    const days = calcDaysDiff(state.pickupDate, state.returnDate);
-    const dayWord = days === 1 ? "day" : "days";
     if (fleetDateSummary) {
-      fleetDateSummary.textContent =
-        `${state.bikes.length} model(s) for ${state.pickupDate} to ${state.returnDate} (${days} ${dayWord})`;
+      if (!state.returnDate) {
+        const pickupLabel = state.pickupDate || toIsoLocal(new Date());
+        fleetDateSummary.textContent =
+          `${state.bikes.length} model(s) starting ${pickupLabel} — select a return date for trip availability`;
+      } else {
+        const days = calcDaysDiff(state.pickupDate, state.returnDate);
+        const dayWord = days === 1 ? "day" : "days";
+        fleetDateSummary.textContent =
+          `${state.bikes.length} model(s) for ${state.pickupDate} to ${state.returnDate} (${days} ${dayWord})`;
+      }
     }
 
     if (!state.bikes.length) {
@@ -351,9 +387,11 @@
     bookingFormError.textContent = "";
 
     try {
+      const todayStr = toIsoLocal(new Date());
+      const effectivePickup = state.pickupDate || todayStr;
       const params = new URLSearchParams({
-        pickup_date: state.pickupDate,
-        return_date: state.returnDate,
+        pickup_date: effectivePickup,
+        return_date: state.returnDate || effectivePickup,
       });
       const res = await fetch(`/api/bikes/${bikeId}?${params.toString()}`);
       const data = await res.json();
@@ -406,8 +444,13 @@
           .join("");
       }
 
-      bookingPickup.value = state.pickupDate;
-      bookingReturn.value = state.returnDate;
+      const modalTodayStr = toIsoLocal(new Date());
+      const modalPickupStr = state.pickupDate || modalTodayStr;
+      bookingPickup.min = modalTodayStr;
+      bookingPickup.value = modalPickupStr;
+      bookingReturn.min = modalPickupStr;
+      bookingReturn.value = state.returnDate || "";
+      syncReturnDateUi();
       const isDelivery = bookingPickupMethod.value === "delivery";
       deliveryAddressGroup.classList.toggle("hidden", !isDelivery);
       deliveryAddressInput.required = isDelivery;
@@ -426,10 +469,28 @@
     const bikeId = bookingBikeId.value;
     const pDate = bookingPickup.value;
     const rDate = bookingReturn.value;
-    if (!bikeId || !pDate || !rDate) return;
+    if (!bikeId || !pDate) return;
+
+    if (!rDate) {
+      state.latestQuote = null;
+      if (quoteAvailability) {
+        quoteAvailability.className = "quote-availability muted";
+        quoteAvailability.textContent = "Select a return date above to check availability & total price.";
+      }
+      if (quoteLines) {
+        quoteLines.innerHTML = "";
+      }
+      if (bookingSubmitBtn) {
+        bookingSubmitBtn.disabled = false;
+      }
+      syncReturnDateUi();
+      syncPaymentChannelUi(false);
+      return;
+    }
 
     if (rDate < pDate) {
       bookingReturn.value = pDate;
+      syncDateWrap(bookingReturn);
     }
 
     const params = new URLSearchParams({
@@ -539,8 +600,22 @@
   if (searchForm) {
     searchForm.addEventListener("submit", (event) => {
       event.preventDefault();
+      if (!searchReturnInput || !searchReturnInput.value) {
+        if (searchReturnInput) {
+          searchReturnInput.focus();
+          if (typeof searchReturnInput.reportValidity === "function") {
+            searchReturnInput.reportValidity();
+          }
+          try {
+            searchReturnInput.showPicker?.();
+          } catch (_) {}
+        }
+        showToast("Please select a return date.", "error");
+        return;
+      }
       if (searchReturnInput.value < searchPickupInput.value) {
         searchReturnInput.value = searchPickupInput.value;
+        syncDateWrap(searchReturnInput);
       }
       state.pickupDate = searchPickupInput.value;
       state.returnDate = searchReturnInput.value;
@@ -553,21 +628,27 @@
 
   if (searchPickupInput) {
     searchPickupInput.addEventListener("change", () => {
-      if (searchReturnInput.value < searchPickupInput.value) {
-        searchReturnInput.value = searchPickupInput.value;
+      const pVal = searchPickupInput.value || toIsoLocal(new Date());
+      if (searchReturnInput) {
+        searchReturnInput.min = pVal;
+        if (searchReturnInput.value && searchReturnInput.value < pVal) {
+          searchReturnInput.value = pVal;
+          syncDateWrap(searchReturnInput);
+        }
       }
-      state.pickupDate = searchPickupInput.value;
-      state.returnDate = searchReturnInput.value;
+      state.pickupDate = pVal;
+      state.returnDate = searchReturnInput ? searchReturnInput.value : "";
       loadFleet();
     });
   }
 
   if (searchReturnInput) {
     searchReturnInput.addEventListener("change", () => {
-      if (searchReturnInput.value < searchPickupInput.value) {
+      if (searchReturnInput.value && searchPickupInput && searchReturnInput.value < searchPickupInput.value) {
         searchReturnInput.value = searchPickupInput.value;
       }
-      state.pickupDate = searchPickupInput.value;
+      syncDateWrap(searchReturnInput);
+      state.pickupDate = searchPickupInput ? searchPickupInput.value : state.pickupDate;
       state.returnDate = searchReturnInput.value;
       loadFleet();
     });
@@ -647,7 +728,31 @@
     });
   }
 
-  [bookingPickup, bookingReturn, extraHelmetCheckbox, topBoxCheckbox].forEach((el) => {
+  if (bookingPickup) {
+    bookingPickup.addEventListener("change", () => {
+      const pVal = bookingPickup.value || toIsoLocal(new Date());
+      if (bookingReturn) {
+        bookingReturn.min = pVal;
+        if (bookingReturn.value && bookingReturn.value < pVal) {
+          bookingReturn.value = pVal;
+          syncDateWrap(bookingReturn);
+        }
+      }
+      refreshQuote();
+    });
+  }
+
+  if (bookingReturn) {
+    bookingReturn.addEventListener("change", () => {
+      if (bookingReturn.value && bookingPickup && bookingReturn.value < bookingPickup.value) {
+        bookingReturn.value = bookingPickup.value;
+      }
+      syncDateWrap(bookingReturn);
+      refreshQuote();
+    });
+  }
+
+  [extraHelmetCheckbox, topBoxCheckbox].forEach((el) => {
     if (el) el.addEventListener("change", refreshQuote);
   });
 
@@ -682,6 +787,18 @@
       event.preventDefault();
       bookingFormError.classList.add("hidden");
       bookingFormError.textContent = "";
+
+      if (!bookingPickup.value || !bookingReturn.value) {
+        bookingFormError.textContent = "Please select your pickup and return dates.";
+        bookingFormError.classList.remove("hidden");
+        if (!bookingReturn.value && bookingReturn) {
+          bookingReturn.focus();
+          try {
+            bookingReturn.showPicker?.();
+          } catch (_) {}
+        }
+        return;
+      }
 
       const payload = {
         bike_id: Number(bookingBikeId.value),
@@ -763,6 +880,7 @@
         saveRecentTrip(booking);
         closeModal("booking-modal");
         bookingForm.reset();
+        syncReturnDateUi();
         deliveryAddressGroup.classList.add("hidden");
         deliveryAddressInput.required = false;
 
@@ -824,6 +942,8 @@
     });
   }
 
+  bindDatePickerPlaceholder(searchReturnInput);
+  bindDatePickerPlaceholder(bookingReturn);
   initDefaultDates();
   loadPublicShops();
   loadFleet();
