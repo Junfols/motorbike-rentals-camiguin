@@ -364,6 +364,22 @@
         } else if (b.status === "active") {
           actions.push(`<button type="button" class="btn btn-sm btn-success" data-booking-action="completed" data-id="${b.id}">Mark Returned</button>`);
         }
+        const showBalanceTools = ["confirmed", "active", "completed"].includes(b.status);
+        const balanceOwed = Number(b.balance_due !== undefined && b.balance_due !== null ? b.balance_due : b.total_amount) > 0;
+        if (showBalanceTools && balanceOwed) {
+          actions.push(
+            b.balance_paid
+              ? `<button type="button" class="btn btn-sm btn-outline" data-balance-paid="0" data-id="${b.id}">Undo Balance Paid</button>`
+              : `<button type="button" class="btn btn-sm btn-primary" data-balance-paid="1" data-id="${b.id}">Mark Balance Paid</button>`
+          );
+        }
+        const balanceBadge = !showBalanceTools
+          ? ""
+          : !balanceOwed
+          ? `<span class="badge badge-verified">Paid in full</span>`
+          : b.balance_paid
+          ? `<span class="badge badge-verified">Balance Paid</span>`
+          : `<span class="badge badge-submitted">Balance Unpaid</span>`;
 
         if (payStatus === "submitted") {
           actions.push(`<button type="button" class="btn btn-sm btn-primary" data-payment-action="verified" data-id="${b.id}">Verify Receipt</button>`);
@@ -406,7 +422,7 @@
               </div>
               <div>
                 <span class="trip-detail-label">Reservation / Balance Due</span>
-                <strong>${escapeHtml(formatMoney(b.balance_due !== undefined && b.balance_due !== null ? b.balance_due : b.total_amount))}</strong>
+                <strong>${escapeHtml(formatMoney(b.balance_due !== undefined && b.balance_due !== null ? b.balance_due : b.total_amount))}</strong> ${balanceBadge}
                 <div class="text-muted">${hasOnlineFee ? `${escapeHtml(payChannelLabel)}: ${escapeHtml(formatMoney(b.reservation_fee))}` : "Pay 100% at shop"} &bull; Dep: ${escapeHtml(formatMoney(b.deposit_amount))}</div>
               </div>
               <div>
@@ -933,6 +949,25 @@
       } catch (err) {
         showToast(err.message, "error");
         payBtn.disabled = false;
+      }
+      return;
+    }
+    const balanceBtn = event.target.closest("[data-balance-paid]");
+    if (balanceBtn) {
+      const id = balanceBtn.getAttribute("data-id");
+      const paid = balanceBtn.getAttribute("data-balance-paid") === "1";
+      balanceBtn.disabled = true;
+      try {
+        await apiJson(`/api/admin/bookings/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ balance_paid: paid }),
+        });
+        await Promise.all([loadDashboard(), loadBookings()]);
+        showToast(paid ? "Balance marked as paid." : "Balance marked as unpaid.", "success");
+      } catch (err) {
+        showToast(err.message, "error");
+        balanceBtn.disabled = false;
       }
       return;
     }
