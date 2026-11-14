@@ -34,6 +34,8 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         for route in ("/", "/bookings", "/partner", "/admin", "/offline"):
             resp = self.client.get(route)
             self.assertEqual(resp.status_code, 200, f"Route {route} failed")
+            if route != "/admin":
+                self.assertNotIn('href="/admin"', resp.get_data(as_text=True))
 
         shops_resp = self.client.get("/api/shops")
         self.assertEqual(shops_resp.status_code, 200)
