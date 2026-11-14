@@ -1562,13 +1562,13 @@ class MotorbikeRentalPWATests(unittest.TestCase):
 
     def test_qr_upload_accepts_jfif_and_highres_images_and_network_first_scripts(self):
         sw_text = self.client.get("/sw.js").get_data(as_text=True)
-        self.assertIn("motoride-pwa-v7", sw_text)
+        self.assertIn("motoride-pwa-v8", sw_text)
         self.assertIn('/static/js/', sw_text)
 
         login_resp = self.client.post("/api/admin/login", json={"password": "admin1234"})
         self.assertEqual(login_resp.status_code, 200)
         admin_html = self.client.get("/admin").get_data(as_text=True)
-        self.assertIn('/static/js/admin.js?v=7', admin_html)
+        self.assertIn('/static/js/admin.js?v=8', admin_html)
         self.assertIn('.jfif', admin_html)
 
         # Windows/Edge/Messenger saves often use .jfif -> served cleanly as image/jpeg
@@ -1605,6 +1605,25 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         )
         self.assertEqual(up_too_big.status_code, 400)
         self.assertIn("8 MB", up_too_big.get_json()["error"])
+
+    def test_return_date_defaults_to_select_date_prompt_without_prefill(self):
+        index_html = self.client.get("/").get_data(as_text=True)
+        self.assertIn('/static/css/style.css?v=8', index_html)
+        self.assertIn('/static/js/storefront.js?v=8', index_html)
+        self.assertEqual(index_html.count('<span class="date-placeholder" aria-hidden="true">Select date</span>'), 2)
+        self.assertIn('id="search-return-date"', index_html)
+        self.assertIn('id="booking-return-date"', index_html)
+
+        storefront_js = self.client.get("/static/js/storefront.js").get_data(as_text=True)
+        self.assertIn('state.returnDate = "";', storefront_js)
+        self.assertIn("bindDatePickerPlaceholder(searchReturnInput);", storefront_js)
+        self.assertIn("bindDatePickerPlaceholder(bookingReturn);", storefront_js)
+        self.assertIn("Select a return date above to check availability & total price.", storefront_js)
+        self.assertNotIn("today.getDate() + 2", storefront_js)
+
+        style_css = self.client.get("/static/css/style.css").get_data(as_text=True)
+        self.assertIn(".date-input-wrap.is-empty .date-placeholder", style_css)
+        self.assertIn(".quote-availability.muted", style_css)
 
 if __name__ == "__main__":
     unittest.main()
