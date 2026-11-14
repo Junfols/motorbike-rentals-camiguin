@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+.venv/
+motoride.db
+motoride.db-wal
+motoride.db-shm
+static/uploads/*
+!static/uploads/.gitkeep
