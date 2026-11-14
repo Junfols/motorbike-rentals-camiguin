@@ -1145,7 +1145,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             engine_cc = int(data.get("engine_cc", existing["engine_cc"] if existing else 125))
             daily_rate = float(data.get("daily_rate", existing["daily_rate"] if existing else 0))
             weekly_rate = float(data.get("weekly_rate", existing["weekly_rate"] if existing else 0))
-            deposit = float(data.get("deposit", existing["deposit"] if existing else 2000))
+            deposit = float(data.get("deposit", existing["deposit"] if existing else 1500))
             units_count = int(data.get("units_count", existing["units_count"] if existing else 1))
         except (TypeError, ValueError):
             raise ValueError("Engine CC, rates, deposit, and units must be valid numbers.")
