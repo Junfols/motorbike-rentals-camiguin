@@ -307,7 +307,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         DB_PATH=db_path,
         DATABASE_URL=db_url,
         UPLOAD_FOLDER=upload_dir,
-        MAX_CONTENT_LENGTH=5 * 1024 * 1024,
+        MAX_CONTENT_LENGTH=10 * 1024 * 1024,
         SECRET_KEY=(test_config or {}).get("SECRET_KEY", secret_key),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
@@ -392,9 +392,12 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.get("/offline")
     def offline_page():
         return render_template("offline.html", active_nav="")
+    @app.get("/admin.webmanifest")
+    def admin_manifest():
+        return manifest(admin_app=True)
 
     @app.get("/manifest.webmanifest")
-    def manifest():
+    def manifest(admin_app: bool = False):
         shop = get_settings(get_db())
         shop_name = shop.get("shop_name", "Motorbike Rentals Camiguin")
         short_name = (
@@ -464,6 +467,14 @@ def create_app(test_config: dict | None = None) -> Flask:
                 },
             ],
         }
+        if admin_app:
+            payload["id"] = "/admin"
+            payload["name"] = f"{shop_name} Admin"
+            payload["short_name"] = "Admin"
+            payload["description"] = "Admin dashboard for platform owner."
+            payload["start_url"] = "/admin?source=pwa"
+            payload["scope"] = "/admin"
+            payload["shortcuts"] = []
         resp = make_response(jsonify(payload))
         resp.headers["Content-Type"] = "application/manifest+json; charset=utf-8"
         resp.headers["Cache-Control"] = "no-cache"
