@@ -446,6 +446,62 @@ textarea:focus {
   box-shadow: 0 0 0 3px var(--primary-ring);
 }
 
+.date-input-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.date-input-wrap .date-placeholder {
+  display: none;
+  position: absolute;
+  left: 11px;
+  right: 34px;
+  top: 3px;
+  bottom: 3px;
+  align-items: center;
+  padding-left: 2px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-family: inherit;
+  line-height: 1.2;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.date-input-wrap.is-empty .date-placeholder {
+  display: flex;
+}
+
+.date-input-wrap.is-empty input[type="date"]::-webkit-datetime-edit,
+.date-input-wrap.is-empty input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+.date-input-wrap.is-empty input[type="date"]::-webkit-datetime-edit-text,
+.date-input-wrap.is-empty input[type="date"]::-webkit-datetime-edit-month-field,
+.date-input-wrap.is-empty input[type="date"]::-webkit-datetime-edit-day-field,
+.date-input-wrap.is-empty input[type="date"]::-webkit-datetime-edit-year-field {
+  color: transparent;
+}
+
+.date-input-wrap.is-empty input[type="date"]::-webkit-date-and-time-value {
+  opacity: 0;
+}
+
+.date-input-wrap.is-empty input[type="date"]:focus-visible::-webkit-datetime-edit,
+.date-input-wrap.is-empty input[type="date"]:focus-visible::-webkit-datetime-edit-fields-wrapper,
+.date-input-wrap.is-empty input[type="date"]:focus-visible::-webkit-datetime-edit-text,
+.date-input-wrap.is-empty input[type="date"]:focus-visible::-webkit-datetime-edit-month-field,
+.date-input-wrap.is-empty input[type="date"]:focus-visible::-webkit-datetime-edit-day-field,
+.date-input-wrap.is-empty input[type="date"]:focus-visible::-webkit-datetime-edit-year-field {
+  color: var(--ink);
+}
+
+.date-input-wrap.is-empty input[type="date"]:focus-visible + .date-placeholder {
+  display: none;
+}
+
 /* Sections & Toolbar */
 .section {
   padding: 36px 0;
@@ -881,6 +937,11 @@ textarea:focus {
 
 .quote-availability.bad {
   color: var(--danger);
+}
+
+.quote-availability.muted {
+  color: var(--muted);
+  font-weight: 600;
 }
 
 .quote-line {
@@ -1730,7 +1791,8 @@ textarea:focus {
   .form-group select,
   .form-group textarea,
   .select-compact,
-  .search-input-wrap input {
+    .search-input-wrap input,
+  .date-input-wrap .date-placeholder {
     font-size: 16px;
   }
 }
