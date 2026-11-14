@@ -453,8 +453,77 @@
       .join("");
   }
 
+  function updateAlertStatusPill(el, isReady, readyText, mutedText) {
+    if (!el) return;
+    el.textContent = isReady ? readyText : mutedText;
+    el.classList.remove("ready", "muted");
+    el.classList.add(isReady ? "ready" : "muted");
+  }
+
+  function applyAlertSettingsToForm(s) {
+    const tokenInput = document.getElementById("set-telegram-bot-token");
+    if (tokenInput) tokenInput.value = "";
+    const clearTokenBox = document.getElementById("clear-telegram-bot-token");
+    if (clearTokenBox) clearTokenBox.checked = false;
+    const clearTokenWrap = document.getElementById("clear-telegram-token-wrap");
+    if (clearTokenWrap) clearTokenWrap.classList.toggle("hidden", !s.has_telegram_bot_token);
+    updateAlertStatusPill(
+      document.getElementById("telegram-token-status"),
+      !!s.has_telegram_bot_token,
+      "Saved",
+      "Not set"
+    );
+
+    const smtpPassInput = document.getElementById("set-smtp-password");
+    if (smtpPassInput) smtpPassInput.value = "";
+    const clearPassBox = document.getElementById("clear-smtp-password");
+    if (clearPassBox) clearPassBox.checked = false;
+    const clearPassWrap = document.getElementById("clear-smtp-password-wrap");
+    if (clearPassWrap) clearPassWrap.classList.toggle("hidden", !s.has_smtp_password);
+    updateAlertStatusPill(
+      document.getElementById("smtp-password-status"),
+      !!s.has_smtp_password,
+      "Saved",
+      "Not set"
+    );
+
+    document.getElementById("set-admin-telegram-chat-id").value = s.admin_telegram_chat_id || "";
+    document.getElementById("set-admin-notify-email").value = s.admin_notify_email || "";
+    document.getElementById("set-smtp-host").value = s.smtp_host || "";
+    document.getElementById("set-smtp-port").value = s.smtp_port || "587";
+    document.getElementById("set-smtp-username").value = s.smtp_username || "";
+    document.getElementById("set-smtp-from-email").value = s.smtp_from_email || "";
+    document.getElementById("set-notify-partner-email").checked = s.notify_partner_email !== "0";
+    document.getElementById("set-notify-customer-email").checked = s.notify_customer_email === "1";
+
+    const tgReady = !!(s.has_telegram_bot_token && (s.admin_telegram_chat_id || "").trim());
+    const emailReady = !!((s.smtp_host || "").trim() && (s.admin_notify_email || "").trim());
+    const summaryEl = document.getElementById("admin-alerts-summary-pill");
+    if (tgReady && emailReady) {
+      updateAlertStatusPill(summaryEl, true, "Telegram + Email Active", "Optional");
+    } else if (tgReady) {
+      updateAlertStatusPill(summaryEl, true, "Telegram Active", "Optional");
+    } else if (emailReady) {
+      updateAlertStatusPill(summaryEl, true, "Email Active", "Optional");
+    } else {
+      updateAlertStatusPill(summaryEl, false, "Active", "Not Configured");
+    }
+  }
+
+  function renderAlertChannelResults(containerEl, data) {
+    if (!containerEl) return;
+    const results = data.results || {};
+    const parts = Object.entries(results).map(([channel, info]) => {
+      const icon = info.ok ? "OK" : "Failed";
+      return `${channel.toUpperCase()}: ${icon} — ${info.detail || ""}`;
+    });
+    containerEl.textContent = parts.length ? parts.join(" | ") : data.error || "No alert channels configured.";
+    containerEl.classList.remove("hidden", "ok", "err");
+    containerEl.classList.add(data.ok ? "ok" : "err");
+  }
+
   async function loadSettings() {
-    const data = await apiJson("/api/settings");
+    const data = await apiJson("/api/admin/settings");
     const s = data.settings || {};
     document.getElementById("set-shop-name").value = s.shop_name || "";
     document.getElementById("set-location").value = s.location || "";
@@ -471,6 +540,7 @@
     document.getElementById("set-helmet-fee").value = s.extra_helmet_fee || "0";
     document.getElementById("set-topbox-fee").value = s.top_box_fee || "0";
     document.getElementById("set-terms-note").value = s.terms_note || "";
+    applyAlertSettingsToForm(s);
   }
 
   function openBikeEditor(bike) {
@@ -793,6 +863,18 @@
       extra_helmet_fee: document.getElementById("set-helmet-fee").value,
       top_box_fee: document.getElementById("set-topbox-fee").value,
       terms_note: document.getElementById("set-terms-note").value.trim(),
+      admin_telegram_chat_id: document.getElementById("set-admin-telegram-chat-id").value.trim(),
+      telegram_bot_token: document.getElementById("set-telegram-bot-token").value.trim(),
+      clear_telegram_bot_token: document.getElementById("clear-telegram-bot-token").checked,
+      admin_notify_email: document.getElementById("set-admin-notify-email").value.trim(),
+      smtp_host: document.getElementById("set-smtp-host").value.trim(),
+      smtp_port: document.getElementById("set-smtp-port").value.trim(),
+      smtp_username: document.getElementById("set-smtp-username").value.trim(),
+      smtp_password: document.getElementById("set-smtp-password").value.trim(),
+      clear_smtp_password: document.getElementById("clear-smtp-password").checked,
+      smtp_from_email: document.getElementById("set-smtp-from-email").value.trim(),
+      notify_partner_email: document.getElementById("set-notify-partner-email").checked,
+      notify_customer_email: document.getElementById("set-notify-customer-email").checked,
       current_password: document.getElementById("set-current-password").value,
       new_password: document.getElementById("set-new-password").value,
     };
@@ -804,6 +886,7 @@
         body: JSON.stringify(payload),
       });
       updateShopTextInDom(data.settings);
+      applyAlertSettingsToForm(data.settings);
       document.getElementById("admin-shop-subtitle").textContent =
         `${data.settings.shop_name} • ${data.settings.location}`;
       document.getElementById("set-current-password").value = "";
@@ -815,6 +898,51 @@
       settingsError.classList.remove("hidden");
     }
   });
+
+  const testAdminAlertBtn = document.getElementById("test-admin-alert-btn");
+  if (testAdminAlertBtn) {
+    testAdminAlertBtn.addEventListener("click", async () => {
+      const resultEl = document.getElementById("admin-alert-test-result");
+      testAdminAlertBtn.disabled = true;
+      testAdminAlertBtn.textContent = "Sending...";
+      if (resultEl) resultEl.classList.add("hidden");
+      try {
+        const res = await fetch("/api/admin/settings/test-alert", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            telegram_bot_token: document.getElementById("set-telegram-bot-token").value.trim(),
+            admin_telegram_chat_id: document.getElementById("set-admin-telegram-chat-id").value.trim(),
+            admin_notify_email: document.getElementById("set-admin-notify-email").value.trim(),
+            smtp_host: document.getElementById("set-smtp-host").value.trim(),
+            smtp_port: document.getElementById("set-smtp-port").value.trim(),
+            smtp_username: document.getElementById("set-smtp-username").value.trim(),
+            smtp_password: document.getElementById("set-smtp-password").value.trim(),
+            smtp_from_email: document.getElementById("set-smtp-from-email").value.trim(),
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          showLogin();
+          return;
+        }
+        renderAlertChannelResults(resultEl, data);
+        showToast(
+          data.ok ? "Test alert delivered!" : "Test alert failed — check details.",
+          data.ok ? "success" : "error"
+        );
+      } catch (err) {
+        if (resultEl) {
+          resultEl.textContent = err.message;
+          resultEl.classList.remove("hidden", "ok");
+          resultEl.classList.add("err");
+        }
+      } finally {
+        testAdminAlertBtn.disabled = false;
+        testAdminAlertBtn.textContent = "Send Test Alert";
+      }
+    });
+  }
 
   checkSession();
 })();

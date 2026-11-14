@@ -125,6 +125,8 @@
     document.getElementById("prof-owner-name").value = shop.owner_name || "";
     document.getElementById("prof-phone").value = shop.phone || "";
     document.getElementById("prof-whatsapp").value = shop.whatsapp_number || "";
+    document.getElementById("prof-telegram-chat-id").value = shop.telegram_chat_id || "";
+    document.getElementById("prof-alert-email-preview").value = shop.email || "";
     document.getElementById("prof-municipality").value = shop.municipality || "Mambajao";
     document.getElementById("prof-delivery-fee").value = shop.delivery_fee ?? 250;
     document.getElementById("prof-address").value = shop.address || "";
@@ -153,6 +155,7 @@
   async function loadDashboard() {
     const data = await apiJson("/api/partner/dashboard");
     renderShopHeader(data.shop);
+    updatePlatformAlertStatus(data);
     const k = data.kpis;
     pendingBadge.textContent = k.pending_count;
     pendingBadge.classList.toggle("hidden", k.pending_count === 0);
@@ -407,6 +410,7 @@
           municipality: document.getElementById("reg-municipality").value,
           delivery_fee: document.getElementById("reg-delivery-fee").value,
           address: document.getElementById("reg-address").value.trim(),
+          telegram_chat_id: document.getElementById("reg-telegram-chat-id").value.trim(),
           description: document.getElementById("reg-description").value.trim(),
           password: document.getElementById("reg-password").value,
         }),
@@ -544,6 +548,29 @@
     }
   });
 
+  function updatePlatformAlertStatus(platformFlags) {
+    if (!platformFlags) return;
+    if (typeof platformFlags.platform_telegram_enabled === "boolean") {
+      state.platformTelegramEnabled = platformFlags.platform_telegram_enabled;
+    }
+    if (typeof platformFlags.platform_email_enabled === "boolean") {
+      state.platformEmailEnabled = platformFlags.platform_email_enabled;
+    }
+    const pill = document.getElementById("partner-telegram-platform-status");
+    if (!pill) return;
+    pill.classList.remove("ready", "muted");
+    if (state.platformTelegramEnabled) {
+      pill.textContent = "Platform Telegram Bot Ready";
+      pill.classList.add("ready");
+    } else if (state.platformEmailEnabled) {
+      pill.textContent = "Email Alerts Ready (Telegram Bot Not Set)";
+      pill.classList.add("ready");
+    } else {
+      pill.textContent = "Ask Main Admin to Enable Telegram Bot / SMTP";
+      pill.classList.add("muted");
+    }
+  }
+
   profileForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     profileError.classList.add("hidden");
@@ -556,6 +583,7 @@
           owner_name: document.getElementById("prof-owner-name").value.trim(),
           phone: document.getElementById("prof-phone").value.trim(),
           whatsapp_number: document.getElementById("prof-whatsapp").value.trim(),
+          telegram_chat_id: document.getElementById("prof-telegram-chat-id").value.trim(),
           municipality: document.getElementById("prof-municipality").value,
           delivery_fee: document.getElementById("prof-delivery-fee").value,
           address: document.getElementById("prof-address").value.trim(),
@@ -565,6 +593,7 @@
         }),
       });
       renderShopHeader(data.shop);
+      updatePlatformAlertStatus(data);
       document.getElementById("prof-current-password").value = "";
       document.getElementById("prof-new-password").value = "";
       showToast("Shop profile saved!", "success");
@@ -573,6 +602,49 @@
       profileError.classList.remove("hidden");
     }
   });
+
+  const testPartnerAlertBtn = document.getElementById("test-partner-alert-btn");
+  if (testPartnerAlertBtn) {
+    testPartnerAlertBtn.addEventListener("click", async () => {
+      const resultEl = document.getElementById("partner-alert-test-result");
+      testPartnerAlertBtn.disabled = true;
+      testPartnerAlertBtn.textContent = "Sending...";
+      if (resultEl) resultEl.classList.add("hidden");
+      try {
+        const res = await fetch("/api/partner/profile/test-alert", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            telegram_chat_id: document.getElementById("prof-telegram-chat-id").value.trim(),
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          showAuth();
+          return;
+        }
+        const results = data.results || {};
+        const parts = Object.entries(results).map(([channel, info]) => {
+          return `${channel.toUpperCase()}: ${info.ok ? "OK" : "Failed"} — ${info.detail || ""}`;
+        });
+        if (resultEl) {
+          resultEl.textContent = parts.length ? parts.join(" | ") : data.error || "Test failed.";
+          resultEl.classList.remove("hidden", "ok", "err");
+          resultEl.classList.add(data.ok ? "ok" : "err");
+        }
+        showToast(data.ok ? "Test alert sent!" : "Test alert could not be delivered.", data.ok ? "success" : "error");
+      } catch (err) {
+        if (resultEl) {
+          resultEl.textContent = err.message;
+          resultEl.classList.remove("hidden", "ok");
+          resultEl.classList.add("err");
+        }
+      } finally {
+        testPartnerAlertBtn.disabled = false;
+        testPartnerAlertBtn.textContent = "Send Test Alert to My CP";
+      }
+    });
+  }
 
   checkSession();
 })();
