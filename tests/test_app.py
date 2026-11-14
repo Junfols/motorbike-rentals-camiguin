@@ -53,6 +53,16 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         sw_resp = self.client.get("/sw.js")
         self.assertEqual(sw_resp.status_code, 200)
         self.assertEqual(sw_resp.headers.get("Service-Worker-Allowed"), "/")
+        admin_manifest_resp = self.client.get("/admin.webmanifest")
+        self.assertEqual(admin_manifest_resp.status_code, 200)
+        admin_manifest = admin_manifest_resp.get_json()
+        self.assertEqual(admin_manifest["id"], "/admin")
+        self.assertEqual(admin_manifest["start_url"], "/admin?source=pwa")
+        self.assertEqual(admin_manifest["short_name"], "Admin")
+        self.assertEqual(admin_manifest["display"], "standalone")
+        self.assertEqual(manifest["id"], "/")
+        self.assertIn('href="/admin.webmanifest"', self.client.get("/admin").get_data(as_text=True))
+        self.assertIn('href="/manifest.webmanifest"', self.client.get("/").get_data(as_text=True))
 
     def test_fleet_filtering_and_quote_weekly_discount(self):
         resp = self.client.get("/api/bikes?category=Big%20Bike")
