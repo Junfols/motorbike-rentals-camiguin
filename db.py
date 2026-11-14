@@ -22,6 +22,32 @@ MEDIA_MIME_TYPES = {
     "webp": "image/webp",
 }
 
+SECRET_SETTING_KEYS = {
+    "admin_password_hash",
+    "secret_key",
+    "telegram_bot_token",
+    "smtp_password",
+    "admin_telegram_chat_id",
+    "admin_notify_email",
+    "smtp_host",
+    "smtp_port",
+    "smtp_username",
+    "smtp_from_email",
+    "notify_partner_email",
+    "notify_customer_email",
+}
+
+_ALERT_ENV_FALLBACKS = {
+    "telegram_bot_token": "TELEGRAM_BOT_TOKEN",
+    "admin_telegram_chat_id": "ADMIN_TELEGRAM_CHAT_ID",
+    "admin_notify_email": "ADMIN_NOTIFY_EMAIL",
+    "smtp_host": "SMTP_HOST",
+    "smtp_port": "SMTP_PORT",
+    "smtp_username": "SMTP_USERNAME",
+    "smtp_password": "SMTP_PASSWORD",
+    "smtp_from_email": "SMTP_FROM_EMAIL",
+}
+
 _PG_INIT_LOCK_KEY = 84729103
 
 
@@ -259,6 +285,7 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             address TEXT NOT NULL DEFAULT '',
             description TEXT NOT NULL DEFAULT '',
             delivery_fee REAL NOT NULL DEFAULT 250,
+            telegram_chat_id TEXT NOT NULL DEFAULT '',
             password_hash TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'pending',
             is_main INTEGER NOT NULL DEFAULT 0,
@@ -351,6 +378,7 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
             address TEXT NOT NULL DEFAULT '',
             description TEXT NOT NULL DEFAULT '',
             delivery_fee DOUBLE PRECISION NOT NULL DEFAULT 250,
+            telegram_chat_id TEXT NOT NULL DEFAULT '',
             password_hash TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'pending',
             is_main INTEGER NOT NULL DEFAULT 0,
@@ -469,6 +497,16 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
                 "top_box_fee": "100",
                 "opening_hours": "Daily, 7:00 AM – 8:00 PM",
                 "terms_note": "Valid Driver's License and refundable security deposit required upon pickup.",
+                "telegram_bot_token": os.environ.get("TELEGRAM_BOT_TOKEN", ""),
+                "admin_telegram_chat_id": os.environ.get("ADMIN_TELEGRAM_CHAT_ID", ""),
+                "admin_notify_email": os.environ.get("ADMIN_NOTIFY_EMAIL", ""),
+                "smtp_host": os.environ.get("SMTP_HOST", ""),
+                "smtp_port": os.environ.get("SMTP_PORT", "587"),
+                "smtp_username": os.environ.get("SMTP_USERNAME", ""),
+                "smtp_password": os.environ.get("SMTP_PASSWORD", ""),
+                "smtp_from_email": os.environ.get("SMTP_FROM_EMAIL", ""),
+                "notify_partner_email": "1",
+                "notify_customer_email": "1",
                 "admin_password_hash": generate_password_hash(initial_admin_pw),
                 "secret_key": initial_secret,
             }
@@ -543,6 +581,10 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
                 )
 
             # Safe schema migrations if upgrading an existing single-shop DB
+            shop_cols = _table_columns(conn, "shops")
+            if "telegram_chat_id" not in shop_cols:
+                conn.execute("ALTER TABLE shops ADD COLUMN telegram_chat_id TEXT NOT NULL DEFAULT ''")
+
             bike_cols = _table_columns(conn, "bikes")
             if "shop_id" not in bike_cols:
                 conn.execute("ALTER TABLE bikes ADD COLUMN shop_id INTEGER NOT NULL DEFAULT 1")
@@ -712,10 +754,28 @@ def get_settings(conn: DatabaseConnection, include_secrets: bool = False) -> dic
     """Fetch platform settings as a dictionary."""
     rows = conn.execute("SELECT key, value FROM settings").fetchall()
     result = {row["key"]: row["value"] for row in rows}
-    if not include_secrets:
-        result.pop("admin_password_hash", None)
-        result.pop("secret_key", None)
+    if include_secrets:
+        for setting_key, env_name in _ALERT_ENV_FALLBACKS.items():
+            if not result.get(setting_key):
+                env_val = (os.environ.get(env_name) or "").strip()
+                if env_val:
+                    result[setting_key] = env_val
+    else:
+        for secret_key in SECRET_SETTING_KEYS:
+            result.pop(secret_key, None)
     return result
+
+
+def get_admin_settings_view(conn: DatabaseConnection) -> dict:
+    """Return all editable platform settings for Main Admin with tokens masked."""
+    full = get_settings(conn, include_secrets=True)
+    token = full.pop("telegram_bot_token", "")
+    smtp_pw = full.pop("smtp_password", "")
+    full.pop("admin_password_hash", None)
+    full.pop("secret_key", None)
+    full["has_telegram_bot_token"] = bool(token)
+    full["has_smtp_password"] = bool(smtp_pw)
+    return full
 
 
 def verify_admin_password(conn: DatabaseConnection, password: str) -> bool:

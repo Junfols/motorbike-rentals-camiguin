@@ -34,6 +34,7 @@ from db import (
     count_overlapping_bookings,
     delete_unused_uploaded_media,
     generate_booking_code,
+    get_admin_settings_view,
     get_connection,
     get_database_url,
     get_settings,
@@ -47,6 +48,14 @@ from db import (
     verify_shop_password,
 )
 from icons import ensure_icons
+from notifications import (
+    dispatch_background,
+    notify_booking_cancelled_by_customer,
+    notify_new_booking,
+    notify_new_partner_registration,
+    notify_partner_status_change,
+    send_test_alert,
+)
 
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 
@@ -102,6 +111,7 @@ def _serialize_shop(row, include_private: bool = False) -> dict:
     if include_private:
         data["owner_name"] = row["owner_name"]
         data["email"] = row["email"]
+        data["telegram_chat_id"] = row["telegram_chat_id"] if "telegram_chat_id" in keys else ""
         data["created_at"] = row["created_at"]
     return data
 
@@ -258,6 +268,15 @@ def create_app(test_config: dict | None = None) -> Flask:
         db = g.pop("db", None)
         if db is not None:
             db.close()
+
+    def _dispatch_alert(fn, *args):
+        custom = app.config.get("NOTIFICATION_DISPATCHER")
+        if custom:
+            custom(fn, *args)
+        elif app.config.get("NOTIFICATION_SYNC"):
+            fn(*args)
+        else:
+            dispatch_background(fn, *args)
 
     @app.context_processor
     def inject_shop_settings():
@@ -784,7 +803,14 @@ def create_app(test_config: dict | None = None) -> Flask:
             raise
 
         created = _fetch_booking_by_id(conn, booking_id)
-        return jsonify({"booking": _serialize_booking(created), "quote": quote}), 201
+        booking_data = _serialize_booking(created)
+        _dispatch_alert(
+            notify_new_booking,
+            get_settings(conn, include_secrets=True),
+            _serialize_shop(shop_row, include_private=True),
+            booking_data,
+        )
+        return jsonify({"booking": booking_data, "quote": quote}), 201
 
     def _fetch_booking_by_id(conn, booking_id: int):
         return conn.execute(
@@ -880,7 +906,16 @@ def create_app(test_config: dict | None = None) -> Flask:
                 (now, row["id"]),
             )
         updated = _fetch_booking_by_id(conn, row["id"])
-        return jsonify({"booking": _serialize_booking(updated)})
+        booking_data = _serialize_booking(updated)
+        shop_row = conn.execute("SELECT * FROM shops WHERE id = ?", (row["shop_id"],)).fetchone()
+        if shop_row:
+            _dispatch_alert(
+                notify_booking_cancelled_by_customer,
+                get_settings(conn, include_secrets=True),
+                _serialize_shop(shop_row, include_private=True),
+                booking_data,
+            )
+        return jsonify({"booking": booking_data})
 
     # ------------------------------------------------------------------
     # Shared Bike Extraction Helper (Admin & Partner)
@@ -985,16 +1020,35 @@ def create_app(test_config: dict | None = None) -> Flask:
     # ------------------------------------------------------------------
     # Partner Portal Auth & APIs (/api/partner/...)
     # ------------------------------------------------------------------
+    def _platform_alert_flags(conn) -> dict:
+        secret_cfg = get_settings(conn, include_secrets=True)
+        telegram_ready = bool((secret_cfg.get("telegram_bot_token") or "").strip())
+        email_ready = bool(
+            (secret_cfg.get("smtp_host") or "").strip()
+            and ((secret_cfg.get("smtp_from_email") or "").strip() or (secret_cfg.get("smtp_username") or "").strip())
+        )
+        return {
+            "platform_telegram_enabled": telegram_ready,
+            "platform_email_enabled": email_ready,
+        }
+
     @app.get("/api/partner/me")
     def partner_me():
         shop_id = session.get("partner_shop_id")
         if not shop_id:
             return jsonify({"authenticated": False, "shop": None})
-        row = get_db().execute("SELECT * FROM shops WHERE id = ?", (shop_id,)).fetchone()
+        conn = get_db()
+        row = conn.execute("SELECT * FROM shops WHERE id = ?", (shop_id,)).fetchone()
         if not row:
             session.pop("partner_shop_id", None)
             return jsonify({"authenticated": False, "shop": None})
-        return jsonify({"authenticated": True, "shop": _serialize_shop(row, include_private=True)})
+        return jsonify(
+            {
+                "authenticated": True,
+                "shop": _serialize_shop(row, include_private=True),
+                **_platform_alert_flags(conn),
+            }
+        )
 
     @app.post("/api/partner/register")
     def partner_register():
@@ -1004,6 +1058,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         email = (payload.get("email") or "").strip().lower()
         phone = (payload.get("phone") or "").strip()
         whatsapp_number = _normalize_phone(payload.get("whatsapp_number") or phone)
+        telegram_chat_id = (payload.get("telegram_chat_id") or "").strip()
         municipality = (payload.get("municipality") or "Mambajao").strip()
         address = (payload.get("address") or "").strip()
         description = (payload.get("description") or "").strip()
@@ -1043,9 +1098,9 @@ def create_app(test_config: dict | None = None) -> Flask:
                 """
                 INSERT INTO shops (
                     shop_name, slug, owner_name, email, phone, whatsapp_number,
-                    municipality, address, description, delivery_fee, password_hash,
+                    telegram_chat_id, municipality, address, description, delivery_fee, password_hash,
                     status, is_main, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?)
                 """,
                 (
                     shop_name,
@@ -1054,6 +1109,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                     email,
                     phone,
                     whatsapp_number,
+                    telegram_chat_id,
                     municipality,
                     address,
                     description,
@@ -1065,7 +1121,15 @@ def create_app(test_config: dict | None = None) -> Flask:
 
         session["partner_shop_id"] = shop_id
         created = conn.execute("SELECT * FROM shops WHERE id = ?", (shop_id,)).fetchone()
-        return jsonify({"authenticated": True, "shop": _serialize_shop(created, include_private=True)}), 201
+        secret_settings = get_settings(conn, include_secrets=True)
+        _dispatch_alert(notify_new_partner_registration, secret_settings, dict(created))
+        return jsonify(
+            {
+                "authenticated": True,
+                "shop": _serialize_shop(created, include_private=True),
+                **_platform_alert_flags(conn),
+            }
+        ), 201
 
     @app.post("/api/partner/login")
     def partner_login():
@@ -1150,6 +1214,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         return jsonify(
             {
                 "shop": _serialize_shop(g.partner_shop, include_private=True),
+                **_platform_alert_flags(conn),
                 "commission_rate": float(settings.get("commission_rate", "10") or 0),
                 "kpis": {
                     "total_models": int(fleet_stats["total_models"]),
@@ -1433,6 +1498,9 @@ def create_app(test_config: dict | None = None) -> Flask:
         whatsapp_number = _normalize_phone(
             payload.get("whatsapp_number") if "whatsapp_number" in payload else shop["whatsapp_number"]
         )
+        telegram_chat_id = (
+            (payload.get("telegram_chat_id") if "telegram_chat_id" in payload else shop["telegram_chat_id"]) or ""
+        ).strip()
         municipality = (payload.get("municipality") or shop["municipality"]).strip()
         address = (payload.get("address") if "address" in payload else shop["address"]).strip()
         description = (
@@ -1471,7 +1539,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                 """
                 UPDATE shops SET
                     shop_name = ?, slug = ?, owner_name = ?, phone = ?, whatsapp_number = ?,
-                    municipality = ?, address = ?, description = ?, delivery_fee = ?,
+                    telegram_chat_id = ?, municipality = ?, address = ?, description = ?, delivery_fee = ?,
                     password_hash = ?
                 WHERE id = ?
                 """,
@@ -1481,6 +1549,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                     owner_name,
                     phone,
                     whatsapp_number,
+                    telegram_chat_id,
                     municipality,
                     address,
                     description,
@@ -1490,7 +1559,29 @@ def create_app(test_config: dict | None = None) -> Flask:
                 ),
             )
         updated = conn.execute("SELECT * FROM shops WHERE id = ?", (shop["id"],)).fetchone()
-        return jsonify({"shop": _serialize_shop(updated, include_private=True)})
+        return jsonify({"shop": _serialize_shop(updated, include_private=True), **_platform_alert_flags(conn)})
+
+    @app.post("/api/partner/profile/test-alert")
+    @partner_required
+    def partner_test_alert():
+        payload = request.get_json(silent=True) or {}
+        conn = get_db()
+        shop = g.partner_shop
+        chat_id = (
+            (payload.get("telegram_chat_id") if "telegram_chat_id" in payload else shop["telegram_chat_id"]) or ""
+        ).strip()
+        email_to = ((payload.get("email") if "email" in payload else shop["email"]) or "").strip()
+
+        secret_settings = get_settings(conn, include_secrets=True)
+        has_smtp = bool((secret_settings.get("smtp_host") or "").strip())
+        results = send_test_alert(
+            secret_settings,
+            telegram_chat_id=chat_id if (chat_id or not has_smtp) else None,
+            email_to=email_to if has_smtp else None,
+            label=shop["shop_name"],
+        )
+        ok_any = any(item.get("ok") for item in results.values())
+        return jsonify({"ok": ok_any, "results": results}), (200 if ok_any else 400)
 
     # ------------------------------------------------------------------
     # Main Super Admin Auth & Centralized Dashboard APIs (/api/admin/...)
@@ -1741,6 +1832,9 @@ def create_app(test_config: dict | None = None) -> Flask:
         with conn:
             conn.execute("UPDATE shops SET status = ? WHERE id = ?", (new_status, shop_id))
         updated = conn.execute("SELECT * FROM shops WHERE id = ?", (shop_id,)).fetchone()
+        if new_status != existing["status"] and new_status in ("approved", "suspended"):
+            secret_settings = get_settings(conn, include_secrets=True)
+            _dispatch_alert(notify_partner_status_change, secret_settings, dict(updated))
         return jsonify({"shop": _serialize_shop(updated, include_private=True)})
 
     @app.delete("/api/admin/shops/<int:shop_id>")
@@ -2042,6 +2136,12 @@ def create_app(test_config: dict | None = None) -> Flask:
         delete_unused_uploaded_media(conn, existing["image_url"])
         return jsonify({"deleted": True, "id": bike_id})
 
+    @app.get("/api/admin/settings")
+    @admin_required
+    def admin_get_settings():
+        conn = get_db()
+        return jsonify({"settings": get_admin_settings_view(conn)})
+
     @app.put("/api/admin/settings")
     @admin_required
     def admin_update_settings():
@@ -2063,6 +2163,12 @@ def create_app(test_config: dict | None = None) -> Flask:
             "top_box_fee",
             "opening_hours",
             "terms_note",
+            "admin_telegram_chat_id",
+            "admin_notify_email",
+            "smtp_host",
+            "smtp_port",
+            "smtp_username",
+            "smtp_from_email",
         )
         numeric_keys = {"delivery_fee", "extra_helmet_fee", "top_box_fee", "commission_rate"}
 
@@ -2095,6 +2201,36 @@ def create_app(test_config: dict | None = None) -> Flask:
                 return jsonify({"error": "New password must be at least 6 characters."}), 400
             updates["admin_password_hash"] = generate_password_hash(new_password)
 
+        if "smtp_port" in updates:
+            port_raw = (updates["smtp_port"] or "").strip() or "587"
+            try:
+                port_num = int(port_raw)
+                if port_num < 1 or port_num > 65535:
+                    raise ValueError("out of range")
+                updates["smtp_port"] = str(port_num)
+            except ValueError:
+                return jsonify({"error": "SMTP Port must be a number between 1 and 65535."}), 400
+
+        for bool_key in ("notify_partner_email", "notify_customer_email"):
+            if bool_key in payload:
+                raw_val = payload.get(bool_key)
+                if isinstance(raw_val, bool):
+                    updates[bool_key] = "1" if raw_val else "0"
+                else:
+                    updates[bool_key] = (
+                        "1" if str(raw_val).strip().lower() in ("1", "true", "yes", "on") else "0"
+                    )
+
+        if payload.get("clear_telegram_bot_token"):
+            updates["telegram_bot_token"] = ""
+        elif isinstance(payload.get("telegram_bot_token"), str) and payload["telegram_bot_token"].strip():
+            updates["telegram_bot_token"] = payload["telegram_bot_token"].strip()
+
+        if payload.get("clear_smtp_password"):
+            updates["smtp_password"] = ""
+        elif isinstance(payload.get("smtp_password"), str) and payload["smtp_password"].strip():
+            updates["smtp_password"] = payload["smtp_password"].strip()
+
         with conn:
             for key, val in updates.items():
                 conn.execute(
@@ -2103,7 +2239,44 @@ def create_app(test_config: dict | None = None) -> Flask:
                     (key, val),
                 )
 
-        return jsonify({"settings": get_settings(conn)})
+        return jsonify({"settings": get_admin_settings_view(conn)})
+
+    @app.post("/api/admin/settings/test-alert")
+    @admin_required
+    def admin_test_alert():
+        payload = request.get_json(silent=True) or {}
+        conn = get_db()
+        cfg = dict(get_settings(conn, include_secrets=True))
+        for key in (
+            "telegram_bot_token",
+            "smtp_host",
+            "smtp_port",
+            "smtp_username",
+            "smtp_password",
+            "smtp_from_email",
+        ):
+            override = payload.get(key)
+            if isinstance(override, str) and override.strip():
+                cfg[key] = override.strip()
+
+        chat_id = (
+            (payload.get("admin_telegram_chat_id") if "admin_telegram_chat_id" in payload else cfg.get("admin_telegram_chat_id"))
+            or ""
+        ).strip()
+        email_to = (
+            (payload.get("admin_notify_email") if "admin_notify_email" in payload else cfg.get("admin_notify_email"))
+            or ""
+        ).strip()
+
+        has_smtp = bool((cfg.get("smtp_host") or "").strip())
+        results = send_test_alert(
+            cfg,
+            telegram_chat_id=chat_id if (chat_id or not has_smtp) else None,
+            email_to=email_to if has_smtp else None,
+            label="Main Admin",
+        )
+        ok_any = any(item.get("ok") for item in results.values())
+        return jsonify({"ok": ok_any, "results": results}), (200 if ok_any else 400)
 
     return app
 
