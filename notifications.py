@@ -150,7 +150,16 @@ def format_new_booking_message(settings: dict, shop: dict, booking: dict) -> tup
         f"License: {booking.get('license_number')}\n"
         + (f"Notes: {booking.get('notes')}\n" if booking.get("notes") else "")
         + f"\nTotal: {cur}{float(booking.get('total_amount') or 0):,.2f}\n"
-        f"Platform Fee ({float(booking.get('commission_rate') or 0):g}%): "
+        + (
+            f"Reservation Payment ({(booking.get('payment_channel') or 'gcash').upper()} - "
+            f"{booking.get('payment_status') or 'submitted'}): "
+            f"{cur}{float(booking.get('reservation_fee') or 0):,.2f}"
+            + (f" (Ref: {booking.get('payment_reference')})" if booking.get("payment_reference") else "")
+            + f"\nBalance Due at Pickup: {cur}{float(booking.get('balance_due') or 0):,.2f}\n"
+            if float(booking.get("reservation_fee") or 0) > 0 or booking.get("payment_reference")
+            else ""
+        )
+        + f"Platform Fee ({float(booking.get('commission_rate') or 0):g}%): "
         f"{cur}{float(booking.get('platform_fee') or 0):,.2f}\n"
         f"Partner Net Payout: {cur}{float(booking.get('shop_payout') or 0):,.2f}\n"
         f"Security Deposit: {cur}{float(booking.get('deposit_amount') or 0):,.2f}"

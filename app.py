@@ -28,6 +28,8 @@ from db import (
     VALID_BIKE_STATUSES,
     VALID_BOOKING_STATUSES,
     VALID_CATEGORIES,
+    VALID_PAYMENT_STATUSES,
+    VALID_RESERVATION_MODES,
     VALID_SHOP_STATUSES,
     VALID_TRANSMISSIONS,
     calculate_quote,
@@ -40,6 +42,7 @@ from db import (
     get_settings,
     get_uploaded_media,
     init_db,
+    is_reservation_payment_configured,
     parse_iso_date,
     save_uploaded_media,
     slugify_name,
@@ -81,6 +84,53 @@ def _allowed_image(filename: str) -> bool:
         return False
     ext = filename.rsplit(".", 1)[1].lower()
     return ext in ALLOWED_IMAGE_EXTENSIONS
+
+
+def _as_bool(value, default: bool = False) -> bool:
+    """Parse boolean flags coming from JSON booleans or multipart form fields."""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _validate_image_upload(
+    image_file,
+    prefix: str = "",
+    max_bytes: int = 4 * 1024 * 1024,
+) -> tuple[str, bytes, str | None] | None:
+    """Validate an uploaded image file and prepare its storage tuple without touching DB."""
+    if not image_file or not getattr(image_file, "filename", ""):
+        return None
+    orig_name = str(image_file.filename)
+    if not _allowed_image(orig_name):
+        raise ValueError("Uploaded image must be PNG, JPG, JPEG, or WEBP.")
+    raw_bytes = image_file.read()
+    if not raw_bytes:
+        raise ValueError("Uploaded image file is empty.")
+    if len(raw_bytes) > max_bytes:
+        limit_mb = max(1, max_bytes // (1024 * 1024))
+        raise ValueError(f"Uploaded image must be {limit_mb} MB or smaller.")
+    ext = orig_name.rsplit(".", 1)[1].lower()
+    safe_name = secure_filename(orig_name) or f"image.{ext}"
+    if "." not in safe_name:
+        safe_name = f"{safe_name}.{ext}"
+    prefix_clean = f"{prefix.strip('_')}_" if prefix.strip("_") else ""
+    unique_name = f"{prefix_clean}{secrets.token_hex(6)}_{safe_name}"
+    mime = (getattr(image_file, "mimetype", None) or "").strip() or None
+    return unique_name, raw_bytes, mime
+
+
+def _save_validated_image(
+    conn,
+    validated: tuple[str, bytes, str | None],
+    use_tx: bool = True,
+) -> str:
+    """Persist a validated image tuple in uploaded_media and return its /uploads URL."""
+    unique_name, raw_bytes, mime = validated
+    save_uploaded_media(conn, unique_name, raw_bytes, content_type=mime, use_tx=use_tx)
+    return f"/uploads/{unique_name}"
 
 
 def _serialize_shop(row, include_private: bool = False) -> dict:
@@ -191,6 +241,16 @@ def _serialize_booking(row) -> dict:
         "commission_rate": float(row["commission_rate"] or 0),
         "platform_fee": float(row["platform_fee"] or 0),
         "shop_payout": float(row["shop_payout"] or 0),
+        "reservation_fee": float(row["reservation_fee"] if "reservation_fee" in row.keys() and row["reservation_fee"] is not None else 0),
+        "balance_due": float(
+            row["balance_due"]
+            if "balance_due" in row.keys() and row["balance_due"] is not None
+            else row["total_amount"]
+        ),
+        "payment_channel": (row["payment_channel"] if "payment_channel" in row.keys() else "") or "pay_at_shop",
+        "payment_reference": (row["payment_reference"] if "payment_reference" in row.keys() else "") or "",
+        "payment_proof_url": (row["payment_proof_url"] if "payment_proof_url" in row.keys() else "") or "",
+        "payment_status": (row["payment_status"] if "payment_status" in row.keys() else "") or "unpaid",
         "deposit_amount": float(row["deposit_amount"]),
         "notes": row["notes"],
         "admin_notes": row["admin_notes"],
@@ -669,7 +729,13 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     @app.post("/api/bookings")
     def create_booking():
-        payload = request.get_json(silent=True) or {}
+        if request.content_type and "multipart/form-data" in request.content_type:
+            payload = request.form
+            proof_file = request.files.get("payment_proof")
+        else:
+            payload = request.get_json(silent=True) or {}
+            proof_file = None
+
         bike_id = payload.get("bike_id")
         customer_name = (payload.get("customer_name") or "").strip()
         customer_phone = (payload.get("customer_phone") or "").strip()
@@ -680,9 +746,11 @@ def create_app(test_config: dict | None = None) -> Flask:
         pickup_time = (payload.get("pickup_time") or "09:00").strip()
         pickup_method = (payload.get("pickup_method") or "shop").strip().lower()
         delivery_address = (payload.get("delivery_address") or "").strip()
-        extra_helmet = bool(payload.get("extra_helmet", False))
-        top_box = bool(payload.get("top_box", False))
+        extra_helmet = _as_bool(payload.get("extra_helmet"), default=False)
+        top_box = _as_bool(payload.get("top_box"), default=False)
         notes = (payload.get("notes") or "").strip()
+        payment_channel = str(payload.get("payment_channel") or "pay_at_shop").strip().lower()
+        payment_reference = str(payload.get("payment_reference") or "").strip()
 
         if not bike_id or not isinstance(bike_id, int):
             try:
@@ -700,6 +768,12 @@ def create_app(test_config: dict | None = None) -> Flask:
             return jsonify({"error": "Invalid pickup method."}), 400
         if pickup_method == "delivery" and not delivery_address:
             return jsonify({"error": "Please enter your resort, port, or delivery address."}), 400
+        if payment_channel not in ("pay_at_shop", "gcash", "maya"):
+            return jsonify({"error": "Invalid payment method selected."}), 400
+        try:
+            validated_proof = _validate_image_upload(proof_file, prefix="proof")
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
         try:
             p_dt = parse_iso_date(pickup_date)
@@ -755,6 +829,77 @@ def create_app(test_config: dict | None = None) -> Flask:
                 top_box=top_box,
                 shop=shop_row,
             )
+
+            payment_active = (
+                quote["reservation_mode"] != "off"
+                and quote["reservation_configured"]
+                and quote["reservation_fee"] > 0
+            )
+            if not payment_active:
+                stored_channel = "pay_at_shop"
+                stored_reference = ""
+                stored_proof_url = ""
+                stored_payment_status = "unpaid"
+                stored_reservation_fee = 0.0
+                stored_balance_due = quote["total_amount"]
+            elif payment_channel == "pay_at_shop":
+                if quote["reservation_mode"] == "required":
+                    conn.rollback()
+                    return (
+                        jsonify(
+                            {
+                                "error": (
+                                    "Reservation fee payment via GCash or Maya is required to "
+                                    "submit this booking request."
+                                )
+                            }
+                        ),
+                        400,
+                    )
+                stored_channel = "pay_at_shop"
+                stored_reference = ""
+                stored_proof_url = ""
+                stored_payment_status = "unpaid"
+                stored_reservation_fee = 0.0
+                stored_balance_due = quote["total_amount"]
+            else:
+                if payment_reference and len(payment_reference) < 6:
+                    conn.rollback()
+                    return (
+                        jsonify(
+                            {
+                                "error": (
+                                    "Please enter your full GCash / Maya Reference No. "
+                                    "(at least 6 characters)."
+                                )
+                            }
+                        ),
+                        400,
+                    )
+                if not payment_reference and validated_proof is None:
+                    conn.rollback()
+                    return (
+                        jsonify(
+                            {
+                                "error": (
+                                    "Please enter your GCash / Maya Reference No. or upload "
+                                    "your payment receipt screenshot."
+                                )
+                            }
+                        ),
+                        400,
+                    )
+                stored_proof_url = (
+                    _save_validated_image(conn, validated_proof, use_tx=False)
+                    if validated_proof is not None
+                    else ""
+                )
+                stored_channel = payment_channel
+                stored_reference = payment_reference
+                stored_payment_status = "submitted"
+                stored_reservation_fee = quote["reservation_fee"]
+                stored_balance_due = quote["balance_due"]
+
             booking_code = generate_booking_code(conn)
             now = datetime.now().isoformat(timespec="seconds")
 
@@ -765,8 +910,10 @@ def create_app(test_config: dict | None = None) -> Flask:
                     license_number, pickup_date, return_date, pickup_time, pickup_method,
                     delivery_address, extra_helmet, top_box, rental_days, base_subtotal,
                     addons_total, delivery_total, total_amount, commission_rate, platform_fee,
-                    shop_payout, deposit_amount, notes, admin_notes, status, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'pending', ?, ?)
+                    shop_payout, reservation_fee, balance_due, payment_channel, payment_reference,
+                    payment_proof_url, payment_status, deposit_amount, notes, admin_notes, status,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'pending', ?, ?)
                 """,
                 (
                     booking_code,
@@ -791,6 +938,12 @@ def create_app(test_config: dict | None = None) -> Flask:
                     quote["commission_rate"],
                     quote["platform_fee"],
                     quote["shop_payout"],
+                    stored_reservation_fee,
+                    stored_balance_due,
+                    stored_channel,
+                    stored_reference,
+                    stored_proof_url,
+                    stored_payment_status,
                     quote["deposit_amount"],
                     notes,
                     now,
@@ -977,18 +1130,9 @@ def create_app(test_config: dict | None = None) -> Flask:
         else:
             featured = bool(featured_raw)
 
-        if image_file and image_file.filename:
-            if not _allowed_image(image_file.filename):
-                raise ValueError("Uploaded image must be PNG, JPG, JPEG, or WEBP.")
-            raw_bytes = image_file.read()
-            if not raw_bytes:
-                raise ValueError("Uploaded image file is empty.")
-            if len(raw_bytes) > 4 * 1024 * 1024:
-                raise ValueError("Uploaded image must be 4 MB or smaller.")
-            safe_name = secure_filename(image_file.filename)
-            unique_name = f"{secrets.token_hex(6)}_{safe_name}"
-            save_uploaded_media(get_db(), unique_name, raw_bytes)
-            image_url = f"/uploads/{unique_name}"
+        validated_image = _validate_image_upload(image_file)
+        if validated_image is not None:
+            image_url = _save_validated_image(get_db(), validated_image)
         elif not image_url:
             image_url = "/static/images/bike-click125.jpg"
         elif image_url.startswith("/"):
@@ -1642,6 +1786,9 @@ def create_app(test_config: dict | None = None) -> Flask:
                 COALESCE(SUM(CASE WHEN status IN ('confirmed', 'active', 'completed') THEN total_amount ELSE 0 END), 0) AS projected_revenue,
                 COALESCE(SUM(CASE WHEN status IN ('confirmed', 'active', 'completed') THEN platform_fee ELSE 0 END), 0) AS platform_fee_total,
                 COALESCE(SUM(CASE WHEN status IN ('confirmed', 'active', 'completed') THEN shop_payout ELSE 0 END), 0) AS partner_payout_total,
+                COALESCE(SUM(CASE WHEN payment_status = 'verified' AND status != 'cancelled' THEN reservation_fee ELSE 0 END), 0) AS collected_reservation_total,
+                COALESCE(SUM(CASE WHEN payment_status = 'submitted' AND status != 'cancelled' THEN reservation_fee ELSE 0 END), 0) AS pending_verification_total,
+                COUNT(CASE WHEN payment_status = 'submitted' AND status != 'cancelled' THEN id END) AS pending_payment_verifications,
                 COALESCE(SUM(CASE WHEN status = 'completed' THEN total_amount ELSE 0 END), 0) AS completed_revenue,
                 COALESCE(SUM(CASE WHEN status IN ('confirmed', 'active', 'completed') AND substr(pickup_date, 1, 7) = ? THEN total_amount ELSE 0 END), 0) AS month_revenue,
                 COALESCE(SUM(CASE WHEN status IN ('confirmed', 'active', 'completed') AND pickup_date = ? THEN total_amount ELSE 0 END), 0) AS today_revenue
@@ -1701,10 +1848,16 @@ def create_app(test_config: dict | None = None) -> Flask:
                     "projected_revenue": float(revenue_row["projected_revenue"]),
                     "platform_fee_total": float(revenue_row["platform_fee_total"]),
                     "partner_payout_total": float(revenue_row["partner_payout_total"]),
+                    "collected_reservation_total": float(revenue_row["collected_reservation_total"]),
+                    "pending_verification_total": float(revenue_row["pending_verification_total"]),
+                    "pending_payment_verifications": int(revenue_row["pending_payment_verifications"] or 0),
                     "completed_revenue": float(revenue_row["completed_revenue"]),
                     "month_revenue": float(revenue_row["month_revenue"]),
                     "today_revenue": float(revenue_row["today_revenue"]),
                     "commission_rate": float(settings.get("commission_rate", "10") or 0),
+                    "reservation_mode": settings.get("reservation_mode", "off"),
+                    "reservation_percent": float(settings.get("reservation_percent", "10") or 0),
+                    "reservation_configured": is_reservation_payment_configured(settings),
                 },
                 "revenue_by_shop": [
                     {
@@ -1922,6 +2075,25 @@ def create_app(test_config: dict | None = None) -> Flask:
         if new_status not in VALID_BOOKING_STATUSES:
             return jsonify({"error": "Invalid booking status."}), 400
 
+        existing_pay_status = str(existing["payment_status"] or "unpaid").strip().lower()
+        new_payment_status = (
+            str(payload["payment_status"]).strip().lower()
+            if "payment_status" in payload and payload["payment_status"] is not None
+            else existing_pay_status
+        )
+        if new_payment_status not in VALID_PAYMENT_STATUSES:
+            return jsonify({"error": "Invalid payment status."}), 400
+
+        total_amount = float(existing["total_amount"] or 0)
+        reservation_fee = float(existing["reservation_fee"] or 0)
+        if "payment_status" in payload and new_payment_status in ("submitted", "verified") and reservation_fee <= 0:
+            return jsonify({"error": "No online reservation payment was submitted for this booking."}), 400
+
+        if new_payment_status in ("rejected", "refunded", "unpaid"):
+            new_balance_due = round(total_amount, 2)
+        else:
+            new_balance_due = round(max(0.0, total_amount - reservation_fee), 2)
+
         admin_notes = (
             payload["admin_notes"].strip()
             if "admin_notes" in payload and payload["admin_notes"] is not None
@@ -1955,8 +2127,12 @@ def create_app(test_config: dict | None = None) -> Flask:
         now = datetime.now().isoformat(timespec="seconds")
         with conn:
             conn.execute(
-                "UPDATE bookings SET status = ?, admin_notes = ?, updated_at = ? WHERE id = ?",
-                (new_status, admin_notes, now, booking_id),
+                """
+                UPDATE bookings
+                SET status = ?, payment_status = ?, balance_due = ?, admin_notes = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (new_status, new_payment_status, new_balance_due, admin_notes, now, booking_id),
             )
         updated = _fetch_booking_by_id(conn, booking_id)
         return jsonify({"booking": _serialize_booking(updated)})
@@ -2158,6 +2334,12 @@ def create_app(test_config: dict | None = None) -> Flask:
             "whatsapp_number",
             "currency",
             "commission_rate",
+            "reservation_mode",
+            "reservation_percent",
+            "gcash_account_name",
+            "gcash_number",
+            "maya_number",
+            "payment_instructions",
             "delivery_fee",
             "extra_helmet_fee",
             "top_box_fee",
@@ -2170,7 +2352,13 @@ def create_app(test_config: dict | None = None) -> Flask:
             "smtp_username",
             "smtp_from_email",
         )
-        numeric_keys = {"delivery_fee", "extra_helmet_fee", "top_box_fee", "commission_rate"}
+        numeric_keys = {
+            "delivery_fee",
+            "extra_helmet_fee",
+            "top_box_fee",
+            "commission_rate",
+            "reservation_percent",
+        }
 
         updates: dict[str, str] = {}
         for key in editable_keys:
@@ -2181,8 +2369,9 @@ def create_app(test_config: dict | None = None) -> Flask:
                         num = float(val or 0)
                         if num < 0:
                             return jsonify({"error": f"{key} cannot be negative."}), 400
-                        if key == "commission_rate" and num > 100:
-                            return jsonify({"error": "Commission rate cannot exceed 100%."}), 400
+                        if key in ("commission_rate", "reservation_percent") and num > 100:
+                            label = "Commission rate" if key == "commission_rate" else "Reservation percent"
+                            return jsonify({"error": f"{label} cannot exceed 100%."}), 400
                         val = str(int(num) if num.is_integer() else round(num, 2))
                     except ValueError:
                         return jsonify({"error": f"{key} must be a valid number."}), 400
@@ -2191,6 +2380,15 @@ def create_app(test_config: dict | None = None) -> Flask:
                 if key == "currency" and not val:
                     return jsonify({"error": "Currency symbol cannot be empty."}), 400
                 updates[key] = val
+
+        if "reservation_mode" in updates:
+            mode_val = updates["reservation_mode"].lower()
+            if mode_val not in VALID_RESERVATION_MODES:
+                return (
+                    jsonify({"error": "Invalid reservation mode. Choose off, optional, or required."}),
+                    400,
+                )
+            updates["reservation_mode"] = mode_val
 
         new_password = (payload.get("new_password") or "").strip()
         if new_password:
@@ -2213,13 +2411,7 @@ def create_app(test_config: dict | None = None) -> Flask:
 
         for bool_key in ("notify_partner_email", "notify_customer_email"):
             if bool_key in payload:
-                raw_val = payload.get(bool_key)
-                if isinstance(raw_val, bool):
-                    updates[bool_key] = "1" if raw_val else "0"
-                else:
-                    updates[bool_key] = (
-                        "1" if str(raw_val).strip().lower() in ("1", "true", "yes", "on") else "0"
-                    )
+                updates[bool_key] = "1" if _as_bool(payload.get(bool_key)) else "0"
 
         if payload.get("clear_telegram_bot_token"):
             updates["telegram_bot_token"] = ""
@@ -2231,6 +2423,12 @@ def create_app(test_config: dict | None = None) -> Flask:
         elif isinstance(payload.get("smtp_password"), str) and payload["smtp_password"].strip():
             updates["smtp_password"] = payload["smtp_password"].strip()
 
+        old_qr_url = ""
+        if _as_bool(payload.get("clear_gcash_qr")):
+            qr_row = conn.execute("SELECT value FROM settings WHERE key = 'gcash_qr_url'").fetchone()
+            old_qr_url = qr_row["value"] if qr_row else ""
+            updates["gcash_qr_url"] = ""
+
         with conn:
             for key, val in updates.items():
                 conn.execute(
@@ -2239,7 +2437,38 @@ def create_app(test_config: dict | None = None) -> Flask:
                     (key, val),
                 )
 
+        if old_qr_url:
+            delete_unused_uploaded_media(conn, old_qr_url)
+
         return jsonify({"settings": get_admin_settings_view(conn)})
+
+    @app.post("/api/admin/settings/qr")
+    @admin_required
+    def admin_upload_qr():
+        qr_file = request.files.get("qr_image") or request.files.get("image")
+        try:
+            validated_qr = _validate_image_upload(qr_file, prefix="qr")
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        if validated_qr is None:
+            return (
+                jsonify({"error": "Please select a QR code image (PNG, JPG, JPEG, or WEBP)."}),
+                400,
+            )
+
+        conn = get_db()
+        old_row = conn.execute("SELECT value FROM settings WHERE key = 'gcash_qr_url'").fetchone()
+        old_qr_url = old_row["value"] if old_row else ""
+        with conn:
+            new_qr_url = _save_validated_image(conn, validated_qr, use_tx=False)
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES ('gcash_qr_url', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (new_qr_url,),
+            )
+        if old_qr_url and old_qr_url != new_qr_url:
+            delete_unused_uploaded_media(conn, old_qr_url)
+        return jsonify({"gcash_qr_url": new_qr_url, "settings": get_admin_settings_view(conn)})
 
     @app.post("/api/admin/settings/test-alert")
     @admin_required

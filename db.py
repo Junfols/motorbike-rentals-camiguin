@@ -11,6 +11,8 @@ BLOCKING_STATUSES = ("pending", "confirmed", "active")
 VALID_BOOKING_STATUSES = ("pending", "confirmed", "active", "completed", "cancelled")
 VALID_BIKE_STATUSES = ("available", "maintenance", "hidden")
 VALID_SHOP_STATUSES = ("pending", "approved", "suspended")
+VALID_RESERVATION_MODES = ("off", "optional", "required")
+VALID_PAYMENT_STATUSES = ("unpaid", "submitted", "verified", "rejected", "refunded")
 VALID_CATEGORIES = ("Scooter", "Maxi Scooter", "Adventure", "Big Bike")
 VALID_TRANSMISSIONS = ("Automatic", "Manual")
 CAMIGUIN_MUNICIPALITIES = ("Mambajao", "Catarman", "Sagay", "Guinsiliban", "Mahinog")
@@ -359,6 +361,12 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             commission_rate REAL NOT NULL DEFAULT 10,
             platform_fee REAL NOT NULL DEFAULT 0,
             shop_payout REAL NOT NULL DEFAULT 0,
+            reservation_fee REAL NOT NULL DEFAULT 0,
+            balance_due REAL NOT NULL DEFAULT 0,
+            payment_channel TEXT NOT NULL DEFAULT 'pay_at_shop',
+            payment_reference TEXT NOT NULL DEFAULT '',
+            payment_proof_url TEXT NOT NULL DEFAULT '',
+            payment_status TEXT NOT NULL DEFAULT 'unpaid',
             deposit_amount REAL NOT NULL,
             notes TEXT NOT NULL DEFAULT '',
             admin_notes TEXT NOT NULL DEFAULT '',
@@ -454,6 +462,12 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
             commission_rate DOUBLE PRECISION NOT NULL DEFAULT 10,
             platform_fee DOUBLE PRECISION NOT NULL DEFAULT 0,
             shop_payout DOUBLE PRECISION NOT NULL DEFAULT 0,
+            reservation_fee DOUBLE PRECISION NOT NULL DEFAULT 0,
+            balance_due DOUBLE PRECISION NOT NULL DEFAULT 0,
+            payment_channel TEXT NOT NULL DEFAULT 'pay_at_shop',
+            payment_reference TEXT NOT NULL DEFAULT '',
+            payment_proof_url TEXT NOT NULL DEFAULT '',
+            payment_status TEXT NOT NULL DEFAULT 'unpaid',
             deposit_amount DOUBLE PRECISION NOT NULL,
             notes TEXT NOT NULL DEFAULT '',
             admin_notes TEXT NOT NULL DEFAULT '',
@@ -528,6 +542,13 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
                 "smtp_from_email": os.environ.get("SMTP_FROM_EMAIL", ""),
                 "notify_partner_email": "1",
                 "notify_customer_email": "1",
+                "reservation_mode": "optional",
+                "reservation_percent": "10",
+                "gcash_account_name": "",
+                "gcash_number": "",
+                "gcash_qr_url": "",
+                "maya_number": "",
+                "payment_instructions": "Scan the GCash QR or send the reservation fee, then enter your 13-digit Reference No. before submitting. Pay the remaining balance at the shop on pickup.",
                 "admin_password_hash": generate_password_hash(initial_admin_pw),
                 "secret_key": initial_secret,
             }
@@ -621,6 +642,36 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
                 conn.execute("ALTER TABLE bookings ADD COLUMN shop_payout REAL NOT NULL DEFAULT 0")
                 conn.execute(
                     "UPDATE bookings SET shop_payout = total_amount WHERE shop_payout = 0 AND total_amount > 0"
+                )
+            if "reservation_fee" not in booking_cols:
+                conn.execute("ALTER TABLE bookings ADD COLUMN reservation_fee REAL NOT NULL DEFAULT 0")
+            if "balance_due" not in booking_cols:
+                conn.execute("ALTER TABLE bookings ADD COLUMN balance_due REAL NOT NULL DEFAULT 0")
+                conn.execute(
+                    """
+                    UPDATE bookings
+                    SET balance_due = CASE
+                        WHEN total_amount > COALESCE(reservation_fee, 0) THEN total_amount - COALESCE(reservation_fee, 0)
+                        ELSE 0
+                    END
+                    WHERE balance_due = 0 AND total_amount > 0
+                    """
+                )
+            if "payment_channel" not in booking_cols:
+                conn.execute(
+                    "ALTER TABLE bookings ADD COLUMN payment_channel TEXT NOT NULL DEFAULT 'pay_at_shop'"
+                )
+            if "payment_reference" not in booking_cols:
+                conn.execute(
+                    "ALTER TABLE bookings ADD COLUMN payment_reference TEXT NOT NULL DEFAULT ''"
+                )
+            if "payment_proof_url" not in booking_cols:
+                conn.execute(
+                    "ALTER TABLE bookings ADD COLUMN payment_proof_url TEXT NOT NULL DEFAULT ''"
+                )
+            if "payment_status" not in booking_cols:
+                conn.execute(
+                    "ALTER TABLE bookings ADD COLUMN payment_status TEXT NOT NULL DEFAULT 'unpaid'"
                 )
 
             _create_indexes(conn)
@@ -875,6 +926,18 @@ def calculate_quote(
     platform_fee = round(total_amount * (commission_rate / 100.0), 2)
     shop_payout = round(total_amount - platform_fee, 2)
 
+    reservation_mode = str(settings.get("reservation_mode", "off") or "off").strip().lower()
+    if reservation_mode not in VALID_RESERVATION_MODES:
+        reservation_mode = "off"
+    reservation_configured = is_reservation_payment_configured(settings)
+    reservation_percent = float(settings.get("reservation_percent", "10") or 0)
+    reservation_percent = max(0.0, min(100.0, reservation_percent))
+    if reservation_mode != "off" and reservation_configured and reservation_percent > 0:
+        reservation_fee = round(total_amount * (reservation_percent / 100.0), 2)
+    else:
+        reservation_fee = 0.0
+    balance_due = round(max(0.0, total_amount - reservation_fee), 2)
+
     return {
         "rental_days": rental_days,
         "daily_rate": daily_rate,
@@ -888,6 +951,11 @@ def calculate_quote(
         "commission_rate": round(commission_rate, 2),
         "platform_fee": platform_fee,
         "shop_payout": shop_payout,
+        "reservation_mode": reservation_mode,
+        "reservation_configured": reservation_configured,
+        "reservation_percent": round(reservation_percent, 2),
+        "reservation_fee": reservation_fee,
+        "balance_due": balance_due,
         "deposit_amount": round(deposit, 2),
     }
 
@@ -964,26 +1032,36 @@ def slugify_shop_name(name: str, conn: DatabaseConnection, exclude_id: int | Non
     return _unique_slug(name, conn, "shops", "rental-shop", exclude_id=exclude_id)
 
 
+def is_reservation_payment_configured(settings: dict[str, str]) -> bool:
+    """Return True when at least one GCash/Maya receiving channel or QR image is set."""
+    return any(
+        str(settings.get(key, "") or "").strip()
+        for key in ("gcash_qr_url", "gcash_number", "maya_number")
+    )
+
+
 def save_uploaded_media(
     conn: DatabaseConnection,
     filename: str,
     data: bytes,
     content_type: str | None = None,
+    use_tx: bool = True,
 ) -> None:
     """Persist uploaded image bytes in DB so ephemeral cloud disks never lose bike photos."""
     ext = filename.rsplit(".", 1)[1].lower() if "." in filename else ""
     mime = content_type or MEDIA_MIME_TYPES.get(ext, "application/octet-stream")
     now = datetime.now().isoformat(timespec="seconds")
-    with conn:
-        conn.execute(
-            """
-            INSERT INTO uploaded_media (filename, content_type, data, created_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT (filename) DO UPDATE
-            SET content_type = excluded.content_type, data = excluded.data
-            """,
-            (filename, mime, data, now),
-        )
+    sql = """
+        INSERT INTO uploaded_media (filename, content_type, data, created_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT (filename) DO UPDATE
+        SET content_type = excluded.content_type, data = excluded.data
+    """
+    if use_tx:
+        with conn:
+            conn.execute(sql, (filename, mime, data, now))
+    else:
+        conn.execute(sql, (filename, mime, data, now))
 
 
 def get_uploaded_media(conn: DatabaseConnection, filename: str):
@@ -994,15 +1072,40 @@ def get_uploaded_media(conn: DatabaseConnection, filename: str):
     ).fetchone()
 
 
+def delete_uploaded_media_by_url(
+    conn: DatabaseConnection,
+    image_url: str | None,
+    use_tx: bool = True,
+) -> int:
+    """Delete an /uploads/<filename> row directly when replaced or removed."""
+    url = str(image_url or "").strip()
+    if not url.startswith("/uploads/"):
+        return 0
+    filename = url[len("/uploads/") :].strip()
+    if not filename or "/" in filename or "\\" in filename:
+        return 0
+    if use_tx:
+        with conn:
+            cur = conn.execute("DELETE FROM uploaded_media WHERE filename = ?", (filename,))
+            return int(getattr(cur, "rowcount", 0) or 0)
+    cur = conn.execute("DELETE FROM uploaded_media WHERE filename = ?", (filename,))
+    return int(getattr(cur, "rowcount", 0) or 0)
+
+
 def delete_unused_uploaded_media(conn: DatabaseConnection, image_url: str | None) -> None:
-    """Clean up unreferenced DB-stored uploads when a bike photo is deleted or replaced."""
+    """Clean up unreferenced DB-stored uploads when a photo/QR/receipt is deleted or replaced."""
     if not image_url or not image_url.startswith("/uploads/"):
         return
-    still_used = conn.execute(
-        "SELECT 1 FROM bikes WHERE image_url = ? LIMIT 1",
-        (image_url,),
-    ).fetchone()
+    still_used = (
+        conn.execute("SELECT 1 FROM bikes WHERE image_url = ? LIMIT 1", (image_url,)).fetchone()
+        or conn.execute(
+            "SELECT 1 FROM bookings WHERE payment_proof_url = ? LIMIT 1",
+            (image_url,),
+        ).fetchone()
+        or conn.execute(
+            "SELECT 1 FROM settings WHERE key = 'gcash_qr_url' AND value = ? LIMIT 1",
+            (image_url,),
+        ).fetchone()
+    )
     if not still_used:
-        filename = image_url[len("/uploads/") :]
-        with conn:
-            conn.execute("DELETE FROM uploaded_media WHERE filename = ?", (filename,))
+        delete_uploaded_media_by_url(conn, image_url)
