@@ -251,6 +251,7 @@ def _serialize_booking(row) -> dict:
         "payment_reference": (row["payment_reference"] if "payment_reference" in row.keys() else "") or "",
         "payment_proof_url": (row["payment_proof_url"] if "payment_proof_url" in row.keys() else "") or "",
         "payment_status": (row["payment_status"] if "payment_status" in row.keys() else "") or "unpaid",
+        "balance_paid": _row_balance_paid(row),
         "deposit_amount": float(row["deposit_amount"]),
         "notes": row["notes"],
         "admin_notes": row["admin_notes"],
@@ -258,6 +259,23 @@ def _serialize_booking(row) -> dict:
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+def _row_balance_paid(row) -> bool:
+    """True when the shop already collected the remaining balance for this booking."""
+    if "balance_paid" not in row.keys():
+        return False
+    return bool(int(row["balance_paid"] or 0))
+
+
+def _resolve_balance_paid(payload: dict, existing_row) -> tuple[bool, str | None]:
+    """Return (new_balance_paid, error). Cancelled bookings cannot be marked paid."""
+    current = _row_balance_paid(existing_row)
+    if "balance_paid" not in payload or payload["balance_paid"] is None:
+        return current, None
+    wanted = _as_bool(payload["balance_paid"])
+    new_status = str(payload.get("status") or existing_row["status"]).strip().lower()
+    if wanted and new_status == "cancelled":
+        return current, "Cancelled bookings cannot be marked as paid."
+    return wanted, None
 
 
 def create_app(test_config: dict | None = None) -> Flask:
@@ -1468,11 +1486,16 @@ def create_app(test_config: dict | None = None) -> Flask:
             if bike and booked >= int(bike["units_count"] or 1):
                 return jsonify({"error": "Cannot reactivate: all units already booked for those dates."}), 409
 
+        new_balance_paid, balance_error = _resolve_balance_paid(payload, existing)
+        if balance_error:
+            return jsonify({"error": balance_error}), 400
+
         now = datetime.now().isoformat(timespec="seconds")
         with conn:
             conn.execute(
-                "UPDATE bookings SET status = ?, admin_notes = ?, updated_at = ? WHERE id = ? AND shop_id = ?",
-                (new_status, admin_notes, now, booking_id, shop_id),
+                "UPDATE bookings SET status = ?, admin_notes = ?, balance_paid = ?, updated_at = ? "
+                "WHERE id = ? AND shop_id = ?",
+                (new_status, admin_notes, 1 if new_balance_paid else 0, now, booking_id, shop_id),
             )
         updated = _fetch_booking_by_id(conn, booking_id)
         return jsonify({"booking": _serialize_booking(updated)})
@@ -2135,15 +2158,28 @@ def create_app(test_config: dict | None = None) -> Flask:
                     409,
                 )
 
+        new_balance_paid, balance_error = _resolve_balance_paid(payload, existing)
+        if balance_error:
+            return jsonify({"error": balance_error}), 400
+
         now = datetime.now().isoformat(timespec="seconds")
         with conn:
             conn.execute(
                 """
                 UPDATE bookings
-                SET status = ?, payment_status = ?, balance_due = ?, admin_notes = ?, updated_at = ?
+                SET status = ?, payment_status = ?, balance_due = ?, balance_paid = ?,
+                    admin_notes = ?, updated_at = ?
                 WHERE id = ?
                 """,
-                (new_status, new_payment_status, new_balance_due, admin_notes, now, booking_id),
+                (
+                    new_status,
+                    new_payment_status,
+                    new_balance_due,
+                    1 if new_balance_paid else 0,
+                    admin_notes,
+                    now,
+                    booking_id,
+                ),
             )
         updated = _fetch_booking_by_id(conn, booking_id)
         return jsonify({"booking": _serialize_booking(updated)})
