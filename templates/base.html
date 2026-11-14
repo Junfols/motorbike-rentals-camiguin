@@ -19,7 +19,7 @@
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg">
   <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="/static/css/style.css?v=7">
+  <link rel="stylesheet" href="/static/css/style.css?v=8">
   {% block head_extra %}{% endblock %}
 </head>
 <body class="app-body">
@@ -130,7 +130,7 @@
   <div id="install-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="install-modal-title">
     <div class="modal-card modal-sm">
       <div class="modal-header">
-        <h3 id="install-modal-title">Install {{ shop.shop_name }} as an App</h3>
+      <h3 id="install-modal-title">Install {{ shop.shop_name }} as an App</h3>
         <button type="button" class="icon-btn" data-close-modal="install-modal" aria-label="Close">&times;</button>
       </div>
       <div class="modal-body">
@@ -167,7 +167,7 @@
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
   <script id="shop-config-data" type="application/json">{{ shop | tojson }}</script>
-  <script src="/static/js/pwa.js?v=7"></script>
+  <script src="/static/js/pwa.js?v=8"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
