@@ -227,6 +227,90 @@
           </div>
         </div>
 
+        <hr class="form-divider">
+        <div class="alert-config-header">
+          <div>
+            <h3>Instant CP &amp; Email Alerts (Telegram + SMTP)</h3>
+            <p class="field-hint">Receive instant phone alerts on new bookings, cancellations, and partner applications. Zero monthly cost via Telegram Bot API.</p>
+          </div>
+          <span id="admin-alerts-summary-pill" class="status-pill-inline muted">Optional</span>
+        </div>
+
+        <div class="info-box">
+          <h4>Quick 60-Second Telegram CP Setup</h4>
+          <p class="field-hint">1. Open Telegram, message <strong>@BotFather</strong> &rarr; send <code>/newbot</code> &rarr; copy the <strong>Bot Token</strong> below. 2. Message <strong>@userinfobot</strong> to copy your numeric <strong>Chat ID</strong>. 3. Open your new bot and tap <strong>Start</strong> (<code>/start</code>), then click <strong>Send Test Alert</strong>.</p>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="set-telegram-bot-token">
+              Telegram Bot Token
+              <span id="telegram-token-status" class="status-pill-inline muted">Not set</span>
+            </label>
+            <input type="password" id="set-telegram-bot-token" autocomplete="off" placeholder="Paste token from @BotFather (leave blank to keep saved)">
+            <label id="clear-telegram-token-wrap" class="checkbox-inline hidden">
+              <input type="checkbox" id="clear-telegram-bot-token"> Clear saved Bot Token
+            </label>
+          </div>
+          <div class="form-group">
+            <label for="set-admin-telegram-chat-id">Main Admin Telegram Chat ID</label>
+            <input type="text" id="set-admin-telegram-chat-id" placeholder="e.g., 123456789 (from @userinfobot)">
+          </div>
+        </div>
+
+        <hr class="form-divider">
+        <h3>Email Alerts via SMTP (Optional)</h3>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="set-admin-notify-email">Admin Notification Email</label>
+            <input type="email" id="set-admin-notify-email" placeholder="owner@camiguinmotoride.ph">
+          </div>
+          <div class="form-group">
+            <label for="set-smtp-host">SMTP Host</label>
+            <input type="text" id="set-smtp-host" placeholder="e.g., smtp.gmail.com">
+          </div>
+        </div>
+
+        <div class="form-grid-3">
+          <div class="form-group">
+            <label for="set-smtp-port">SMTP Port</label>
+            <input type="number" id="set-smtp-port" min="1" max="65535" value="587" placeholder="587">
+          </div>
+          <div class="form-group">
+            <label for="set-smtp-username">SMTP Username</label>
+            <input type="text" id="set-smtp-username" placeholder="yourgmail@gmail.com">
+          </div>
+          <div class="form-group">
+            <label for="set-smtp-password">
+              SMTP App Password
+              <span id="smtp-password-status" class="status-pill-inline muted">Not set</span>
+            </label>
+            <input type="password" id="set-smtp-password" autocomplete="off" placeholder="Leave blank to keep saved">
+            <label id="clear-smtp-password-wrap" class="checkbox-inline hidden">
+              <input type="checkbox" id="clear-smtp-password"> Clear saved password
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="set-smtp-from-email">SMTP From Email (optional, defaults to SMTP Username)</label>
+          <input type="email" id="set-smtp-from-email" placeholder="noreply@camiguinmotoride.ph">
+        </div>
+
+        <div class="alert-toggle-row">
+          <label class="checkbox-inline">
+            <input type="checkbox" id="set-notify-partner-email" checked> Email partner shops on new bookings &amp; approvals (requires SMTP)
+          </label>
+          <label class="checkbox-inline">
+            <input type="checkbox" id="set-notify-customer-email"> Email booking confirmation to customers (requires SMTP)
+          </label>
+        </div>
+
+        <div class="alert-test-box">
+          <button type="button" id="test-admin-alert-btn" class="btn btn-outline btn-sm">Send Test Alert</button>
+          <div id="admin-alert-test-result" class="alert-test-result hidden"></div>
+        </div>
+
         <div id="settings-error" class="alert-error hidden"></div>
         <button type="submit" class="btn btn-primary">Save Platform Settings</button>
       </form>

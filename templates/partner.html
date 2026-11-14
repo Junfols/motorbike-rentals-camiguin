@@ -79,6 +79,11 @@
         </div>
 
         <div class="form-group">
+          <label for="reg-telegram-chat-id">Telegram Chat ID (Optional &mdash; for instant CP booking alerts)</label>
+          <input type="text" id="reg-telegram-chat-id" placeholder="e.g., 123456789 (get yours from @userinfobot on Telegram)">
+        </div>
+
+        <div class="form-group">
           <label for="reg-description">Short Shop Description</label>
           <textarea id="reg-description" rows="2" placeholder="Well-maintained scooters, free helmets, fast pickup..."></textarea>
         </div>
@@ -208,6 +213,33 @@
         <div class="form-group">
           <label for="prof-description">Shop Description</label>
           <textarea id="prof-description" rows="2"></textarea>
+        </div>
+
+        <hr class="form-divider">
+        <div class="alert-config-header">
+          <div>
+            <h3>Instant Booking Alerts (CP / Telegram &amp; Email)</h3>
+            <p class="field-hint">Get an instant message on your phone whenever a customer books or cancels your motorbikes.</p>
+          </div>
+          <span id="partner-telegram-platform-status" class="status-pill-inline muted">Checking bot...</span>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="prof-telegram-chat-id">Your Telegram Chat ID</label>
+            <input type="text" id="prof-telegram-chat-id" placeholder="e.g., 123456789 (from @userinfobot)">
+            <small class="field-hint">Message <strong>@userinfobot</strong> on Telegram for your ID, then press <strong>Start</strong> on the platform bot before testing.</small>
+          </div>
+          <div class="form-group">
+            <label for="prof-alert-email-preview">Shop Alert Email</label>
+            <input type="email" id="prof-alert-email-preview" disabled>
+            <small class="field-hint">Uses your shop login email when platform SMTP email is enabled.</small>
+          </div>
+        </div>
+
+        <div class="alert-test-box">
+          <button type="button" id="test-partner-alert-btn" class="btn btn-outline btn-sm">Send Test Alert to My CP</button>
+          <div id="partner-alert-test-result" class="alert-test-result hidden"></div>
         </div>
 
         <hr class="form-divider">
