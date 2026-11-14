@@ -159,7 +159,7 @@
     <!-- Tab 3: My Fleet -->
     <div id="ptab-fleet" class="partner-tab-panel hidden">
       <div class="admin-toolbar">
-        <div>
+      <div>
           <h3>My Shop Motorbikes</h3>
           <p class="text-muted">Upload photos from your phone, set rates, and manage unit availability.</p>
         </div>
@@ -172,25 +172,21 @@
     <div id="ptab-profile" class="partner-tab-panel hidden">
       <form id="partner-profile-form" class="card settings-form">
         <h3>Shop Information</h3>
-        <div class="form-grid-2">
-          <div class="form-group">
-            <label for="prof-shop-name">Shop Name *</label>
-            <input type="text" id="prof-shop-name" required>
-          </div>
-          <div class="form-group">
-            <label for="prof-owner-name">Owner Name *</label>
-            <input type="text" id="prof-owner-name" required>
-          </div>
+        <div class="form-group">
+          <label for="prof-shop-name">Shop Name *</label>
+          <input type="text" id="prof-shop-name" required>
         </div>
-        <div class="form-grid-2">
-          <div class="form-group">
-            <label for="prof-phone">Mobile Phone *</label>
-            <input type="text" id="prof-phone" required>
-          </div>
-          <div class="form-group">
-            <label for="prof-whatsapp">WhatsApp Digits (e.g., 63917...)</label>
-            <input type="text" id="prof-whatsapp">
-          </div>
+        <div class="form-group">
+          <label for="prof-owner-name">Owner Name *</label>
+          <input type="text" id="prof-owner-name" required>
+        </div>
+        <div class="form-group">
+          <label for="prof-phone">Mobile Phone *</label>
+          <input type="text" id="prof-phone" required>
+        </div>
+        <div class="form-group">
+          <label for="prof-whatsapp">WhatsApp Digits (e.g., 63917...)</label>
+          <input type="text" id="prof-whatsapp">
         </div>
         <div class="form-grid-2">
           <div class="form-group">
@@ -371,5 +367,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/partner.js?v=7"></script>
+<script src="/static/js/partner.js?v=8"></script>
 {% endblock %}
