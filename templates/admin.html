@@ -215,6 +215,62 @@
         </div>
 
         <hr class="form-divider">
+        <div class="alert-config-header">
+          <div>
+            <h3>GCash / Maya Reservation Fee (Direct to You)</h3>
+            <p class="field-hint">Collect a reservation downpayment directly to your GCash or Maya account before pickup. Remaining balance is collected by the partner shop on pickup.</p>
+          </div>
+          <span id="admin-payment-status-pill" class="status-pill-inline muted">Optional</span>
+        </div>
+
+        <div class="form-grid-4">
+          <div class="form-group">
+            <label for="set-reservation-mode">Reservation Mode</label>
+            <select id="set-reservation-mode" name="reservation_mode">
+              <option value="optional">Optional (Pay now or at shop)</option>
+              <option value="required">Required (Must pay online)</option>
+              <option value="off">Off (Pay 100% at shop)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="set-reservation-percent">Reservation Fee (%)</label>
+            <input type="number" id="set-reservation-percent" name="reservation_percent" min="0" max="100" step="0.5" placeholder="10">
+          </div>
+          <div class="form-group">
+            <label for="set-gcash-account-name">GCash / Maya Account Name</label>
+            <input type="text" id="set-gcash-account-name" name="gcash_account_name" placeholder="Juan Dela Cruz">
+          </div>
+          <div class="form-group">
+            <label for="set-gcash-number">GCash Mobile Number</label>
+            <input type="text" id="set-gcash-number" name="gcash_number" placeholder="0917 123 4567">
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="set-maya-number">Maya Mobile Number (Optional)</label>
+            <input type="text" id="set-maya-number" name="maya_number" placeholder="0918 123 4567">
+          </div>
+          <div class="form-group">
+            <label for="set-payment-instructions">Checkout Payment Instructions</label>
+            <input type="text" id="set-payment-instructions" name="payment_instructions" placeholder="Scan QR or send fee, then enter Reference No.">
+          </div>
+        </div>
+
+        <div class="admin-qr-preview-wrap">
+          <img id="admin-qr-preview-img" src="" alt="GCash / Maya QR Preview" class="admin-qr-preview-img hidden">
+          <div style="flex:1;min-width:220px">
+            <label for="set-qr-image-file" style="display:block;font-weight:600;margin-bottom:4px">Upload GCash / Maya InstaPay QR Image (PNG/JPG)</label>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+              <input type="file" id="set-qr-image-file" accept="image/png,image/jpeg,image/webp" style="max-width:260px">
+              <button type="button" id="upload-qr-btn" class="btn btn-sm btn-outline">Upload QR Image</button>
+              <button type="button" id="remove-qr-btn" class="btn btn-sm btn-danger hidden">Remove QR</button>
+            </div>
+            <small id="admin-qr-status-hint" class="field-hint">Upload your InstaPay QR image from GCash or Maya so renters can scan directly.</small>
+          </div>
+        </div>
+
+        <hr class="form-divider">
         <h3>Change Main Admin Password (Optional)</h3>
         <div class="form-grid-2">
           <div class="form-group">

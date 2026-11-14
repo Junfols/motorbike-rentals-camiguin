@@ -280,6 +280,65 @@
           <textarea id="booking-notes" name="notes" rows="2" placeholder="Helmet size (M/L), ferry arrival time, etc."></textarea>
         </div>
 
+        <div id="payment-qr-section" class="payment-qr-section hidden">
+          <div class="payment-qr-header">
+            <h4>3. Reservation Fee Payment <span id="payment-mode-pill" class="status-pill-inline muted">Optional</span></h4>
+            <span id="payment-fee-badge" class="payment-fee-pill">Pay Now: {{ shop.currency }}0</span>
+          </div>
+
+          <div class="payment-qr-grid">
+            <div id="payment-qr-box" class="payment-qr-box hidden">
+              <img id="payment-qr-img" src="" alt="Platform GCash or Maya QR Code" class="payment-qr-img">
+              <small class="text-muted">Scan QR to pay reservation fee</small>
+            </div>
+            <div>
+              <p id="payment-instructions-text" class="field-hint" style="margin-top:0;margin-bottom:8px"></p>
+              <div id="payment-gcash-row" class="payment-account-row hidden">
+                <div>
+                  <strong>GCash:</strong> <span id="payment-gcash-number"></span>
+                  <small id="payment-gcash-name" class="text-muted" style="display:block"></small>
+                </div>
+                <button type="button" id="copy-gcash-btn" class="btn btn-sm btn-outline">Copy</button>
+              </div>
+              <div id="payment-maya-row" class="payment-account-row hidden">
+                <div>
+                  <strong>Maya:</strong> <span id="payment-maya-number"></span>
+                </div>
+                <button type="button" id="copy-maya-btn" class="btn btn-sm btn-outline">Copy</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="payment-channel-options" class="payment-channel-options">
+            <label id="channel-gcash-wrap" class="payment-channel-chip">
+              <input type="radio" name="payment_channel" value="gcash">
+              <span>GCash</span>
+            </label>
+            <label id="channel-maya-wrap" class="payment-channel-chip">
+              <input type="radio" name="payment_channel" value="maya">
+              <span>Maya</span>
+            </label>
+            <label id="channel-shop-wrap" class="payment-channel-chip">
+              <input type="radio" name="payment_channel" value="pay_at_shop">
+              <span>Pay Full at Shop on Pickup</span>
+            </label>
+          </div>
+
+          <div id="payment-proof-fields">
+            <div class="payment-proof-inputs">
+              <div class="form-group">
+                <label for="booking-payment-reference">Reference No. *</label>
+                <input type="text" id="booking-payment-reference" name="payment_reference" maxlength="64" placeholder="e.g., 1234567890123">
+              </div>
+              <div class="form-group">
+                <label for="booking-payment-proof">Receipt Screenshot (Optional)</label>
+                <input type="file" id="booking-payment-proof" name="payment_proof" accept="image/png,image/jpeg,image/webp">
+              </div>
+            </div>
+            <small class="field-hint">Send the exact reservation fee shown above, then enter the Reference No. or upload your receipt screenshot.</small>
+          </div>
+        </div>
+
         <div id="booking-form-error" class="alert-error hidden"></div>
 
         <button type="submit" id="booking-submit-btn" class="btn btn-primary btn-lg btn-block">
