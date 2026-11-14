@@ -1045,5 +1045,462 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertIn("telegram_chat_id", cols)
 
 
+    def test_reservation_payment_settings_qr_and_modes(self):
+        from db import SECRET_SETTING_KEYS, get_connection
+
+        # Unauthenticated QR upload must be rejected
+        no_auth = self.client.post(
+            "/api/admin/settings/qr",
+            data={"qr_image": (io.BytesIO(b"\x89PNG\r\n\x1a\nFAKE"), "qr.png")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(no_auth.status_code, 401)
+
+        bikes = self.client.get("/api/bikes").get_json()["bikes"]
+        bike = bikes[0]
+        p1, r1 = self._future_str(20), self._future_str(21)
+
+        # Before GCash/Maya details exist, quote reports reservation_configured=False and reservation_fee=0
+        q_before = self.client.get(
+            f"/api/quote?bike_id={bike['id']}&pickup_date={p1}&return_date={r1}"
+        ).get_json()["quote"]
+        self.assertFalse(q_before["reservation_configured"])
+        self.assertEqual(q_before["reservation_fee"], 0.0)
+        self.assertEqual(q_before["balance_due"], q_before["total_amount"])
+
+        self.client.post("/api/admin/login", json={"password": "admin1234"})
+
+        # Reject invalid mode / percent
+        bad_mode = self.client.put("/api/admin/settings", json={"reservation_mode": "invalid"})
+        self.assertEqual(bad_mode.status_code, 400)
+        bad_pct = self.client.put("/api/admin/settings", json={"reservation_percent": "120"})
+        self.assertEqual(bad_pct.status_code, 400)
+
+        # Upload first QR image -> saved in DB and served via /uploads/
+        qr_bytes_1 = b"\x89PNG\r\n\x1a\nFIRST_QR_IMAGE_BYTES"
+        up1 = self.client.post(
+            "/api/admin/settings/qr",
+            data={"qr_image": (io.BytesIO(qr_bytes_1), "gcash-qr.png")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(up1.status_code, 200)
+        qr_url_1 = up1.get_json()["gcash_qr_url"]
+        self.assertTrue(qr_url_1.startswith("/uploads/qr_"))
+        self.assertEqual(self.client.get(qr_url_1).data, qr_bytes_1)
+
+        # Configure payment details & 15% optional fee
+        save_cfg = self.client.put(
+            "/api/admin/settings",
+            json={
+                "reservation_mode": "optional",
+                "reservation_percent": "15",
+                "gcash_account_name": "Camiguin Main Admin",
+                "gcash_number": "09171234567",
+                "maya_number": "09187654321",
+                "payment_instructions": "Send 15% downpayment and upload receipt.",
+            },
+        )
+        self.assertEqual(save_cfg.status_code, 200)
+
+        # Public settings include GCash/Maya display fields and omit secrets
+        pub_settings = self.client.get("/api/settings").get_json()["settings"]
+        self.assertEqual(pub_settings["gcash_qr_url"], qr_url_1)
+        self.assertEqual(pub_settings["gcash_number"], "09171234567")
+        self.assertEqual(pub_settings["maya_number"], "09187654321")
+        for key in SECRET_SETTING_KEYS:
+            self.assertNotIn(key, pub_settings)
+
+        # Quote now calculates 15% reservation_fee & balance_due
+        q_after = self.client.get(
+            f"/api/quote?bike_id={bike['id']}&pickup_date={p1}&return_date={r1}"
+        ).get_json()["quote"]
+        self.assertTrue(q_after["reservation_configured"])
+        self.assertEqual(q_after["reservation_mode"], "optional")
+        self.assertEqual(q_after["reservation_percent"], 15.0)
+        self.assertEqual(q_after["reservation_fee"], round(q_after["total_amount"] * 0.15, 2))
+        self.assertEqual(
+            q_after["balance_due"],
+            round(q_after["total_amount"] - q_after["reservation_fee"], 2),
+        )
+
+        # Replacing QR removes old unused QR from uploaded_media
+        qr_bytes_2 = b"\x89PNG\r\n\x1a\nSECOND_QR_IMAGE_BYTES"
+        up2 = self.client.post(
+            "/api/admin/settings/qr",
+            data={"qr_image": (io.BytesIO(qr_bytes_2), "gcash-qr-v2.png")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(up2.status_code, 200)
+        qr_url_2 = up2.get_json()["gcash_qr_url"]
+        self.assertNotEqual(qr_url_1, qr_url_2)
+        self.assertEqual(self.client.get(qr_url_2).data, qr_bytes_2)
+        self.assertEqual(self.client.get(qr_url_1).status_code, 404)
+
+        # Enforce required mode rules & atomic rollback of proof image on 409 conflict
+        self.client.put("/api/admin/settings", json={"reservation_mode": "required"})
+        no_shop_pay = self.client.post(
+            "/api/bookings",
+            json={
+                "bike_id": bike["id"],
+                "customer_name": "Elena Santos",
+                "customer_phone": "09175551234",
+                "license_number": "D01-99-123456",
+                "pickup_date": p1,
+                "return_date": r1,
+                "payment_channel": "pay_at_shop",
+            },
+        )
+        self.assertEqual(no_shop_pay.status_code, 400)
+
+        short_ref = self.client.post(
+            "/api/bookings",
+            json={
+                "bike_id": bike["id"],
+                "customer_name": "Elena Santos",
+                "customer_phone": "09175551234",
+                "license_number": "D01-99-123456",
+                "pickup_date": p1,
+                "return_date": r1,
+                "payment_channel": "gcash",
+                "payment_reference": "123",
+            },
+        )
+        self.assertEqual(short_ref.status_code, 400)
+
+        bad_ext = self.client.post(
+            "/api/bookings",
+            data={
+                "bike_id": str(bike["id"]),
+                "customer_name": "Elena Santos",
+                "customer_phone": "09175551234",
+                "license_number": "D01-99-123456",
+                "pickup_date": p1,
+                "return_date": r1,
+                "payment_channel": "gcash",
+                "payment_reference": "1234567890123",
+                "payment_proof": (io.BytesIO(b"not-an-image"), "receipt.txt"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(bad_ext.status_code, 400)
+
+        # Fill all bike units on p1..r1 so the next proof-bearing booking hits 409 conflict
+        for idx in range(int(bike["units_count"])):
+            ok_fill = self.client.post(
+                "/api/bookings",
+                json={
+                    "bike_id": bike["id"],
+                    "customer_name": f"Rider {idx}",
+                    "customer_phone": f"0917555000{idx}",
+                    "license_number": f"L00-{idx}",
+                    "pickup_date": p1,
+                    "return_date": r1,
+                    "payment_channel": "maya",
+                    "payment_reference": f"MAYA998877{idx}",
+                },
+            )
+            self.assertEqual(ok_fill.status_code, 201)
+
+        conflict_resp = self.client.post(
+            "/api/bookings",
+            data={
+                "bike_id": str(bike["id"]),
+                "customer_name": "Late Rider",
+                "customer_phone": "09178889999",
+                "license_number": "L99-999",
+                "pickup_date": p1,
+                "return_date": r1,
+                "payment_channel": "gcash",
+                "payment_reference": "1234567890999",
+                "payment_proof": (io.BytesIO(b"\x89PNG\r\n\x1a\nORPHAN_TEST"), "orphan.png"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(conflict_resp.status_code, 409)
+
+        check_conn = get_connection(self.db_path)
+        try:
+            proof_rows = check_conn.execute(
+                "SELECT filename FROM uploaded_media WHERE filename LIKE 'proof_%'"
+            ).fetchall()
+        finally:
+            check_conn.close()
+        self.assertEqual(len(proof_rows), 0)
+
+        # Clear QR leaves gcash_qr_url blank and deletes qr_url_2
+        clear_resp = self.client.put("/api/admin/settings", json={"clear_gcash_qr": True})
+        self.assertEqual(clear_resp.status_code, 200)
+        self.assertEqual(clear_resp.get_json()["settings"]["gcash_qr_url"], "")
+        self.assertEqual(self.client.get(qr_url_2).status_code, 404)
+
+    def test_reservation_payment_multipart_proof_verification_and_kpis(self):
+        self.client.post("/api/admin/login", json={"password": "admin1234"})
+        self.client.put(
+            "/api/admin/settings",
+            json={
+                "reservation_mode": "optional",
+                "reservation_percent": "10",
+                "gcash_number": "09170001111",
+            },
+        )
+
+        bikes = self.client.get("/api/bikes").get_json()["bikes"]
+        bike = bikes[0]
+
+        # 1. Pay at shop under optional mode
+        p1, r1 = self._future_str(25), self._future_str(26)
+        shop_booking_resp = self.client.post(
+            "/api/bookings",
+            json={
+                "bike_id": bike["id"],
+                "customer_name": "Walkin Rider",
+                "customer_phone": "09171110001",
+                "license_number": "LIC-111",
+                "pickup_date": p1,
+                "return_date": r1,
+                "payment_channel": "pay_at_shop",
+            },
+        )
+        self.assertEqual(shop_booking_resp.status_code, 201)
+        b_shop = shop_booking_resp.get_json()["booking"]
+        self.assertEqual(b_shop["payment_status"], "unpaid")
+        self.assertEqual(b_shop["reservation_fee"], 0.0)
+        self.assertEqual(b_shop["balance_due"], b_shop["total_amount"])
+
+        # Cannot verify payment on unpaid booking with 0 reservation_fee
+        bad_verify = self.client.patch(
+            f"/api/admin/bookings/{b_shop['id']}",
+            json={"payment_status": "verified"},
+        )
+        self.assertEqual(bad_verify.status_code, 400)
+
+        # 2. Online GCash with receipt screenshot via multipart/form-data
+        p2, r2 = self._future_str(30), self._future_str(32)
+        receipt_bytes = b"\x89PNG\r\n\x1a\nGCASH_RECEIPT_PROOF"
+        online_resp = self.client.post(
+            "/api/bookings",
+            data={
+                "bike_id": str(bike["id"]),
+                "customer_name": "Carlo Reyes",
+                "customer_phone": "09172223333",
+                "license_number": "LIC-222",
+                "pickup_date": p2,
+                "return_date": r2,
+                "extra_helmet": "false",
+                "top_box": "true",
+                "payment_channel": "gcash",
+                "payment_reference": "9001234567890",
+                "payment_proof": (io.BytesIO(receipt_bytes), "gcash-receipt.png"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(online_resp.status_code, 201)
+        b_online = online_resp.get_json()["booking"]
+        self.assertEqual(b_online["payment_channel"], "gcash")
+        self.assertEqual(b_online["payment_reference"], "9001234567890")
+        self.assertEqual(b_online["payment_status"], "submitted")
+        self.assertEqual(b_online["reservation_fee"], round(b_online["total_amount"] * 0.10, 2))
+        self.assertEqual(
+            b_online["balance_due"],
+            round(b_online["total_amount"] - b_online["reservation_fee"], 2),
+        )
+        self.assertTrue(b_online["payment_proof_url"].startswith("/uploads/proof_"))
+        self.assertEqual(self.client.get(b_online["payment_proof_url"]).data, receipt_bytes)
+
+        # Admin KPIs show pending verification before approval
+        dash1 = self.client.get("/api/admin/dashboard").get_json()["kpis"]
+        self.assertEqual(dash1["pending_payment_verifications"], 1)
+        self.assertEqual(dash1["pending_verification_total"], b_online["reservation_fee"])
+        self.assertEqual(dash1["collected_reservation_total"], 0.0)
+
+        # Customer lookup shows payment status, receipt URL, and balance due
+        lookup = self.client.get(
+            f"/api/bookings/lookup?code={b_online['booking_code']}&phone=3333"
+        ).get_json()["booking"]
+        self.assertEqual(lookup["payment_status"], "submitted")
+        self.assertEqual(lookup["balance_due"], b_online["balance_due"])
+        self.assertEqual(lookup["payment_proof_url"], b_online["payment_proof_url"])
+
+        # Admin Verifies & Confirms booking
+        verified = self.client.patch(
+            f"/api/admin/bookings/{b_online['id']}",
+            json={"payment_status": "verified", "status": "confirmed"},
+        ).get_json()["booking"]
+        self.assertEqual(verified["status"], "confirmed")
+        self.assertEqual(verified["payment_status"], "verified")
+        self.assertEqual(verified["balance_due"], b_online["balance_due"])
+
+        import notifications
+
+        alert_subject, alert_body = notifications.format_new_booking_message(
+            {"currency": "₱", "shop_name": "Motorbike Rentals Camiguin"},
+            {"shop_name": b_online.get("shop_name", "Shop")},
+            b_online,
+        )
+        self.assertIn(b_online["booking_code"], alert_subject)
+        self.assertIn("9001234567890", alert_body)
+        self.assertIn("Balance Due at Pickup", alert_body)
+
+        home_html = self.client.get("/").get_data(as_text=True)
+        self.assertIn('id="payment-qr-section"', home_html)
+        admin_html = self.client.get("/admin").get_data(as_text=True)
+        self.assertIn('id="set-reservation-mode"', admin_html)
+        self.assertIn('id="set-qr-image-file"', admin_html)
+
+        dash2 = self.client.get("/api/admin/dashboard").get_json()["kpis"]
+        self.assertEqual(dash2["pending_payment_verifications"], 0)
+        self.assertEqual(dash2["collected_reservation_total"], b_online["reservation_fee"])
+
+        # If payment rejected later, balance_due resets to full total_amount so shop collects all
+        rejected = self.client.patch(
+            f"/api/admin/bookings/{b_online['id']}",
+            json={"payment_status": "rejected"},
+        ).get_json()["booking"]
+        self.assertEqual(rejected["payment_status"], "rejected")
+        self.assertEqual(rejected["balance_due"], b_online["total_amount"])
+
+        # Re-verifying restores net balance_due cleanly
+        reverified = self.client.patch(
+            f"/api/admin/bookings/{b_online['id']}",
+            json={"payment_status": "verified"},
+        ).get_json()["booking"]
+        self.assertEqual(reverified["payment_status"], "verified")
+        self.assertEqual(reverified["balance_due"], b_online["balance_due"])
+
+    def test_legacy_db_migrates_payment_columns_and_preserves_balance_due(self):
+        legacy_db = os.path.join(self.temp_dir.name, "legacy_bookings.db")
+        raw_conn = sqlite3.connect(legacy_db)
+        raw_conn.executescript(
+            """
+            CREATE TABLE shops (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                shop_name TEXT NOT NULL,
+                slug TEXT NOT NULL UNIQUE,
+                owner_name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                phone TEXT NOT NULL,
+                whatsapp_number TEXT NOT NULL DEFAULT '',
+                telegram_chat_id TEXT NOT NULL DEFAULT '',
+                municipality TEXT NOT NULL DEFAULT 'Mambajao',
+                address TEXT NOT NULL DEFAULT '',
+                description TEXT NOT NULL DEFAULT '',
+                delivery_fee REAL NOT NULL DEFAULT 200,
+                password_hash TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                is_main INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE bikes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                shop_id INTEGER NOT NULL DEFAULT 1,
+                name TEXT NOT NULL,
+                slug TEXT NOT NULL UNIQUE,
+                category TEXT NOT NULL,
+                engine_cc INTEGER NOT NULL,
+                transmission TEXT NOT NULL,
+                fuel_type TEXT NOT NULL DEFAULT 'Gasoline',
+                plate_number TEXT NOT NULL DEFAULT '',
+                daily_rate REAL NOT NULL,
+                weekly_rate REAL NOT NULL DEFAULT 0,
+                deposit REAL NOT NULL DEFAULT 2000,
+                units_count INTEGER NOT NULL DEFAULT 1,
+                image_url TEXT NOT NULL DEFAULT '',
+                inclusions TEXT NOT NULL DEFAULT '',
+                description TEXT NOT NULL DEFAULT '',
+                featured INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'available',
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE bookings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                booking_code TEXT NOT NULL UNIQUE,
+                bike_id INTEGER NOT NULL,
+                shop_id INTEGER NOT NULL DEFAULT 1,
+                customer_name TEXT NOT NULL,
+                customer_phone TEXT NOT NULL,
+                customer_email TEXT NOT NULL DEFAULT '',
+                license_number TEXT NOT NULL,
+                pickup_date TEXT NOT NULL,
+                return_date TEXT NOT NULL,
+                pickup_time TEXT NOT NULL DEFAULT '09:00',
+                pickup_method TEXT NOT NULL DEFAULT 'shop',
+                delivery_address TEXT NOT NULL DEFAULT '',
+                extra_helmet INTEGER NOT NULL DEFAULT 0,
+                top_box INTEGER NOT NULL DEFAULT 0,
+                rental_days INTEGER NOT NULL,
+                base_subtotal REAL NOT NULL,
+                addons_total REAL NOT NULL DEFAULT 0,
+                delivery_total REAL NOT NULL DEFAULT 0,
+                total_amount REAL NOT NULL,
+                commission_rate REAL NOT NULL DEFAULT 10,
+                platform_fee REAL NOT NULL DEFAULT 0,
+                shop_payout REAL NOT NULL DEFAULT 0,
+                deposit_amount REAL NOT NULL,
+                notes TEXT NOT NULL DEFAULT '',
+                admin_notes TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
+        raw_conn.execute(
+            """
+            INSERT INTO shops (id, shop_name, slug, owner_name, email, phone, password_hash, status, is_main, created_at)
+            VALUES (1, 'Legacy Shop', 'legacy-shop', 'Owner', 'owner@legacy.ph', '09171234567', 'hash', 'approved', 1, '2026-01-01T00:00:00')
+            """
+        )
+        raw_conn.execute(
+            """
+            INSERT INTO bikes (id, shop_id, name, slug, category, engine_cc, transmission, daily_rate, status, created_at)
+            VALUES (1, 1, 'Legacy Beat 110', 'legacy-beat-110', 'Scooter', 110, 'Automatic', 500, 'available', '2026-01-01T00:00:00')
+            """
+        )
+        raw_conn.execute(
+            """
+            INSERT INTO bookings (
+                id, booking_code, bike_id, shop_id, customer_name, customer_phone, license_number,
+                pickup_date, return_date, rental_days, base_subtotal, total_amount, deposit_amount,
+                status, created_at, updated_at
+            ) VALUES (1, 'MR-2026-0001', 1, 1, 'Old Rider', '09179998888', 'LIC-OLD',
+                      '2026-12-01', '2026-12-04', 3, 1500, 1500, 2000, 'confirmed',
+                      '2026-01-01T00:00:00', '2026-01-01T00:00:00')
+            """
+        )
+        raw_conn.commit()
+        raw_conn.close()
+
+        migrated_app = create_app(
+            {
+                "TESTING": True,
+                "DB_PATH": legacy_db,
+                "UPLOAD_FOLDER": self.upload_dir,
+                "SKIP_ICONS": True,
+            }
+        )
+        client = migrated_app.test_client()
+        self.assertEqual(client.get("/api/health").status_code, 200)
+
+        check_conn = sqlite3.connect(legacy_db)
+        cols = [r[1] for r in check_conn.execute("PRAGMA table_info(bookings)").fetchall()]
+        row = check_conn.execute(
+            "SELECT reservation_fee, balance_due, payment_channel, payment_status FROM bookings WHERE id = 1"
+        ).fetchone()
+        check_conn.close()
+
+        for col in (
+            "reservation_fee",
+            "balance_due",
+            "payment_channel",
+            "payment_reference",
+            "payment_proof_url",
+            "payment_status",
+        ):
+            self.assertIn(col, cols)
+        self.assertEqual(float(row[0]), 0.0)
+        self.assertEqual(float(row[1]), 1500.0)
+        self.assertEqual(row[2], "pay_at_shop")
+        self.assertEqual(row[3], "unpaid")
+
 if __name__ == "__main__":
     unittest.main()
