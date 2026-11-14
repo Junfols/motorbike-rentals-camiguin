@@ -1,8 +1,16 @@
 (function () {
   "use strict";
 
-  const { escapeHtml, formatMoney, showToast, openModal, closeModal, saveRecentTrip, shop } =
-    window.MotoRide;
+  const {
+    escapeHtml,
+    formatMoney,
+    paymentStatusLabel,
+    showToast,
+    openModal,
+    closeModal,
+    saveRecentTrip,
+    shop,
+  } = window.MotoRide;
 
   const fleetGrid = document.getElementById("fleet-grid");
   const fleetDateSummary = document.getElementById("fleet-date-summary");
@@ -32,6 +40,25 @@
   const quoteLines = document.getElementById("quote-lines");
   const bookingFormError = document.getElementById("booking-form-error");
   const bookingSubmitBtn = document.getElementById("booking-submit-btn");
+  const paymentQrSection = document.getElementById("payment-qr-section");
+  const paymentModePill = document.getElementById("payment-mode-pill");
+  const paymentFeeBadge = document.getElementById("payment-fee-badge");
+  const paymentQrBox = document.getElementById("payment-qr-box");
+  const paymentQrImg = document.getElementById("payment-qr-img");
+  const paymentInstructionsText = document.getElementById("payment-instructions-text");
+  const paymentGcashRow = document.getElementById("payment-gcash-row");
+  const paymentGcashNumber = document.getElementById("payment-gcash-number");
+  const paymentGcashName = document.getElementById("payment-gcash-name");
+  const paymentMayaRow = document.getElementById("payment-maya-row");
+  const paymentMayaNumber = document.getElementById("payment-maya-number");
+  const copyGcashBtn = document.getElementById("copy-gcash-btn");
+  const copyMayaBtn = document.getElementById("copy-maya-btn");
+  const channelGcashWrap = document.getElementById("channel-gcash-wrap");
+  const channelMayaWrap = document.getElementById("channel-maya-wrap");
+  const channelShopWrap = document.getElementById("channel-shop-wrap");
+  const paymentProofFields = document.getElementById("payment-proof-fields");
+  const bookingPaymentRef = document.getElementById("booking-payment-reference");
+  const bookingPaymentProof = document.getElementById("booking-payment-proof");
 
   const state = {
     category: "All",
@@ -45,7 +72,110 @@
     returnDate: "",
     bikes: [],
     shops: [],
+    latestQuote: null,
   };
+
+  function getSelectedPaymentChannel() {
+    if (!bookingForm) return "pay_at_shop";
+    const checked = bookingForm.querySelector('input[name="payment_channel"]:checked');
+    return checked ? checked.value : "pay_at_shop";
+  }
+
+  function selectPaymentChannel(channel) {
+    if (!bookingForm) return;
+    const radio = bookingForm.querySelector(`input[name="payment_channel"][value="${channel}"]`);
+    if (radio) radio.checked = true;
+  }
+
+  function syncPaymentChannelUi(resetDefault) {
+    if (!paymentQrSection) return;
+    const q = state.latestQuote;
+    const active = Boolean(
+      q &&
+        q.reservation_mode !== "off" &&
+        q.reservation_configured &&
+        Number(q.reservation_fee || 0) > 0
+    );
+    paymentQrSection.classList.toggle("hidden", !active);
+    if (!active) {
+      selectPaymentChannel("pay_at_shop");
+      if (paymentProofFields) paymentProofFields.classList.add("hidden");
+      return;
+    }
+
+    const isReq = q.reservation_mode === "required";
+    const qrUrl = (shop.gcash_qr_url || "").trim();
+    const gcashNum = (shop.gcash_number || "").trim();
+    const gcashName = (shop.gcash_account_name || "").trim();
+    const mayaNum = (shop.maya_number || "").trim();
+    const hasGcash = Boolean(qrUrl || gcashNum);
+    const hasMaya = Boolean(mayaNum);
+    const preferredOnline = hasGcash ? "gcash" : hasMaya ? "maya" : "pay_at_shop";
+
+    if (paymentModePill) {
+      paymentModePill.textContent = isReq ? "Required" : "Optional";
+      paymentModePill.className = isReq ? "status-pill-inline ready" : "status-pill-inline muted";
+    }
+    if (paymentFeeBadge) {
+      paymentFeeBadge.textContent = `Pay Now (${q.reservation_percent}%): ${formatMoney(q.reservation_fee)}`;
+    }
+    if (paymentInstructionsText) {
+      paymentInstructionsText.textContent =
+        (shop.payment_instructions || "").trim() ||
+        "Scan the QR code or send the reservation fee below, then enter your Reference No. before submitting.";
+    }
+    if (paymentQrBox && paymentQrImg) {
+      if (qrUrl) {
+        paymentQrImg.src = qrUrl;
+        paymentQrBox.classList.remove("hidden");
+      } else {
+        paymentQrImg.src = "";
+        paymentQrBox.classList.add("hidden");
+      }
+    }
+    if (paymentGcashRow && paymentGcashNumber) {
+      if (gcashNum) {
+        paymentGcashNumber.textContent = gcashNum;
+        if (paymentGcashName) {
+          paymentGcashName.textContent = gcashName ? `Account Name: ${gcashName}` : "";
+        }
+        paymentGcashRow.classList.remove("hidden");
+      } else {
+        paymentGcashRow.classList.add("hidden");
+      }
+    }
+    if (paymentMayaRow && paymentMayaNumber) {
+      if (mayaNum) {
+        paymentMayaNumber.textContent = mayaNum;
+        paymentMayaRow.classList.remove("hidden");
+      } else {
+        paymentMayaRow.classList.add("hidden");
+      }
+    }
+
+    if (channelGcashWrap) channelGcashWrap.classList.toggle("hidden", !hasGcash);
+    if (channelMayaWrap) channelMayaWrap.classList.toggle("hidden", !hasMaya);
+    if (channelShopWrap) channelShopWrap.classList.toggle("hidden", isReq);
+
+    let current = getSelectedPaymentChannel();
+    if (resetDefault) {
+      current = preferredOnline;
+      selectPaymentChannel(current);
+    } else if (isReq && current === "pay_at_shop") {
+      current = preferredOnline;
+      selectPaymentChannel(current);
+    } else if (current === "gcash" && !hasGcash) {
+      current = hasMaya ? "maya" : "pay_at_shop";
+      selectPaymentChannel(current);
+    } else if (current === "maya" && !hasMaya) {
+      current = hasGcash ? "gcash" : "pay_at_shop";
+      selectPaymentChannel(current);
+    }
+
+    if (paymentProofFields) {
+      paymentProofFields.classList.toggle("hidden", current === "pay_at_shop");
+    }
+  }
 
   function toIsoLocal(dt) {
     const y = dt.getFullYear();
@@ -281,9 +411,12 @@
       const isDelivery = bookingPickupMethod.value === "delivery";
       deliveryAddressGroup.classList.toggle("hidden", !isDelivery);
       deliveryAddressInput.required = isDelivery;
+      if (bookingPaymentRef) bookingPaymentRef.value = "";
+      if (bookingPaymentProof) bookingPaymentProof.value = "";
       bookingSubmitBtn.textContent = "Confirm Booking Request";
       openModal("booking-modal");
       await refreshQuote();
+      syncPaymentChannelUi(true);
     } catch (err) {
       showToast(err.message, "error");
     }
@@ -312,14 +445,17 @@
       const res = await fetch(`/api/quote?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) {
+        state.latestQuote = null;
         quoteAvailability.className = "quote-availability bad";
         quoteAvailability.textContent = data.error || "Invalid dates";
         quoteLines.innerHTML = "";
         bookingSubmitBtn.disabled = true;
+        syncPaymentChannelUi(false);
         return;
       }
 
       const q = data.quote;
+      state.latestQuote = q;
       if (q.is_available) {
         quoteAvailability.className = "quote-availability ok";
         quoteAvailability.textContent = `Available (${q.available_units} of ${q.units_count} unit(s) open)`;
@@ -370,15 +506,32 @@
           <span>Total Rental Amount</span>
           <span>${escapeHtml(formatMoney(q.total_amount))}</span>
         </div>
+      `;
+      if (q.reservation_mode !== "off" && q.reservation_configured && Number(q.reservation_fee || 0) > 0) {
+        linesHtml += `
+          <div class="quote-line">
+            <span>Reservation Fee (${q.reservation_percent}% via GCash/Maya)</span>
+            <span>${escapeHtml(formatMoney(q.reservation_fee))}</span>
+          </div>
+          <div class="quote-line">
+            <span>Remaining Balance Due at Pickup</span>
+            <span>${escapeHtml(formatMoney(q.balance_due))}</span>
+          </div>
+        `;
+      }
+      linesHtml += `
         <div class="quote-line deposit">
           <span>Refundable Security Deposit (paid at pickup)</span>
           <span>${escapeHtml(formatMoney(q.deposit_amount))}</span>
         </div>
       `;
       quoteLines.innerHTML = linesHtml;
+      syncPaymentChannelUi(false);
     } catch (_) {
+      state.latestQuote = null;
       quoteAvailability.className = "quote-availability bad";
       quoteAvailability.textContent = "Unable to calculate quote right now.";
+      syncPaymentChannelUi(false);
     }
   }
 
@@ -498,6 +651,32 @@
     if (el) el.addEventListener("change", refreshQuote);
   });
 
+  async function copyPaymentText(text, label) {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(`${label} copied!`, "success");
+    } catch (_) {
+      showToast(`${label}: ${text}`, "success");
+    }
+  }
+
+  if (copyGcashBtn && paymentGcashNumber) {
+    copyGcashBtn.addEventListener("click", () => {
+      copyPaymentText(paymentGcashNumber.textContent.trim(), "GCash number");
+    });
+  }
+  if (copyMayaBtn && paymentMayaNumber) {
+    copyMayaBtn.addEventListener("click", () => {
+      copyPaymentText(paymentMayaNumber.textContent.trim(), "Maya number");
+    });
+  }
+  if (bookingForm) {
+    bookingForm.querySelectorAll('input[name="payment_channel"]').forEach((radio) => {
+      radio.addEventListener("change", () => syncPaymentChannelUi(false));
+    });
+  }
+
   if (bookingForm) {
     bookingForm.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -520,15 +699,61 @@
         notes: document.getElementById("booking-notes").value.trim(),
       };
 
+      const q = state.latestQuote;
+      const paymentActive = Boolean(
+        q &&
+          q.reservation_mode !== "off" &&
+          q.reservation_configured &&
+          Number(q.reservation_fee || 0) > 0
+      );
+      const selectedChannel = paymentActive ? getSelectedPaymentChannel() : "pay_at_shop";
+      const paymentReference = bookingPaymentRef ? bookingPaymentRef.value.trim() : "";
+      const proofFile =
+        bookingPaymentProof && bookingPaymentProof.files ? bookingPaymentProof.files[0] : null;
+
+      if (paymentActive && selectedChannel !== "pay_at_shop") {
+        if (paymentReference && paymentReference.length < 6) {
+          bookingFormError.textContent =
+            "Please enter your full GCash / Maya Reference No. (at least 6 characters).";
+          bookingFormError.classList.remove("hidden");
+          return;
+        }
+        if (!paymentReference && !proofFile) {
+          bookingFormError.textContent =
+            q.reservation_mode === "required"
+              ? "Please enter your GCash / Maya Reference No. or upload your payment receipt screenshot."
+              : "Please enter your Reference No., upload a receipt screenshot, or choose 'Pay Full at Shop on Pickup'.";
+          bookingFormError.classList.remove("hidden");
+          return;
+        }
+      }
+
       bookingSubmitBtn.disabled = true;
       bookingSubmitBtn.textContent = "Submitting...";
 
       try {
-        const res = await fetch("/api/bookings", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+        let fetchOpts;
+        if (proofFile && paymentActive && selectedChannel !== "pay_at_shop") {
+          const fd = new FormData();
+          Object.entries(payload).forEach(([k, v]) => {
+            fd.append(k, typeof v === "boolean" ? (v ? "true" : "false") : String(v ?? ""));
+          });
+          fd.append("payment_channel", selectedChannel);
+          fd.append("payment_reference", paymentReference);
+          fd.append("payment_proof", proofFile);
+          fetchOpts = { method: "POST", body: fd };
+        } else {
+          fetchOpts = {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...payload,
+              payment_channel: selectedChannel,
+              payment_reference: selectedChannel === "pay_at_shop" ? "" : paymentReference,
+            }),
+          };
+        }
+        const res = await fetch("/api/bookings", fetchOpts);
         const data = await res.json();
         if (!res.ok) {
           throw new Error(data.error || "Could not submit booking.");
@@ -562,6 +787,8 @@
       <div><strong>Dates:</strong> ${escapeHtml(booking.pickup_date)} to ${escapeHtml(booking.return_date)} (${booking.rental_days} day(s))</div>
       <div><strong>Pickup:</strong> ${escapeHtml(booking.pickup_time)} &bull; ${booking.pickup_method === "delivery" ? `Delivery (${escapeHtml(booking.delivery_address)})` : "Shop Pickup"}</div>
       <div><strong>Total Rental:</strong> ${escapeHtml(formatMoney(booking.total_amount))}</div>
+      ${Number(booking.reservation_fee || 0) > 0 ? `<div><strong>Reservation Fee (${escapeHtml((booking.payment_channel || "gcash").toUpperCase())}):</strong> ${escapeHtml(formatMoney(booking.reservation_fee))} (${escapeHtml(paymentStatusLabel(booking.payment_status))})${booking.payment_reference ? ` &bull; Ref # ${escapeHtml(booking.payment_reference)}` : ""}</div>` : ""}
+      <div><strong>Balance Due on Pickup:</strong> ${escapeHtml(formatMoney(booking.balance_due !== undefined && booking.balance_due !== null ? booking.balance_due : booking.total_amount))}</div>
       <div><strong>Refundable Deposit:</strong> ${escapeHtml(formatMoney(booking.deposit_amount))}</div>
       <div><strong>Status:</strong> <span class="badge badge-pending">Pending Shop Confirmation</span></div>
     `;

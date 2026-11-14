@@ -108,7 +108,10 @@
             <span class="text-muted">Booking Reference</span>
             <h3 style="margin:2px 0 0;">${escapeHtml(b.booking_code)}</h3>
           </div>
-          <span class="badge badge-${escapeHtml(b.status)}">${escapeHtml(statusLabel(b.status))}</span>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            ${(Number(b.reservation_fee || 0) > 0 || (b.payment_status && b.payment_status !== "unpaid")) ? `<span class="badge badge-${escapeHtml(b.payment_status || "unpaid")}">${escapeHtml(window.MotoRide && window.MotoRide.paymentStatusLabel ? window.MotoRide.paymentStatusLabel(b.payment_status) : (b.payment_status || "unpaid"))}</span>` : ""}
+            <span class="badge badge-${escapeHtml(b.status)}">${escapeHtml(statusLabel(b.status))}</span>
+          </div>
         </div>
 
         <div class="trip-bike-row">
@@ -139,6 +142,11 @@
             <strong>${escapeHtml(formatMoney(b.total_amount))}</strong>
           </div>
           <div>
+            <span class="trip-detail-label">Balance Due on Pickup</span>
+            <strong>${escapeHtml(formatMoney(b.balance_due !== undefined && b.balance_due !== null ? b.balance_due : b.total_amount))}</strong>
+            ${Number(b.reservation_fee || 0) > 0 ? `<div class="text-muted">Reservation fee: ${escapeHtml(formatMoney(b.reservation_fee))}</div>` : ""}
+          </div>
+          <div>
             <span class="trip-detail-label">Security Deposit</span>
             <strong>${escapeHtml(formatMoney(b.deposit_amount))}</strong>
           </div>
@@ -148,6 +156,7 @@
           </div>
         </div>
 
+        ${(b.payment_reference || b.payment_proof_url) ? `<p class="text-muted"><strong>Reservation Payment:</strong> ${escapeHtml((b.payment_channel || "gcash").toUpperCase())}${b.payment_reference ? ` &bull; Ref # ${escapeHtml(b.payment_reference)}` : ""}${b.payment_proof_url ? ` &bull; <a href="${escapeHtml(b.payment_proof_url)}" target="_blank" rel="noopener" class="payment-proof-link">View Receipt</a>` : ""}</p>` : ""}
         ${b.delivery_address ? `<p class="text-muted"><strong>Delivery Address:</strong> ${escapeHtml(b.delivery_address)}</p>` : ""}
         ${b.admin_notes ? `<div class="info-box"><h4>Shop Note</h4><p>${escapeHtml(b.admin_notes)}</p></div>` : ""}
 
@@ -216,7 +225,38 @@
     showToast("Cleared saved bookings from this device.");
   });
 
+  async function refreshActiveSavedTrips() {
+    const trips = getSavedTrips().filter((t) =>
+      ["pending", "confirmed", "active"].includes((t.status || "").toLowerCase())
+    );
+    if (!trips.length) return;
+    let updatedAny = false;
+    await Promise.all(
+      trips.slice(0, 6).map(async (t) => {
+        try {
+          const params = new URLSearchParams({
+            code: (t.booking_code || "").trim(),
+            phone: (t.customer_phone || "").trim(),
+          });
+          const res = await fetch(`/api/bookings/lookup?${params.toString()}`);
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data && data.booking) {
+            saveRecentTrip(data.booking);
+            updatedAny = true;
+          }
+        } catch (_) {
+          // Offline or transient failure: keep cached saved trip display
+        }
+      })
+    );
+    if (updatedAny) {
+      renderSavedTrips();
+    }
+  }
+
   renderSavedTrips();
+  refreshActiveSavedTrips();
 
   const urlParams = new URLSearchParams(window.location.search);
   const preCode = urlParams.get("code");

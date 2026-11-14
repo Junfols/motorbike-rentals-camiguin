@@ -232,6 +232,20 @@
           actions.push(`<button type="button" class="btn btn-sm btn-success" data-booking-action="completed" data-id="${b.id}">Mark Returned</button>`);
         }
 
+        const payStatus = b.payment_status || "unpaid";
+        const payLabel = window.MotoRide && window.MotoRide.paymentStatusLabel
+          ? window.MotoRide.paymentStatusLabel(payStatus)
+          : payStatus;
+        const payChannelLabel = b.payment_channel === "maya"
+          ? "Maya"
+          : b.payment_channel === "gcash"
+          ? "GCash"
+          : "Pay at Shop";
+        const hasOnlineFee = Number(b.reservation_fee || 0) > 0;
+        const collectDue = b.balance_due !== undefined && b.balance_due !== null
+          ? Number(b.balance_due)
+          : Number(b.total_amount || 0);
+
         return `
           <div class="admin-booking-card">
             <div class="admin-booking-top">
@@ -240,7 +254,10 @@
                 <span>${escapeHtml(b.bike_name)}</span>
                 ${b.plate_number ? `<span class="text-muted">(${escapeHtml(b.plate_number)})</span>` : ""}
               </div>
-              <span class="badge badge-${escapeHtml(b.status)}">${escapeHtml(statusLabel(b.status))}</span>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                ${(hasOnlineFee || payStatus !== "unpaid") ? `<span class="badge badge-${escapeHtml(payStatus)}">${escapeHtml(payLabel)}</span>` : ""}
+                <span class="badge badge-${escapeHtml(b.status)}">${escapeHtml(statusLabel(b.status))}</span>
+              </div>
             </div>
 
             <div class="trip-details-grid">
@@ -255,14 +272,14 @@
                 <div class="text-muted">${b.rental_days}d &bull; ${escapeHtml(b.pickup_time)}</div>
               </div>
               <div>
-                <span class="trip-detail-label">Gross / Fee (${b.commission_rate}%)</span>
+                <span class="trip-detail-label">Gross / Platform Fee (${b.commission_rate}%)</span>
                 <strong>${escapeHtml(formatMoney(b.total_amount))}</strong>
-                <div class="text-muted">Fee: -${escapeHtml(formatMoney(b.platform_fee))}</div>
+                <div class="text-muted">Fee: -${escapeHtml(formatMoney(b.platform_fee))} &bull; Net: ${escapeHtml(formatMoney(b.shop_payout))}</div>
               </div>
               <div>
-                <span class="trip-detail-label">Net Payout / Deposit</span>
-                <strong>${escapeHtml(formatMoney(b.shop_payout))}</strong>
-                <div class="text-muted">Dep: ${escapeHtml(formatMoney(b.deposit_amount))}</div>
+                <span class="trip-detail-label">Collect on Pickup / Deposit</span>
+                <strong>${escapeHtml(formatMoney(collectDue))}</strong>
+                <div class="text-muted">${hasOnlineFee && payStatus !== "rejected" && payStatus !== "refunded" ? `Paid online: -${escapeHtml(formatMoney(b.reservation_fee))} (${escapeHtml(payChannelLabel)})` : "Full rental due"} &bull; Dep: ${escapeHtml(formatMoney(b.deposit_amount))}</div>
               </div>
               <div>
                 <span class="trip-detail-label">License #</span>
@@ -270,6 +287,7 @@
               </div>
             </div>
 
+            ${b.payment_reference ? `<div class="text-muted"><strong>${escapeHtml(payChannelLabel)} Ref #:</strong> ${escapeHtml(b.payment_reference)}</div>` : ""}
             ${b.delivery_address ? `<div class="text-muted"><strong>Delivery to:</strong> ${escapeHtml(b.delivery_address)}</div>` : ""}
             ${b.notes ? `<div class="text-muted"><strong>Rider note:</strong> ${escapeHtml(b.notes)}</div>` : ""}
 

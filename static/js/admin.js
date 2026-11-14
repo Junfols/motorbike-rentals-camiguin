@@ -1,8 +1,15 @@
 (function () {
   "use strict";
 
-  const { escapeHtml, formatMoney, showToast, openModal, closeModal, updateShopTextInDom } =
-    window.MotoRide;
+  const {
+    escapeHtml,
+    formatMoney,
+    paymentStatusLabel,
+    showToast,
+    openModal,
+    closeModal,
+    updateShopTextInDom,
+  } = window.MotoRide;
 
   const loginView = document.getElementById("admin-login-view");
   const dashboardView = document.getElementById("admin-dashboard-view");
@@ -187,6 +194,11 @@
         <div class="kpi-value">${escapeHtml(formatMoney(k.platform_fee_total))}</div>
         <div class="kpi-sub">Partner payouts: ${escapeHtml(formatMoney(k.partner_payout_total))}</div>
       </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Verified GCash Reservation Fees</div>
+        <div class="kpi-value">${escapeHtml(formatMoney(k.collected_reservation_total || 0))}</div>
+        <div class="kpi-sub">${k.pending_payment_verifications || 0} receipt(s) to verify (${escapeHtml(formatMoney(k.pending_verification_total || 0))})</div>
+      </div>
     `;
 
     const bars = data.revenue_by_shop || [];
@@ -331,6 +343,18 @@
     bookingsList.innerHTML = adminState.bookings
       .map((b) => {
         const actions = [];
+        const payStatus = b.payment_status || "unpaid";
+        const payLabel = paymentStatusLabel(payStatus);
+        const payChannelLabel = b.payment_channel === "maya"
+          ? "Maya"
+          : b.payment_channel === "gcash"
+          ? "GCash"
+          : "Pay at Shop";
+        const hasOnlineFee = Number(b.reservation_fee || 0) > 0;
+
+        if (payStatus === "submitted" && b.status === "pending") {
+          actions.push(`<button type="button" class="btn btn-sm btn-success" data-verify-confirm="${b.id}">Verify &amp; Confirm</button>`);
+        }
         if (b.status === "pending") {
           actions.push(`<button type="button" class="btn btn-sm btn-success" data-booking-action="confirmed" data-id="${b.id}">Approve</button>`);
           actions.push(`<button type="button" class="btn btn-sm btn-danger" data-booking-action="cancelled" data-id="${b.id}">Reject</button>`);
@@ -341,6 +365,15 @@
           actions.push(`<button type="button" class="btn btn-sm btn-success" data-booking-action="completed" data-id="${b.id}">Mark Returned</button>`);
         }
 
+        if (payStatus === "submitted") {
+          actions.push(`<button type="button" class="btn btn-sm btn-primary" data-payment-action="verified" data-id="${b.id}">Verify Receipt</button>`);
+          actions.push(`<button type="button" class="btn btn-sm btn-danger" data-payment-action="rejected" data-id="${b.id}">Reject Payment</button>`);
+        } else if (payStatus === "verified") {
+          actions.push(`<button type="button" class="btn btn-sm btn-outline" data-payment-action="refunded" data-id="${b.id}">Mark Refunded</button>`);
+        } else if (payStatus === "rejected" && hasOnlineFee) {
+          actions.push(`<button type="button" class="btn btn-sm btn-outline" data-payment-action="verified" data-id="${b.id}">Verify Payment</button>`);
+        }
+
         return `
           <div class="admin-booking-card" data-booking-id="${b.id}">
             <div class="admin-booking-top">
@@ -349,7 +382,10 @@
                 <span>${escapeHtml(b.bike_name)}</span>
                 <span class="badge badge-soft">${escapeHtml(b.shop_name || "Shop")}</span>
               </div>
-              <span class="badge badge-${escapeHtml(b.status)}">${escapeHtml(statusLabel(b.status))}</span>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                ${(hasOnlineFee || payStatus !== "unpaid") ? `<span class="badge badge-${escapeHtml(payStatus)}">${escapeHtml(payLabel)}</span>` : ""}
+                <span class="badge badge-${escapeHtml(b.status)}">${escapeHtml(statusLabel(b.status))}</span>
+              </div>
             </div>
 
             <div class="trip-details-grid">
@@ -369,9 +405,9 @@
                 <div class="text-muted">Fee: ${escapeHtml(formatMoney(b.platform_fee))} &bull; Payout: ${escapeHtml(formatMoney(b.shop_payout))}</div>
               </div>
               <div>
-                <span class="trip-detail-label">Pickup &amp; Deposit</span>
-                <strong>${b.pickup_method === "delivery" ? "Delivery" : "Shop Pickup"}</strong>
-                <div class="text-muted">Dep: ${escapeHtml(formatMoney(b.deposit_amount))}</div>
+                <span class="trip-detail-label">Reservation / Balance Due</span>
+                <strong>${escapeHtml(formatMoney(b.balance_due !== undefined && b.balance_due !== null ? b.balance_due : b.total_amount))}</strong>
+                <div class="text-muted">${hasOnlineFee ? `${escapeHtml(payChannelLabel)}: ${escapeHtml(formatMoney(b.reservation_fee))}` : "Pay 100% at shop"} &bull; Dep: ${escapeHtml(formatMoney(b.deposit_amount))}</div>
               </div>
               <div>
                 <span class="trip-detail-label">License #</span>
@@ -379,6 +415,7 @@
               </div>
             </div>
 
+            ${(b.payment_reference || b.payment_proof_url) ? `<div class="text-muted"><strong>Payment Proof:</strong> ${escapeHtml(payChannelLabel)}${b.payment_reference ? ` &bull; Ref # ${escapeHtml(b.payment_reference)}` : ""}${b.payment_proof_url ? ` &bull; <a href="${escapeHtml(b.payment_proof_url)}" target="_blank" rel="noopener" class="payment-proof-link">View Receipt Screenshot</a>` : ""}</div>` : ""}
             ${b.delivery_address ? `<div class="text-muted"><strong>Delivery to:</strong> ${escapeHtml(b.delivery_address)}</div>` : ""}
             ${b.notes ? `<div class="text-muted"><strong>Customer note:</strong> ${escapeHtml(b.notes)}</div>` : ""}
 
@@ -522,6 +559,75 @@
     containerEl.classList.add(data.ok ? "ok" : "err");
   }
 
+  function applyPaymentSettingsToForm(s) {
+    const modeEl = document.getElementById("set-reservation-mode");
+    const pctEl = document.getElementById("set-reservation-percent");
+    const nameEl = document.getElementById("set-gcash-account-name");
+    const gcashEl = document.getElementById("set-gcash-number");
+    const mayaEl = document.getElementById("set-maya-number");
+    const instEl = document.getElementById("set-payment-instructions");
+    const pillEl = document.getElementById("admin-payment-status-pill");
+    const previewImg = document.getElementById("admin-qr-preview-img");
+    const removeQrBtn = document.getElementById("remove-qr-btn");
+    const qrHintEl = document.getElementById("admin-qr-status-hint");
+
+    const mode = (s.reservation_mode || "optional").toLowerCase();
+    if (modeEl) modeEl.value = mode;
+    if (pctEl) pctEl.value = s.reservation_percent ?? "10";
+    if (nameEl) nameEl.value = s.gcash_account_name || "";
+    if (gcashEl) gcashEl.value = s.gcash_number || "";
+    if (mayaEl) mayaEl.value = s.maya_number || "";
+    if (instEl) instEl.value = s.payment_instructions || "";
+
+    const qrUrl = (s.gcash_qr_url || "").trim();
+    const configured = Boolean(qrUrl || (s.gcash_number || "").trim() || (s.maya_number || "").trim());
+
+    if (pillEl) {
+      if (mode === "off") {
+        pillEl.textContent = "Off";
+        pillEl.className = "status-pill-inline muted";
+      } else if (configured) {
+        pillEl.textContent = mode === "required" ? "Required Active" : "Optional Active";
+        pillEl.className = "status-pill-inline ready";
+      } else {
+        pillEl.textContent = "Needs QR or Number";
+        pillEl.className = "status-pill-inline muted";
+      }
+    }
+
+    if (previewImg) {
+      if (qrUrl) {
+        previewImg.src = qrUrl;
+        previewImg.classList.remove("hidden");
+      } else {
+        previewImg.src = "";
+        previewImg.classList.add("hidden");
+      }
+    }
+    if (removeQrBtn) {
+      removeQrBtn.classList.toggle("hidden", !qrUrl);
+    }
+    if (qrHintEl) {
+      qrHintEl.textContent = qrUrl
+        ? "QR code is live on customer checkout. Upload another file anytime to replace it."
+        : "Upload your InstaPay QR image from GCash or Maya so renters can scan directly.";
+    }
+  }
+
+  async function uploadQrImageFile(file) {
+    const formData = new FormData();
+    formData.append("qr_image", file);
+    const data = await apiJson("/api/admin/settings/qr", {
+      method: "POST",
+      body: formData,
+    });
+    if (data.settings) {
+      updateShopTextInDom(data.settings);
+      applyPaymentSettingsToForm(data.settings);
+    }
+    return data;
+  }
+
   async function loadSettings() {
     const data = await apiJson("/api/admin/settings");
     const s = data.settings || {};
@@ -540,6 +646,7 @@
     document.getElementById("set-helmet-fee").value = s.extra_helmet_fee || "0";
     document.getElementById("set-topbox-fee").value = s.top_box_fee || "0";
     document.getElementById("set-terms-note").value = s.terms_note || "";
+    applyPaymentSettingsToForm(s);
     applyAlertSettingsToForm(s);
   }
 
@@ -754,6 +861,45 @@
   });
 
   bookingsList.addEventListener("click", async (event) => {
+    const verifyConfirmBtn = event.target.closest("[data-verify-confirm]");
+    if (verifyConfirmBtn) {
+      const id = verifyConfirmBtn.getAttribute("data-verify-confirm");
+      verifyConfirmBtn.disabled = true;
+      try {
+        await apiJson(`/api/admin/bookings/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ payment_status: "verified", status: "confirmed" }),
+        });
+        await Promise.all([loadDashboard(), loadPartners(), loadBookings(), loadFleet()]);
+        showToast("Payment verified & booking confirmed!", "success");
+      } catch (err) {
+        showToast(err.message, "error");
+        verifyConfirmBtn.disabled = false;
+      }
+      return;
+    }
+
+    const payBtn = event.target.closest("[data-payment-action]");
+    if (payBtn) {
+      const id = payBtn.getAttribute("data-id");
+      const paymentStatus = payBtn.getAttribute("data-payment-action");
+      payBtn.disabled = true;
+      try {
+        await apiJson(`/api/admin/bookings/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ payment_status: paymentStatus }),
+        });
+        await Promise.all([loadDashboard(), loadBookings()]);
+        showToast(`Payment marked ${paymentStatusLabel(paymentStatus).toLowerCase()}.`, "success");
+      } catch (err) {
+        showToast(err.message, "error");
+        payBtn.disabled = false;
+      }
+      return;
+    }
+
     const statusBtn = event.target.closest("[data-booking-action]");
     if (statusBtn) {
       const id = statusBtn.getAttribute("data-id");
@@ -863,6 +1009,12 @@
       extra_helmet_fee: document.getElementById("set-helmet-fee").value,
       top_box_fee: document.getElementById("set-topbox-fee").value,
       terms_note: document.getElementById("set-terms-note").value.trim(),
+      reservation_mode: document.getElementById("set-reservation-mode").value,
+      reservation_percent: document.getElementById("set-reservation-percent").value,
+      gcash_account_name: document.getElementById("set-gcash-account-name").value.trim(),
+      gcash_number: document.getElementById("set-gcash-number").value.trim(),
+      maya_number: document.getElementById("set-maya-number").value.trim(),
+      payment_instructions: document.getElementById("set-payment-instructions").value.trim(),
       admin_telegram_chat_id: document.getElementById("set-admin-telegram-chat-id").value.trim(),
       telegram_bot_token: document.getElementById("set-telegram-bot-token").value.trim(),
       clear_telegram_bot_token: document.getElementById("clear-telegram-bot-token").checked,
@@ -880,12 +1032,18 @@
     };
 
     try {
+      const qrFileInput = document.getElementById("set-qr-image-file");
+      if (qrFileInput && qrFileInput.files && qrFileInput.files[0]) {
+        await uploadQrImageFile(qrFileInput.files[0]);
+        qrFileInput.value = "";
+      }
       const data = await apiJson("/api/admin/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       updateShopTextInDom(data.settings);
+      applyPaymentSettingsToForm(data.settings);
       applyAlertSettingsToForm(data.settings);
       document.getElementById("admin-shop-subtitle").textContent =
         `${data.settings.shop_name} • ${data.settings.location}`;
@@ -898,6 +1056,53 @@
       settingsError.classList.remove("hidden");
     }
   });
+
+  const uploadQrBtn = document.getElementById("upload-qr-btn");
+  if (uploadQrBtn) {
+    uploadQrBtn.addEventListener("click", async () => {
+      const qrFileInput = document.getElementById("set-qr-image-file");
+      const file = qrFileInput && qrFileInput.files ? qrFileInput.files[0] : null;
+      if (!file) {
+        showToast("Please choose a QR image file first.", "error");
+        return;
+      }
+      uploadQrBtn.disabled = true;
+      uploadQrBtn.textContent = "Uploading...";
+      try {
+        await uploadQrImageFile(file);
+        qrFileInput.value = "";
+        await loadDashboard();
+        showToast("GCash / Maya QR uploaded!", "success");
+      } catch (err) {
+        showToast(err.message, "error");
+      } finally {
+        uploadQrBtn.disabled = false;
+        uploadQrBtn.textContent = "Upload QR Image";
+      }
+    });
+  }
+
+  const removeQrBtn = document.getElementById("remove-qr-btn");
+  if (removeQrBtn) {
+    removeQrBtn.addEventListener("click", async () => {
+      removeQrBtn.disabled = true;
+      try {
+        const data = await apiJson("/api/admin/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clear_gcash_qr: true }),
+        });
+        updateShopTextInDom(data.settings);
+        applyPaymentSettingsToForm(data.settings);
+        await loadDashboard();
+        showToast("QR image removed.", "success");
+      } catch (err) {
+        showToast(err.message, "error");
+      } finally {
+        removeQrBtn.disabled = false;
+      }
+    });
+  }
 
   const testAdminAlertBtn = document.getElementById("test-admin-alert-btn");
   if (testAdminAlertBtn) {

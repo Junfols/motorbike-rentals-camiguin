@@ -191,12 +191,24 @@
     });
   }
 
+  function paymentStatusLabel(status) {
+    const labels = {
+      unpaid: "Pay at Shop",
+      submitted: "Receipt Submitted",
+      verified: "Reservation Paid",
+      rejected: "Payment Rejected",
+      refunded: "Refunded",
+    };
+    return labels[status] || status || "Pay at Shop";
+  }
+
   window.MotoRide = {
     get shop() {
       return shopConfig;
     },
     escapeHtml,
     formatMoney,
+    paymentStatusLabel,
     showToast,
     openModal,
     closeModal,
