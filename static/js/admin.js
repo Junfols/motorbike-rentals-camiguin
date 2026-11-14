@@ -559,6 +559,38 @@
     containerEl.classList.add(data.ok ? "ok" : "err");
   }
 
+  const MAX_QR_UPLOAD_BYTES = 8 * 1024 * 1024;
+  const ALLOWED_QR_EXTENSIONS = new Set(["png", "jpg", "jpeg", "jfif", "webp"]);
+  let activeQrUploadPromise = null;
+  let qrAutoUploadedDone = false;
+
+  function setQrHint(message, tone = "neutral") {
+    const qrHintEl = document.getElementById("admin-qr-status-hint");
+    if (!qrHintEl) return;
+    qrHintEl.classList.remove("field-hint-error", "field-hint-success");
+    if (tone === "error") qrHintEl.classList.add("field-hint-error");
+    if (tone === "success") qrHintEl.classList.add("field-hint-success");
+    qrHintEl.textContent = message;
+  }
+
+  function validateQrFileClient(file) {
+    if (!file) return "Please choose a QR image file first.";
+    const parts = String(file.name || "").toLowerCase().split(".");
+    const ext = parts.length > 1 ? parts.pop() : "";
+    const mimeOk = /^image\/(png|jpe?g|pjpeg|webp)$/i.test(file.type || "");
+    if (!ALLOWED_QR_EXTENSIONS.has(ext) && !mimeOk) {
+      return "Unsupported file type. Please choose a PNG, JPG, JPEG, JFIF, or WEBP QR image.";
+    }
+    if (file.size <= 0) {
+      return "Selected QR image file is empty.";
+    }
+    if (file.size > MAX_QR_UPLOAD_BYTES) {
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+      return `Selected image is ${sizeMb} MB (max 8 MB). Please crop or screenshot the QR code cleanly.`;
+    }
+    return null;
+  }
+
   function applyPaymentSettingsToForm(s) {
     const modeEl = document.getElementById("set-reservation-mode");
     const pctEl = document.getElementById("set-reservation-percent");
@@ -569,8 +601,7 @@
     const pillEl = document.getElementById("admin-payment-status-pill");
     const previewImg = document.getElementById("admin-qr-preview-img");
     const removeQrBtn = document.getElementById("remove-qr-btn");
-    const qrHintEl = document.getElementById("admin-qr-status-hint");
-
+    
     const mode = (s.reservation_mode || "optional").toLowerCase();
     if (modeEl) modeEl.value = mode;
     if (pctEl) pctEl.value = s.reservation_percent ?? "10";
@@ -607,14 +638,20 @@
     if (removeQrBtn) {
       removeQrBtn.classList.toggle("hidden", !qrUrl);
     }
-    if (qrHintEl) {
-      qrHintEl.textContent = qrUrl
+    setQrHint(
+      qrUrl
         ? "QR code is live on customer checkout. Upload another file anytime to replace it."
-        : "Upload your InstaPay QR image from GCash or Maya so renters can scan directly.";
-    }
+        : "Choose your GCash / Maya InstaPay QR image (PNG/JPG, up to 8 MB) — it uploads automatically once selected.",
+      qrUrl ? "success" : "neutral"
+    );
   }
 
   async function uploadQrImageFile(file) {
+    const validationError = validateQrImageFile(file);
+    if (validationError) {
+        throw new Error(validationError);
+    }
+
     const formData = new FormData();
     formData.append("qr_image", file);
     const data = await apiJson("/api/admin/settings/qr", {
@@ -1057,28 +1094,42 @@
     }
   });
 
+    const qrFileInput = document.getElementById("set-qr-image-file");
+  if (qrFileInput) {
+    qrFileInput.addEventListener("change", () => {
+      const file = qrFileInput.files && qrFileInput.files[0];
+      if (!file) return;
+      qrAutoUploadedDone = false;
+      runQrUpload(file).catch(() => {});
+    });
+  }
+
   const uploadQrBtn = document.getElementById("upload-qr-btn");
   if (uploadQrBtn) {
     uploadQrBtn.addEventListener("click", async () => {
-      const qrFileInput = document.getElementById("set-qr-image-file");
-      const file = qrFileInput && qrFileInput.files ? qrFileInput.files[0] : null;
+      if (activeQrUploadPromise) {
+        try {
+          await activeQrUploadPromise;
+        } catch (_) {}
+        return;
+      }
+      const fileInput = document.getElementById("set-qr-image-file");
+      const file = fileInput && fileInput.files ? fileInput.files[0] : null;
       if (!file) {
+        const previewImg = document.getElementById("admin-qr-preview-img");
+        const alreadyLive = qrAutoUploadedDone || (previewImg && !previewImg.classList.contains("hidden"));
+        if (alreadyLive) {
+          showToast("QR code is already uploaded and live!", "success");
+          return;
+        }
+        setQrHint("Please choose a QR image file first.", "error");
         showToast("Please choose a QR image file first.", "error");
         return;
       }
-      uploadQrBtn.disabled = true;
-      uploadQrBtn.textContent = "Uploading...";
       try {
-        await uploadQrImageFile(file);
-        qrFileInput.value = "";
+        await runQrUpload(file);
         await loadDashboard();
-        showToast("GCash / Maya QR uploaded!", "success");
-      } catch (err) {
-        showToast(err.message, "error");
-      } finally {
-        uploadQrBtn.disabled = false;
-        uploadQrBtn.textContent = "Upload QR Image";
-      }
+      } catch (_) {}
     });
   }
 
@@ -1087,6 +1138,9 @@
     removeQrBtn.addEventListener("click", async () => {
       removeQrBtn.disabled = true;
       try {
+        qrAutoUploadedDone = false;
+        const fileInput = document.getElementById("set-qr-image-file");
+        if (fileInput) fileInput.value = "";
         const data = await apiJson("/api/admin/settings", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -1103,7 +1157,6 @@
       }
     });
   }
-
   const testAdminAlertBtn = document.getElementById("test-admin-alert-btn");
   if (testAdminAlertBtn) {
     testAdminAlertBtn.addEventListener("click", async () => {
