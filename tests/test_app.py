@@ -1504,5 +1504,51 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertEqual(row[2], "pay_at_shop")
         self.assertEqual(row[3], "unpaid")
 
+    def test_qr_upload_accepts_jfif_and_highres_images_and_network_first_scripts(self):
+        sw_text = self.client.get("/sw.js").get_data(as_text=True)
+        self.assertIn("motoride-pwa-v6", sw_text)
+        self.assertIn('/static/js/', sw_text)
+
+        login_resp = self.client.post("/api/admin/login", json={"password": "admin1234"})
+        self.assertEqual(login_resp.status_code, 200)
+        admin_html = self.client.get("/admin").get_data(as_text=True)
+        self.assertIn('/static/js/admin.js?v=6', admin_html)
+        self.assertIn('.jfif', admin_html)
+
+        # Windows/Edge/Messenger saves often use .jfif -> served cleanly as image/jpeg
+        jfif_bytes = b"\xff\xd8\xff\xe0JFIF_QR_DATA"
+        up_jfif = self.client.post(
+            "/api/admin/settings/qr",
+            data={"qr_image": (io.BytesIO(jfif_bytes), "gcash-qr.jfif")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(up_jfif.status_code, 200)
+        jfif_url = up_jfif.get_json()["gcash_qr_url"]
+        self.assertTrue(jfif_url.endswith(".jfif"))
+        served = self.client.get(jfif_url)
+        self.assertEqual(served.status_code, 200)
+        self.assertEqual(served.mimetype, "image/jpeg")
+        self.assertEqual(served.data, jfif_bytes)
+
+        # Phone screenshots / photos above 4 MB (up to 8 MB) must upload cleanly
+        large_ok = b"\x89PNG\r\n\x1a\n" + (b"0" * (5 * 1024 * 1024))
+        up_large = self.client.post(
+            "/api/admin/settings/qr",
+            data={"qr_image": (io.BytesIO(large_ok), "highres-qr.png")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(up_large.status_code, 200)
+
+        # Above 8 MB limit fails cleanly with 400 JSON error
+        too_big = b"\x89PNG\r
+\x1a\n" + (b"0" * (8 * 1024 * 1024 + 100))
+        up_too_big = self.client.post(
+            "/api/admin/settings/qr",
+            data={"qr_image": (io.BytesIO(too_big), "huge-qr.png")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(up_too_big.status_code, 400)
+        self.assertIn("8 MB", up_too_big.get_json()["error"])
+
 if __name__ == "__main__":
     unittest.main()
