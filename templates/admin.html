@@ -262,7 +262,7 @@
           <div style="flex:1;min-width:220px">
             <label for="set-qr-image-file" style="display:block;font-weight:600;margin-bottom:4px">Upload GCash / Maya InstaPay QR Image (PNG/JPG)</label>
             <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-              <input type="file" id="set-qr-image-file" accept="image/png,image/jpeg,image/webp" style="max-width:260px">
+              <input type="file" id="set-qr-image-file" accept="image/png,image/jpeg,image/webp,.jfif" style="max-width:260px">
               <button type="button" id="upload-qr-btn" class="btn btn-sm btn-outline">Upload QR Image</button>
               <button type="button" id="remove-qr-btn" class="btn btn-sm btn-danger hidden">Remove QR</button>
             </div>
@@ -562,5 +562,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/admin.js"></script>
+<script src="/static/js/admin.js?v=6"></script>
 {% endblock %}
