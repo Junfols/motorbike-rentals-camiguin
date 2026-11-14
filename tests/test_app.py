@@ -367,6 +367,38 @@ class MotorbikeRentalPWATests(unittest.TestCase):
             json={"status": "confirmed", "admin_notes": "Ready for delivery"},
         )
         self.assertEqual(confirm.status_code, 200)
+        self.assertFalse(confirm.get_json()["booking"]["balance_paid"])
+
+        # Shop can mark the remaining balance as collected (e.g., customer pays everything on return)
+        paid_resp = self.client.patch(
+            f"/api/partner/bookings/{booked['id']}",
+            json={"balance_paid": True},
+        )
+        self.assertEqual(paid_resp.status_code, 200)
+        self.assertTrue(paid_resp.get_json()["booking"]["balance_paid"])
+        self.assertEqual(paid_resp.get_json()["booking"]["status"], "confirmed")
+        # Status changes keep the balance_paid flag
+        active_resp = self.client.patch(
+            f"/api/partner/bookings/{booked['id']}",
+            json={"status": "active"},
+        )
+        self.assertTrue(active_resp.get_json()["booking"]["balance_paid"])
+        unpaid_resp = self.client.patch(
+            f"/api/partner/bookings/{booked['id']}",
+            json={"balance_paid": False},
+        )
+        self.assertFalse(unpaid_resp.get_json()["booking"]["balance_paid"])
+        bad_paid = self.client.patch(
+            f"/api/partner/bookings/{booked['id']}",
+            json={"status": "cancelled", "balance_paid": True},
+        )
+        self.assertEqual(bad_paid.status_code, 400)
+        restore_resp = self.client.patch(
+            f"/api/partner/bookings/{booked['id']}",
+            json={"status": "confirmed"},
+        )
+        self.assertEqual(restore_resp.status_code, 200)
+
         p_dash = self.client.get("/api/partner/dashboard").get_json()
         self.assertEqual(p_dash["kpis"]["gross_revenue"], 1100.0)
         self.assertEqual(p_dash["kpis"]["platform_fee_total"], 165.0)
@@ -1286,6 +1318,20 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         )
         self.assertEqual(bad_verify.status_code, 400)
 
+        # Admin can mark the shop balance as collected / uncollected; defaults to unpaid
+        self.assertFalse(b_shop["balance_paid"])
+        admin_paid = self.client.patch(
+            f"/api/admin/bookings/{b_shop['id']}",
+            json={"balance_paid": True},
+        )
+        self.assertEqual(admin_paid.status_code, 200)
+        self.assertTrue(admin_paid.get_json()["booking"]["balance_paid"])
+        admin_unpaid = self.client.patch(
+            f"/api/admin/bookings/{b_shop['id']}",
+            json={"balance_paid": False},
+        )
+        self.assertFalse(admin_unpaid.get_json()["booking"]["balance_paid"])
+
         # 2. Online GCash with receipt screenshot via multipart/form-data
         p2, r2 = self._future_str(30), self._future_str(32)
         receipt_bytes = b"\x89PNG\r\n\x1a\nGCASH_RECEIPT_PROOF"
@@ -1516,13 +1562,13 @@ class MotorbikeRentalPWATests(unittest.TestCase):
 
     def test_qr_upload_accepts_jfif_and_highres_images_and_network_first_scripts(self):
         sw_text = self.client.get("/sw.js").get_data(as_text=True)
-        self.assertIn("motoride-pwa-v6", sw_text)
+        self.assertIn("motoride-pwa-v7", sw_text)
         self.assertIn('/static/js/', sw_text)
 
         login_resp = self.client.post("/api/admin/login", json={"password": "admin1234"})
         self.assertEqual(login_resp.status_code, 200)
         admin_html = self.client.get("/admin").get_data(as_text=True)
-        self.assertIn('/static/js/admin.js?v=6', admin_html)
+        self.assertIn('/static/js/admin.js?v=7', admin_html)
         self.assertIn('.jfif', admin_html)
 
         # Windows/Edge/Messenger saves often use .jfif -> served cleanly as image/jpeg
