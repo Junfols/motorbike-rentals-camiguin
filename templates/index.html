@@ -30,7 +30,10 @@
       </div>
       <div class="search-field">
         <label for="search-return-date">Return Date</label>
-        <input type="date" id="search-return-date" name="return_date" required>
+        <div class="date-input-wrap is-empty">
+          <input type="date" id="search-return-date" name="return_date" required aria-label="Return Date">
+          <span class="date-placeholder" aria-hidden="true">Select date</span>
+        </div>
       </div>
       <div class="search-field">
         <label for="search-municipality">Camiguin Area</label>
@@ -199,7 +202,10 @@
           </div>
           <div class="form-group">
             <label for="booking-return-date">Return Date *</label>
-            <input type="date" id="booking-return-date" name="return_date" required>
+            <div class="date-input-wrap is-empty">
+              <input type="date" id="booking-return-date" name="return_date" required aria-label="Return Date">
+              <span class="date-placeholder" aria-hidden="true">Select date</span>
+            </div>
           </div>
         </div>
 
@@ -350,20 +356,7 @@
 </div>
 
 <!-- Booking Confirmation Modal -->
-<div id="confirmation-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
-  <div class="modal-card modal-md">
-    <div class="modal-header">
-      <h3 id="confirm-modal-title">Booking Request Submitted!</h3>
-      <button type="button" class="icon-btn" data-close-modal="confirmation-modal" aria-label="Close">&times;</button>
-    </div>
-    <div class="modal-body text-center">
-      <div class="success-circle">&#10003;</div>
-      <p class="text-muted">Save your reference code below to check approval from the rental shop anytime.</p>
-      <div class="booking-code-banner">
-        <span id="confirm-booking-code">MR-0000-0000</span>
-        <button type="button" id="copy-code-btn" class="btn btn-sm btn-outline">Copy</button>
-      </div>
-      <div id="confirm-summary" class="confirm-summary-card"></div>
+  <div id="confirm-summary" class="confirm-summary-card"></div>
       <div class="confirm-actions">
         <a id="confirm-track-link" href="/bookings" class="btn btn-primary">Track My Booking</a>
         <a id="confirm-whatsapp-link" href="#" target="_blank" rel="noopener" class="btn btn-outline">Message Shop on WhatsApp</a>
@@ -371,8 +364,4 @@
     </div>
   </div>
 </div>
-{% endblock %}
-
-{% block scripts %}
-<script src="/static/js/storefront.js?v=7"></script>
-{% endblock %}
+	{% endblock %}
