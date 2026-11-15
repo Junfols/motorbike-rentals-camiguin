@@ -1,4 +1,4 @@
-const CACHE_VERSION = "motoride-pwa-v15";
+const CACHE_VERSION = "motoride-pwa-v16";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -7,11 +7,11 @@ const PRECACHE_URLS = [
   "/bookings",
   "/offline",
   "/manifest.webmanifest",
-  "/static/css/style.css?v=15",
-  "/static/js/pwa.js?v=15",
-  "/static/js/storefront.js?v=15",
-  "/static/js/bookings.js?v=15",
-  "/static/js/partner.js?v=15",
+  "/static/css/style.css?v=16",
+  "/static/js/pwa.js?v=16",
+  "/static/js/storefront.js?v=16",
+  "/static/js/bookings.js?v=16",
+  "/static/js/partner.js?v=16",
   "/static/icons/icon-192.png",
   "/static/icons/icon-512.png",
   "/static/icons/icon.svg",
