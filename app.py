@@ -32,6 +32,7 @@ from db import (
     VALID_RESERVATION_MODES,
     VALID_SHOP_STATUSES,
     VALID_TRANSMISSIONS,
+    build_bike_schedules,
     calculate_quote,
     count_overlapping_bookings,
     delete_unused_uploaded_media,
@@ -166,11 +167,11 @@ def _serialize_shop(row, include_private: bool = False) -> dict:
     return data
 
 
-def _serialize_bike(row, booked_units: int = 0) -> dict:
+def _serialize_bike(row, booked_units: int = 0, schedule: dict | None = None) -> dict:
     keys = row.keys()
     units_count = int(row["units_count"] or 1)
     available_units = max(0, units_count - booked_units) if row["status"] == "available" else 0
-    return {
+    data = {
         "id": row["id"],
         "shop_id": int(row["shop_id"]),
         "shop_name": row["shop_name"] if "shop_name" in keys else None,
@@ -203,6 +204,136 @@ def _serialize_bike(row, booked_units: int = 0) -> dict:
         "featured": bool(row["featured"]),
         "created_at": row["created_at"],
     }
+    if schedule:
+        data.update(schedule)
+    return data
+
+
+def _fetch_bike_with_shop(conn, bike_id: int):
+    return conn.execute(
+        "SELECT b.*, s.shop_name AS shop_name, s.municipality AS shop_municipality, s.status AS shop_status "
+        "FROM bikes b JOIN shops s ON s.id = b.shop_id WHERE b.id = ?",
+        (bike_id,),
+    ).fetchone()
+
+
+def _serialize_bike_with_schedule(conn, bike_row, include_calendar: bool = False, include_admin_details: bool = True) -> dict:
+    today_str = date.today().isoformat()
+    booked = count_overlapping_bookings(conn, bike_row["id"], today_str, today_str)
+    sched = build_bike_schedules(
+        conn,
+        [bike_row],
+        ref_pickup_date=today_str,
+        ref_return_date=today_str,
+        include_calendar=include_calendar,
+        include_admin_details=include_admin_details,
+    ).get(int(bike_row["id"]))
+    return _serialize_bike(bike_row, booked_units=booked, schedule=sched)
+
+
+def _apply_bike_availability_patch(conn, bike_row, payload: dict) -> tuple[dict | None, str | None, int]:
+    """Shared handler to quick-update motorbike status or unit count."""
+    new_status = existing_status = bike_row["status"]
+    if "status" in payload and payload["status"] is not None:
+        new_status = str(payload["status"]).strip().lower()
+        if new_status not in VALID_BIKE_STATUSES:
+            return None, "Status must be available, maintenance, or hidden.", 400
+
+    new_units = int(bike_row["units_count"] or 1)
+    if "units_count" in payload and payload["units_count"] is not None:
+        try:
+            new_units = int(payload["units_count"])
+        except (TypeError, ValueError):
+            return None, "Units count must be a valid integer.", 400
+        if new_units < 1:
+            return None, "Units count must be at least 1.", 400
+
+    if new_status == existing_status and new_units == int(bike_row["units_count"] or 1):
+        fresh = _fetch_bike_with_shop(conn, bike_row["id"])
+        return {"bike": _serialize_bike_with_schedule(conn, fresh, include_calendar=True)}, None, 200
+
+    with conn:
+        conn.execute(
+            "UPDATE bikes SET status = ?, units_count = ? WHERE id = ?",
+            (new_status, new_units, bike_row["id"]),
+        )
+    fresh = _fetch_bike_with_shop(conn, bike_row["id"])
+    return {"bike": _serialize_bike_with_schedule(conn, fresh, include_calendar=True)}, None, 200
+
+
+def _create_bike_block_entry(conn, bike_row, payload: dict) -> tuple[dict | None, str | None, int]:
+    """Create a manual date block (walk-in / offline reservation / maintenance hold)."""
+    start_date = str(payload.get("start_date") or "").strip()
+    end_date = str(payload.get("end_date") or start_date).strip()
+    reason = str(payload.get("reason") or "Walk-in / Offline Booking").strip()[:120] or "Walk-in / Offline Booking"
+
+    if not start_date or not end_date:
+        return None, "Start date and end date are required.", 400
+    try:
+        s_dt = parse_iso_date(start_date)
+        e_dt = parse_iso_date(end_date)
+    except ValueError:
+        return None, "Invalid date format. Use YYYY-MM-DD.", 400
+    if e_dt < s_dt:
+        return None, "End date cannot be earlier than start date.", 400
+
+    units_count = max(1, int(bike_row["units_count"] or 1))
+    raw_units = payload.get("units_blocked")
+    if raw_units in (None, ""):
+        units_blocked = units_count
+    else:
+        try:
+            units_blocked = int(raw_units)
+        except (TypeError, ValueError):
+            return None, "Units blocked must be a whole number.", 400
+    if units_blocked < 1 or units_blocked > units_count:
+        return None, f"Units blocked must be between 1 and {units_count}.", 400
+
+    now = datetime.now().isoformat(timespec="seconds")
+    try:
+        locked = conn.begin_booking_lock(bike_row["id"])
+        if not locked:
+            conn.rollback()
+            return None, "Motorbike not found.", 404
+        existing_peak = count_overlapping_bookings(conn, bike_row["id"], start_date, end_date)
+        if existing_peak + units_blocked > units_count:
+            conn.rollback()
+            return (
+                None,
+                (
+                    f"Cannot block {units_blocked} unit(s): {existing_peak} of {units_count} unit(s) "
+                    f"are already booked or blocked between {start_date} and {end_date}."
+                ),
+                409,
+            )
+        conn.insert_returning_id(
+            """
+            INSERT INTO bike_blocks (bike_id, shop_id, start_date, end_date, units_blocked, reason, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (bike_row["id"], bike_row["shop_id"], start_date, end_date, units_blocked, reason, now),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
+    fresh = _fetch_bike_with_shop(conn, bike_row["id"])
+    return {"bike": _serialize_bike_with_schedule(conn, fresh, include_calendar=True)}, None, 201
+
+
+def _delete_bike_block_entry(conn, bike_row, block_id: int) -> tuple[dict | None, str | None, int]:
+    """Delete a manual date block belonging to this motorbike."""
+    existing = conn.execute(
+        "SELECT id FROM bike_blocks WHERE id = ? AND bike_id = ?",
+        (block_id, bike_row["id"]),
+    ).fetchone()
+    if not existing:
+        return None, "Date block not found for this motorbike.", 404
+    with conn:
+        conn.execute("DELETE FROM bike_blocks WHERE id = ? AND bike_id = ?", (block_id, bike_row["id"]))
+    fresh = _fetch_bike_with_shop(conn, bike_row["id"])
+    return {"bike": _serialize_bike_with_schedule(conn, fresh, include_calendar=True)}, None, 200
 
 
 def _serialize_booking(row) -> dict:
@@ -259,6 +390,8 @@ def _serialize_booking(row) -> dict:
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+
+
 def _row_balance_paid(row) -> bool:
     """True when the shop already collected the remaining balance for this booking."""
     if "balance_paid" not in row.keys():
@@ -410,6 +543,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.get("/offline")
     def offline_page():
         return render_template("offline.html", active_nav="")
+
     @app.get("/admin.webmanifest")
     def admin_manifest():
         return manifest(admin_app=True)
@@ -565,15 +699,18 @@ def create_app(test_config: dict | None = None) -> Flask:
         return_date = (request.args.get("return_date") or "").strip()
         available_only = (request.args.get("available_only") or "").lower() in ("1", "true")
 
-        if (pickup_date and not return_date) or (return_date and not pickup_date):
-            return jsonify({"error": "Both pickup_date and return_date are required together."}), 400
+        has_explicit_return = bool(return_date)
+        if return_date and not pickup_date:
+            return jsonify({"error": "Pickup date is required when return date is specified."}), 400
 
-        if pickup_date and return_date:
+        if pickup_date:
             try:
                 p_dt = parse_iso_date(pickup_date)
-                r_dt = parse_iso_date(return_date)
+                effective_return = return_date or pickup_date
+                r_dt = parse_iso_date(effective_return)
                 if r_dt < p_dt:
                     return jsonify({"error": "Return date cannot be earlier than pickup date."}), 400
+                return_date = effective_return
             except ValueError:
                 return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
         else:
@@ -632,10 +769,18 @@ def create_app(test_config: dict | None = None) -> Flask:
         sql += f" ORDER BY {order_clause}"
 
         rows = conn.execute(sql, params).fetchall()
+        schedules = build_bike_schedules(
+            conn,
+            rows,
+            ref_pickup_date=pickup_date,
+            ref_return_date=return_date if has_explicit_return else None,
+            include_calendar=False,
+            include_admin_details=False,
+        )
         bikes = []
         for row in rows:
             booked = count_overlapping_bookings(conn, row["id"], pickup_date, return_date)
-            item = _serialize_bike(row, booked_units=booked)
+            item = _serialize_bike(row, booked_units=booked, schedule=schedules.get(int(row["id"])))
             if available_only and not item["is_available"]:
                 continue
             bikes.append(item)
@@ -672,7 +817,8 @@ def create_app(test_config: dict | None = None) -> Flask:
             return jsonify({"error": "Motorbike not found."}), 404
 
         pickup_date = (request.args.get("pickup_date") or date.today().isoformat()).strip()
-        return_date = (request.args.get("return_date") or pickup_date).strip()
+        explicit_return = (request.args.get("return_date") or "").strip()
+        return_date = explicit_return or pickup_date
         try:
             p_dt = parse_iso_date(pickup_date)
             r_dt = parse_iso_date(return_date)
@@ -682,25 +828,15 @@ def create_app(test_config: dict | None = None) -> Flask:
             return jsonify({"error": "Invalid date format."}), 400
 
         booked = count_overlapping_bookings(conn, bike_id, pickup_date, return_date)
-        placeholders = ",".join("?" for _ in BLOCKING_STATUSES)
-        upcoming_rows = conn.execute(
-            f"""
-            SELECT pickup_date, return_date, status
-            FROM bookings
-            WHERE bike_id = ?
-              AND status IN ({placeholders})
-              AND return_date >= ?
-            ORDER BY pickup_date ASC
-            LIMIT 25
-            """,
-            (bike_id, *BLOCKING_STATUSES, date.today().isoformat()),
-        ).fetchall()
-
-        bike_data = _serialize_bike(row, booked_units=booked)
-        bike_data["booked_ranges"] = [
-            {"pickup_date": r["pickup_date"], "return_date": r["return_date"]}
-            for r in upcoming_rows
-        ]
+        sched = build_bike_schedules(
+            conn,
+            [row],
+            ref_pickup_date=pickup_date,
+            ref_return_date=explicit_return or None,
+            include_calendar=True,
+            include_admin_details=False,
+        ).get(bike_id)
+        bike_data = _serialize_bike(row, booked_units=booked, schedule=sched)
         return jsonify({"bike": bike_data})
 
     @app.get("/api/quote")
@@ -1517,10 +1653,18 @@ def create_app(test_config: dict | None = None) -> Flask:
             """,
             (shop_id,),
         ).fetchall()
+        schedules = build_bike_schedules(
+            conn,
+            rows,
+            ref_pickup_date=today_str,
+            ref_return_date=today_str,
+            include_calendar=False,
+            include_admin_details=True,
+        )
         items = []
         for row in rows:
             booked = count_overlapping_bookings(conn, row["id"], today_str, today_str)
-            items.append(_serialize_bike(row, booked_units=booked))
+            items.append(_serialize_bike(row, booked_units=booked, schedule=schedules.get(int(row["id"]))))
         return jsonify({"bikes": items})
 
     @app.post("/api/partner/bikes")
@@ -1659,9 +1803,77 @@ def create_app(test_config: dict | None = None) -> Flask:
                 409,
             )
         with conn:
+            conn.execute("DELETE FROM bike_blocks WHERE bike_id = ?", (bike_id,))
             conn.execute("DELETE FROM bikes WHERE id = ? AND shop_id = ?", (bike_id, shop_id))
         delete_unused_uploaded_media(conn, existing["image_url"])
         return jsonify({"deleted": True, "id": bike_id})
+
+    @app.patch("/api/partner/bikes/<int:bike_id>/status")
+    @partner_required
+    def partner_patch_bike_status(bike_id: int):
+        if g.partner_shop["status"] == "suspended":
+            return jsonify({"error": "Suspended accounts cannot update motorbikes."}), 403
+        conn = get_db()
+        existing = conn.execute(
+            "SELECT b.*, s.shop_name AS shop_name, s.municipality AS shop_municipality, s.status AS shop_status "
+            "FROM bikes b JOIN shops s ON s.id = b.shop_id WHERE b.id = ? AND b.shop_id = ?",
+            (bike_id, g.partner_shop["id"]),
+        ).fetchone()
+        if not existing:
+            return jsonify({"error": "Motorbike not found in your shop."}), 404
+        res, err, code = _apply_bike_availability_patch(conn, existing, request.get_json(silent=True) or {})
+        if err:
+            return jsonify({"error": err}), code
+        return jsonify(res), code
+
+    @app.get("/api/partner/bikes/<int:bike_id>/blocks")
+    @partner_required
+    def partner_get_bike_blocks(bike_id: int):
+        conn = get_db()
+        existing = conn.execute(
+            "SELECT b.*, s.shop_name AS shop_name, s.municipality AS shop_municipality, s.status AS shop_status "
+            "FROM bikes b JOIN shops s ON s.id = b.shop_id WHERE b.id = ? AND b.shop_id = ?",
+            (bike_id, g.partner_shop["id"]),
+        ).fetchone()
+        if not existing:
+            return jsonify({"error": "Motorbike not found in your shop."}), 404
+        return jsonify({"bike": _serialize_bike_with_schedule(conn, existing, include_calendar=True)})
+
+    @app.post("/api/partner/bikes/<int:bike_id>/blocks")
+    @partner_required
+    def partner_add_bike_block(bike_id: int):
+        if g.partner_shop["status"] == "suspended":
+            return jsonify({"error": "Suspended accounts cannot block motorbike dates."}), 403
+        conn = get_db()
+        existing = conn.execute(
+            "SELECT b.*, s.shop_name AS shop_name, s.municipality AS shop_municipality, s.status AS shop_status "
+            "FROM bikes b JOIN shops s ON s.id = b.shop_id WHERE b.id = ? AND b.shop_id = ?",
+            (bike_id, g.partner_shop["id"]),
+        ).fetchone()
+        if not existing:
+            return jsonify({"error": "Motorbike not found in your shop."}), 404
+        res, err, code = _create_bike_block_entry(conn, existing, request.get_json(silent=True) or {})
+        if err:
+            return jsonify({"error": err}), code
+        return jsonify(res), code
+
+    @app.delete("/api/partner/bikes/<int:bike_id>/blocks/<int:block_id>")
+    @partner_required
+    def partner_remove_bike_block(bike_id: int, block_id: int):
+        if g.partner_shop["status"] == "suspended":
+            return jsonify({"error": "Suspended accounts cannot manage motorbike blocks."}), 403
+        conn = get_db()
+        existing = conn.execute(
+            "SELECT b.*, s.shop_name AS shop_name, s.municipality AS shop_municipality, s.status AS shop_status "
+            "FROM bikes b JOIN shops s ON s.id = b.shop_id WHERE b.id = ? AND b.shop_id = ?",
+            (bike_id, g.partner_shop["id"]),
+        ).fetchone()
+        if not existing:
+            return jsonify({"error": "Motorbike not found in your shop."}), 404
+        res, err, code = _delete_bike_block_entry(conn, existing, block_id)
+        if err:
+            return jsonify({"error": err}), code
+        return jsonify(res), code
 
     @app.put("/api/partner/profile")
     @partner_required
@@ -2203,10 +2415,18 @@ def create_app(test_config: dict | None = None) -> Flask:
             params.append(shop_id)
         sql += " ORDER BY b.id DESC"
         rows = conn.execute(sql, params).fetchall()
+        schedules = build_bike_schedules(
+            conn,
+            rows,
+            ref_pickup_date=today_str,
+            ref_return_date=today_str,
+            include_calendar=False,
+            include_admin_details=True,
+        )
         items = []
         for row in rows:
             booked = count_overlapping_bookings(conn, row["id"], today_str, today_str)
-            items.append(_serialize_bike(row, booked_units=booked))
+            items.append(_serialize_bike(row, booked_units=booked, schedule=schedules.get(int(row["id"]))))
         return jsonify({"bikes": items})
 
     @app.post("/api/admin/bikes")
@@ -2355,9 +2575,55 @@ def create_app(test_config: dict | None = None) -> Flask:
             )
 
         with conn:
+            conn.execute("DELETE FROM bike_blocks WHERE bike_id = ?", (bike_id,))
             conn.execute("DELETE FROM bikes WHERE id = ?", (bike_id,))
         delete_unused_uploaded_media(conn, existing["image_url"])
         return jsonify({"deleted": True, "id": bike_id})
+
+    @app.patch("/api/admin/bikes/<int:bike_id>/status")
+    @admin_required
+    def admin_patch_bike_status(bike_id: int):
+        conn = get_db()
+        existing = _fetch_bike_with_shop(conn, bike_id)
+        if not existing:
+            return jsonify({"error": "Motorbike not found."}), 404
+        res, err, code = _apply_bike_availability_patch(conn, existing, request.get_json(silent=True) or {})
+        if err:
+            return jsonify({"error": err}), code
+        return jsonify(res), code
+
+    @app.get("/api/admin/bikes/<int:bike_id>/blocks")
+    @admin_required
+    def admin_get_bike_blocks(bike_id: int):
+        conn = get_db()
+        existing = _fetch_bike_with_shop(conn, bike_id)
+        if not existing:
+            return jsonify({"error": "Motorbike not found."}), 404
+        return jsonify({"bike": _serialize_bike_with_schedule(conn, existing, include_calendar=True)})
+
+    @app.post("/api/admin/bikes/<int:bike_id>/blocks")
+    @admin_required
+    def admin_add_bike_block(bike_id: int):
+        conn = get_db()
+        existing = _fetch_bike_with_shop(conn, bike_id)
+        if not existing:
+            return jsonify({"error": "Motorbike not found."}), 404
+        res, err, code = _create_bike_block_entry(conn, existing, request.get_json(silent=True) or {})
+        if err:
+            return jsonify({"error": err}), code
+        return jsonify(res), code
+
+    @app.delete("/api/admin/bikes/<int:bike_id>/blocks/<int:block_id>")
+    @admin_required
+    def admin_remove_bike_block(bike_id: int, block_id: int):
+        conn = get_db()
+        existing = _fetch_bike_with_shop(conn, bike_id)
+        if not existing:
+            return jsonify({"error": "Motorbike not found."}), 404
+        res, err, code = _delete_bike_block_entry(conn, existing, block_id)
+        if err:
+            return jsonify({"error": err}), code
+        return jsonify(res), code
 
     @app.get("/api/admin/settings")
     @admin_required

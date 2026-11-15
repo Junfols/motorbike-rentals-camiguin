@@ -1,7 +1,7 @@
 import os
 import secrets
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from werkzeug.security import check_password_hash, generate_password_hash
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -377,6 +377,17 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             updated_at TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS bike_blocks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bike_id INTEGER NOT NULL REFERENCES bikes(id) ON DELETE CASCADE,
+            shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+            start_date TEXT NOT NULL,
+            end_date TEXT NOT NULL,
+            units_blocked INTEGER NOT NULL DEFAULT 1,
+            reason TEXT NOT NULL DEFAULT 'Walk-in / Offline Booking',
+            created_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS uploaded_media (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             filename TEXT UNIQUE NOT NULL,
@@ -480,6 +491,18 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
         )
         """,
         """
+        CREATE TABLE IF NOT EXISTS bike_blocks (
+            id SERIAL PRIMARY KEY,
+            bike_id INTEGER NOT NULL REFERENCES bikes(id) ON DELETE CASCADE,
+            shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+            start_date TEXT NOT NULL,
+            end_date TEXT NOT NULL,
+            units_blocked INTEGER NOT NULL DEFAULT 1,
+            reason TEXT NOT NULL DEFAULT 'Walk-in / Offline Booking',
+            created_at TEXT NOT NULL
+        )
+        """,
+        """
         CREATE TABLE IF NOT EXISTS uploaded_media (
             id SERIAL PRIMARY KEY,
             filename TEXT UNIQUE NOT NULL,
@@ -499,6 +522,7 @@ def _create_indexes(conn: DatabaseConnection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_bookings_bike_dates ON bookings (bike_id, pickup_date, return_date, status)",
         "CREATE INDEX IF NOT EXISTS idx_bookings_shop_status ON bookings (shop_id, status, pickup_date)",
         "CREATE INDEX IF NOT EXISTS idx_bookings_code ON bookings (booking_code)",
+        "CREATE INDEX IF NOT EXISTS idx_bike_blocks_bike_dates ON bike_blocks (bike_id, start_date, end_date)",
         "CREATE INDEX IF NOT EXISTS idx_media_filename ON uploaded_media (filename)",
     ]
     for idx in indexes:
@@ -680,6 +704,7 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
                 conn.execute(
                     "ALTER TABLE bookings ADD COLUMN balance_paid INTEGER NOT NULL DEFAULT 0"
                 )
+
             _create_indexes(conn)
 
             existing_bikes = conn.execute("SELECT COUNT(*) FROM bikes").fetchone()[0]
@@ -966,6 +991,35 @@ def calculate_quote(
     }
 
 
+def _peak_concurrency_in_window(
+    intervals: list[tuple[date, date, int]],
+    window_start: date,
+    window_end: date,
+) -> int:
+    """Return peak concurrent booked/blocked units on any day in [window_start, window_end]."""
+    if not intervals or window_end < window_start:
+        return 0
+    deltas: dict[date, int] = {}
+    for s_dt, e_dt, units in intervals:
+        if units <= 0 or e_dt < window_start or s_dt > window_end:
+            continue
+        cs = max(s_dt, window_start)
+        ce = min(e_dt, window_end)
+        deltas[cs] = deltas.get(cs, 0) + units
+        end_next = ce + timedelta(days=1)
+        deltas[end_next] = deltas.get(end_next, 0) - units
+
+    running = 0
+    peak = 0
+    for day, delta in sorted(deltas.items()):
+        if day > window_end:
+            break
+        running += delta
+        if running > peak:
+            peak = running
+    return peak
+
+
 def count_overlapping_bookings(
     conn: DatabaseConnection,
     bike_id: int,
@@ -973,10 +1027,12 @@ def count_overlapping_bookings(
     return_date: str,
     exclude_booking_id: int | None = None,
 ) -> int:
-    """Count blocking bookings overlapping [pickup_date, return_date]."""
+    """Return peak concurrent blocking bookings + manual blocks across [pickup_date, return_date]."""
+    p_dt = parse_iso_date(pickup_date)
+    r_dt = parse_iso_date(return_date)
     placeholders = ",".join("?" for _ in BLOCKING_STATUSES)
     query = f"""
-        SELECT COUNT(*) FROM bookings
+        SELECT pickup_date, return_date FROM bookings
         WHERE bike_id = ?
           AND status IN ({placeholders})
           AND pickup_date <= ?
@@ -986,7 +1042,238 @@ def count_overlapping_bookings(
     if exclude_booking_id is not None:
         query += " AND id != ?"
         params.append(exclude_booking_id)
-    return int(conn.execute(query, params).fetchone()[0])
+
+    intervals: list[tuple[date, date, int]] = []
+    for row in conn.execute(query, params).fetchall():
+        try:
+            intervals.append((parse_iso_date(row["pickup_date"]), parse_iso_date(row["return_date"]), 1))
+        except ValueError:
+            continue
+
+    block_rows = conn.execute(
+        """
+        SELECT start_date, end_date, units_blocked FROM bike_blocks
+        WHERE bike_id = ?
+          AND start_date <= ?
+          AND end_date >= ?
+        """,
+        (bike_id, return_date, pickup_date),
+    ).fetchall()
+    for row in block_rows:
+        try:
+            intervals.append(
+                (
+                    parse_iso_date(row["start_date"]),
+                    parse_iso_date(row["end_date"]),
+                    max(1, int(row["units_blocked"] or 1)),
+                )
+            )
+        except ValueError:
+            continue
+
+    return _peak_concurrency_in_window(intervals, p_dt, r_dt)
+
+
+def _merge_date_ranges(sorted_dates: list[date], max_ranges: int = 12) -> list[dict[str, str]]:
+    """Merge consecutive date objects into [{pickup_date, return_date}] spans."""
+    if not sorted_dates:
+        return []
+    ranges: list[dict[str, str]] = []
+    start = sorted_dates[0]
+    prev = sorted_dates[0]
+    for cur in sorted_dates[1:]:
+        if (cur - prev).days == 1:
+            prev = cur
+            continue
+        ranges.append({"pickup_date": start.isoformat(), "return_date": prev.isoformat()})
+        if len(ranges) >= max_ranges:
+            return ranges
+        start = cur
+        prev = cur
+    ranges.append({"pickup_date": start.isoformat(), "return_date": prev.isoformat()})
+    return ranges[:max_ranges]
+
+
+def build_bike_schedules(
+    conn: DatabaseConnection,
+    bike_rows: list,
+    ref_pickup_date: str | None = None,
+    ref_return_date: str | None = None,
+    calendar_days: int = 35,
+    lookahead_days: int = 120,
+    include_calendar: bool = False,
+    include_admin_details: bool = False,
+) -> dict[int, dict]:
+    """Compute booked ranges, next available dates, and optional 35-day calendars in batch."""
+    if not bike_rows:
+        return {}
+
+    today = date.today()
+    p_dt = today
+    if ref_pickup_date:
+        try:
+            p_dt = max(today, parse_iso_date(ref_pickup_date))
+        except ValueError:
+            p_dt = today
+    r_dt = p_dt
+    has_explicit_return = False
+    if ref_return_date:
+        try:
+            parsed_r = parse_iso_date(ref_return_date)
+            if parsed_r >= p_dt:
+                r_dt = parsed_r
+                has_explicit_return = True
+        except ValueError:
+            pass
+
+    scan_start = today
+    scan_end = max(today + timedelta(days=max(calendar_days, 1) - 1), r_dt) + timedelta(days=lookahead_days)
+    total_days = (scan_end - scan_start).days + 1
+    scan_start_str = scan_start.isoformat()
+
+    bike_ids = [int(row["id"]) for row in bike_rows]
+    id_placeholders = ",".join("?" for _ in bike_ids)
+    status_placeholders = ",".join("?" for _ in BLOCKING_STATUSES)
+
+    booking_rows = conn.execute(
+        f"""
+        SELECT id, bike_id, booking_code, customer_name, pickup_date, return_date, status
+        FROM bookings
+        WHERE bike_id IN ({id_placeholders})
+          AND status IN ({status_placeholders})
+          AND return_date >= ?
+        ORDER BY pickup_date ASC
+        """,
+        (*bike_ids, *BLOCKING_STATUSES, scan_start_str),
+    ).fetchall()
+
+    block_rows = conn.execute(
+        f"""
+        SELECT id, bike_id, start_date, end_date, units_blocked, reason, created_at
+        FROM bike_blocks
+        WHERE bike_id IN ({id_placeholders})
+          AND end_date >= ?
+        ORDER BY start_date ASC, id ASC
+        """,
+        (*bike_ids, scan_start_str),
+    ).fetchall()
+
+    bookings_by_bike: dict[int, list] = {bid: [] for bid in bike_ids}
+    for b in booking_rows:
+        bookings_by_bike.setdefault(int(b["bike_id"]), []).append(b)
+
+    blocks_by_bike: dict[int, list] = {bid: [] for bid in bike_ids}
+    for blk in block_rows:
+        blocks_by_bike.setdefault(int(blk["bike_id"]), []).append(blk)
+
+    results: dict[int, dict] = {}
+    for row in bike_rows:
+        bid = int(row["id"])
+        units_count = max(1, int(row["units_count"] or 1))
+        bike_status = row["status"]
+        diff_arr = [0] * (total_days + 1)
+
+        def _add_interval(s_str: str, e_str: str, units: int) -> None:
+            try:
+                s_dt = parse_iso_date(s_str)
+                e_dt = parse_iso_date(e_str)
+            except ValueError:
+                return
+            if e_dt < scan_start or s_dt > scan_end or units <= 0:
+                return
+            s_idx = max(0, (s_dt - scan_start).days)
+            e_idx = min(total_days - 1, (e_dt - scan_start).days)
+            diff_arr[s_idx] += units
+            diff_arr[e_idx + 1] -= units
+
+        for b in bookings_by_bike.get(bid, []):
+            _add_interval(b["pickup_date"], b["return_date"], 1)
+        for blk in blocks_by_bike.get(bid, []):
+            _add_interval(blk["start_date"], blk["end_date"], max(1, int(blk["units_blocked"] or 1)))
+
+        day_counts: list[int] = [0] * total_days
+        cur = 0
+        for i in range(total_days):
+            cur += diff_arr[i]
+            day_counts[i] = max(0, cur)
+
+        full_dates = [
+            scan_start + timedelta(days=i)
+            for i in range(total_days)
+            if day_counts[i] >= units_count
+        ]
+        booked_ranges = _merge_date_ranges(full_dates)
+
+        ref_start_idx = max(0, min(total_days - 1, (p_dt - scan_start).days))
+        ref_end_idx = max(ref_start_idx, min(total_days - 1, (r_dt - scan_start).days))
+        ref_peak = max(day_counts[ref_start_idx : ref_end_idx + 1])
+
+        next_available_date = None
+        next_available_return_date = None
+        if bike_status == "available" and ref_peak >= units_count:
+            span_days = ref_end_idx - ref_start_idx
+            for cand_idx in range(ref_start_idx + 1, total_days - span_days):
+                if all(day_counts[j] < units_count for j in range(cand_idx, cand_idx + span_days + 1)):
+                    cand_start = scan_start + timedelta(days=cand_idx)
+                    next_available_date = cand_start.isoformat()
+                    if has_explicit_return:
+                        next_available_return_date = (cand_start + timedelta(days=span_days)).isoformat()
+                    break
+
+        entry: dict = {
+            "booked_ranges": booked_ranges,
+            "next_available_date": next_available_date,
+            "next_available_return_date": next_available_return_date,
+        }
+
+        if include_calendar:
+            cal = []
+            for i in range(min(calendar_days, total_days)):
+                cnt = day_counts[i]
+                avail = max(0, units_count - cnt) if bike_status == "available" else 0
+                if bike_status != "available" or avail == 0:
+                    st = "booked"
+                elif cnt > 0:
+                    st = "limited"
+                else:
+                    st = "available"
+                cal.append(
+                    {
+                        "date": (scan_start + timedelta(days=i)).isoformat(),
+                        "booked_units": cnt,
+                        "available_units": avail,
+                        "units_count": units_count,
+                        "status": st,
+                    }
+                )
+            entry["availability_calendar"] = cal
+
+        if include_admin_details:
+            entry["upcoming_bookings"] = [
+                {
+                    "id": b["id"],
+                    "booking_code": b["booking_code"],
+                    "customer_name": b["customer_name"],
+                    "pickup_date": b["pickup_date"],
+                    "return_date": b["return_date"],
+                    "status": b["status"],
+                }
+                for b in bookings_by_bike.get(bid, [])[:25]
+            ]
+            entry["blocks"] = [
+                {
+                    "id": blk["id"],
+                    "start_date": blk["start_date"],
+                    "end_date": blk["end_date"],
+                    "units_blocked": int(blk["units_blocked"] or 1),
+                    "reason": blk["reason"],
+                    "created_at": blk["created_at"],
+                }
+                for blk in blocks_by_bike.get(bid, [])
+            ]
+
+        results[bid] = entry
+    return results
 
 
 def generate_booking_code(conn: DatabaseConnection) -> str:
