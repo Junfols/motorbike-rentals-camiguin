@@ -202,12 +202,375 @@
     return labels[status] || status || "Pay at Shop";
   }
 
+  const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const CALENDAR_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  function toLocalIsoDate(dt) {
+    const d = dt instanceof Date ? dt : new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  function parseLocalIsoDate(isoStr) {
+    if (!isoStr || !/^\d{4}-\d{2}-\d{2}$/.test(isoStr)) return null;
+    const [y, m, d] = isoStr.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  function formatShortDate(isoStr) {
+    const dt = parseLocalIsoDate(isoStr);
+    if (!dt) return String(isoStr || "");
+    const curYear = new Date().getFullYear();
+    const label = `${SHORT_MONTHS[dt.getMonth()]} ${dt.getDate()}`;
+    return dt.getFullYear() !== curYear ? `${label}, '${String(dt.getFullYear()).slice(-2)}` : label;
+  }
+
+  function formatDateRangeShort(startIso, endIso) {
+    if (!startIso) return "";
+    if (!endIso || startIso === endIso) return formatShortDate(startIso);
+    const s = parseLocalIsoDate(startIso);
+    const e = parseLocalIsoDate(endIso);
+    if (!s || !e) return `${startIso} to ${endIso}`;
+    const curYear = new Date().getFullYear();
+    if (s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth()) {
+      const yrSuffix = s.getFullYear() !== curYear ? `, '${String(s.getFullYear()).slice(-2)}` : "";
+      return `${SHORT_MONTHS[s.getMonth()]} ${s.getDate()}–${e.getDate()}${yrSuffix}`;
+    }
+    return `${formatShortDate(startIso)} – ${formatShortDate(endIso)}`;
+  }
+
+  function formatBookedRangesLabel(ranges, limit = 2) {
+    if (!Array.isArray(ranges) || !ranges.length) return "";
+    const slice = ranges.slice(0, limit).map((r) => formatDateRangeShort(r.pickup_date || r.start_date, r.return_date || r.end_date));
+    const extra = ranges.length > limit ? ` (+${ranges.length - limit} more)` : "";
+    return `${slice.join(", ")}${extra}`;
+  }
+
+  function renderAvailabilityCalendarHtml(calendarDays, opts = {}) {
+    if (!Array.isArray(calendarDays) || !calendarDays.length) {
+      return `<div class="text-muted">Calendar preview unavailable.</div>`;
+    }
+    const { selectedPickup = "", selectedReturn = "", interactive = false } = opts;
+    const firstDt = parseLocalIsoDate(calendarDays[0].date);
+    const leadingBlanks = firstDt ? firstDt.getDay() : 0;
+
+    const cells = [];
+    for (let i = 0; i < leadingBlanks; i += 1) {
+      cells.push(`<div class="cal-cell cal-empty" aria-hidden="true"></div>`);
+    }
+
+    calendarDays.forEach((day, idx) => {
+      const dt = parseLocalIsoDate(day.date);
+      const dayNum = dt ? dt.getDate() : day.date.slice(-2);
+      const monthTag = dt && (idx === 0 || dayNum === 1) ? SHORT_MONTHS[dt.getMonth()] : "";
+      const isBooked = day.status === "booked";
+      const isPickup = Boolean(selectedPickup && day.date === selectedPickup);
+      const isReturn = Boolean(selectedReturn && day.date === selectedReturn);
+      const inRange = Boolean(
+        selectedPickup && selectedReturn && day.date >= selectedPickup && day.date <= selectedReturn
+      );
+
+      let subLabel = "Open";
+      if (isBooked) {
+        subLabel = "Booked";
+      } else if (day.status === "limited") {
+        subLabel = `${day.available_units} left`;
+      }
+
+      const cls = [
+        "cal-cell",
+        `cal-${day.status}`,
+        interactive ? "cal-interactive" : "",
+        isPickup ? "cal-pickup" : "",
+        isReturn ? "cal-return" : "",
+        inRange ? "cal-in-range" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      const titleText = isBooked
+        ? `${formatShortDate(day.date)}: Already booked`
+        : `${formatShortDate(day.date)}: ${day.available_units} of ${day.units_count} unit(s) open`;
+
+      if (interactive) {
+        cells.push(`
+          <button
+            type="button"
+            class="${cls}"
+            data-cal-date="${escapeHtml(day.date)}"
+            data-cal-status="${escapeHtml(day.status)}"
+            title="${escapeHtml(titleText)}"
+            ${isBooked ? 'disabled aria-disabled="true"' : ""}
+          >
+            ${monthTag ? `<span class="cal-month-tag">${escapeHtml(monthTag)}</span>` : ""}
+            <span class="cal-day-num">${dayNum}</span>
+            <span class="cal-day-status">${escapeHtml(subLabel)}</span>
+          </button>
+        `);
+      } else {
+        cells.push(`
+          <div class="${cls}" title="${escapeHtml(titleText)}">
+            ${monthTag ? `<span class="cal-month-tag">${escapeHtml(monthTag)}</span>` : ""}
+            <span class="cal-day-num">${dayNum}</span>
+            <span class="cal-day-status">${escapeHtml(subLabel)}</span>
+          </div>
+        `);
+      }
+    });
+
+    return `
+      <div class="avail-cal-legend">
+        <span class="cal-legend-item"><span class="cal-dot cal-dot-open"></span>Open</span>
+        <span class="cal-legend-item"><span class="cal-dot cal-dot-limited"></span>Limited Units</span>
+        <span class="cal-legend-item"><span class="cal-dot cal-dot-booked"></span>Booked</span>
+        ${interactive ? `<span class="cal-legend-item"><span class="cal-dot cal-dot-selected"></span>Your Dates</span>` : ""}
+      </div>
+      <div class="avail-cal-weekdays">
+        ${CALENDAR_WEEKDAYS.map((w) => `<span>${w}</span>`).join("")}
+      </div>
+      <div class="avail-cal-grid">${cells.join("")}</div>
+    `;
+  }
+
+  function renderAdminBikeScheduleSummary(bike) {
+    const bookedText = formatBookedRangesLabel(bike.booked_ranges, 2);
+    const activeBlocks = Array.isArray(bike.blocks) ? bike.blocks.length : 0;
+    const statusSelect = `
+      <div class="quick-status-row">
+        <label style="font-size:0.78rem;color:var(--muted);font-weight:700;">Availability:</label>
+        <select class="select-compact bike-quick-status" data-quick-status="${bike.id}" aria-label="Change availability for ${escapeHtml(bike.name)}">
+          <option value="available" ${bike.status === "available" ? "selected" : ""}>Available</option>
+          <option value="maintenance" ${bike.status === "maintenance" ? "selected" : ""}>Maintenance</option>
+          <option value="hidden" ${bike.status === "hidden" ? "selected" : ""}>Hidden</option>
+        </select>
+      </div>
+    `;
+    const scheduleBadge = bookedText
+      ? `<div class="bike-sched-line warn">Booked dates: <strong>${escapeHtml(bookedText)}</strong></div>`
+      : `<div class="bike-sched-line ok">Open for all upcoming dates</div>`;
+    const blocksHint = activeBlocks > 0 ? `<div class="bike-sched-sub">${activeBlocks} walk-in/manual block(s)</div>` : "";
+    return `${statusSelect}${scheduleBadge}${blocksHint}`;
+  }
+
+  function createBikeScheduleController({ apiBase, onUpdated }) {
+    const modal = document.getElementById("bike-schedule-modal");
+    if (!modal) {
+      return {
+        open: async () => {},
+        quickChangeStatus: async () => {},
+      };
+    }
+
+    const titleEl = document.getElementById("sched-modal-title");
+    const metaEl = document.getElementById("sched-bike-meta");
+    const errEl = document.getElementById("sched-modal-error");
+    const statusForm = document.getElementById("sched-status-form");
+    const statusSel = document.getElementById("sched-status-select");
+    const unitsInput = document.getElementById("sched-units-input");
+    const blockForm = document.getElementById("sched-block-form");
+    const startInput = document.getElementById("sched-block-start");
+    const endInput = document.getElementById("sched-block-end");
+    const blockUnitsInput = document.getElementById("sched-block-units");
+    const reasonInput = document.getElementById("sched-block-reason");
+    const blocksList = document.getElementById("sched-blocks-list");
+    const bookingsList = document.getElementById("sched-bookings-list");
+    const calPreview = document.getElementById("sched-calendar-preview");
+
+    let activeBikeId = null;
+
+    async function requestJson(url, opts) {
+      const res = await fetch(url, opts);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `Request failed (${res.status})`);
+      }
+      return data;
+    }
+
+    function renderModalBike(bike) {
+      activeBikeId = bike.id;
+      titleEl.textContent = `Manage Availability — ${bike.name}`;
+      metaEl.textContent = `${bike.units_count} total unit(s) • ${bike.booked_units} booked today • Status: ${bike.status}`;
+      statusSel.value = bike.status || "available";
+      unitsInput.value = bike.units_count || 1;
+      blockUnitsInput.max = bike.units_count || 1;
+      blockUnitsInput.value = Math.min(Number(blockUnitsInput.value || 1), bike.units_count || 1) || 1;
+
+      const todayIso = toLocalIsoDate(new Date());
+      if (startInput && !startInput.value) startInput.value = todayIso;
+      if (endInput && (!endInput.value || endInput.value < startInput.value)) endInput.value = startInput.value;
+      if (startInput) startInput.min = todayIso;
+      if (endInput) endInput.min = startInput.value || todayIso;
+
+      const blocks = bike.blocks || [];
+      if (!blocks.length) {
+        blocksList.innerHTML = `<div class="text-muted">No manual date blocks yet.</div>`;
+      } else {
+        blocksList.innerHTML = blocks
+          .map(
+            (blk) => `
+              <div class="sched-item-row">
+                <div>
+                  <strong>${escapeHtml(formatDateRangeShort(blk.start_date, blk.end_date))}</strong>
+                  <div class="text-muted">${escapeHtml(blk.reason)} &bull; ${blk.units_blocked} unit(s)</div>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline" data-unblock-id="${blk.id}">Unblock</button>
+              </div>
+            `
+          )
+          .join("");
+      }
+
+      const upcoming = bike.upcoming_bookings || [];
+      if (!upcoming.length) {
+        bookingsList.innerHTML = `<div class="text-muted">No upcoming customer bookings.</div>`;
+      } else {
+        bookingsList.innerHTML = upcoming
+          .map(
+            (b) => `
+              <div class="sched-item-row">
+                <div>
+                  <strong>${escapeHtml(formatDateRangeShort(b.pickup_date, b.return_date))}</strong>
+                  <div class="text-muted">${escapeHtml(b.booking_code)} &bull; ${escapeHtml(b.customer_name)}</div>
+                </div>
+                <span class="badge badge-${escapeHtml(b.status)}">${escapeHtml(b.status)}</span>
+              </div>
+            `
+          )
+          .join("");
+      }
+
+      if (calPreview) {
+        calPreview.innerHTML = renderAvailabilityCalendarHtml(bike.availability_calendar || [], { interactive: false });
+      }
+    }
+
+    if (startInput) {
+      startInput.addEventListener("change", () => {
+        if (endInput) {
+          endInput.min = startInput.value;
+          if (!endInput.value || endInput.value < startInput.value) {
+            endInput.value = startInput.value;
+          }
+        }
+      });
+    }
+
+    if (statusForm) {
+      statusForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!activeBikeId) return;
+        errEl.classList.add("hidden");
+        try {
+          const data = await requestJson(`${apiBase}/${activeBikeId}/status`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              status: statusSel.value,
+              units_count: Number(unitsInput.value || 1),
+            }),
+          });
+          renderModalBike(data.bike);
+          if (typeof onUpdated === "function") await onUpdated();
+          showToast("Motorbike status & units saved.", "success");
+        } catch (err) {
+          errEl.textContent = err.message;
+          errEl.classList.remove("hidden");
+        }
+      });
+    }
+
+    if (blockForm) {
+      blockForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!activeBikeId) return;
+        errEl.classList.add("hidden");
+        try {
+          const data = await requestJson(`${apiBase}/${activeBikeId}/blocks`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              start_date: startInput.value,
+              end_date: endInput.value,
+              units_blocked: Number(blockUnitsInput.value || 1),
+              reason: (reasonInput.value || "").trim() || "Walk-in / Offline Booking",
+            }),
+          });
+          renderModalBike(data.bike);
+          if (typeof onUpdated === "function") await onUpdated();
+          showToast("Dates blocked. Customers now see those dates as Booked.", "success");
+        } catch (err) {
+          errEl.textContent = err.message;
+          errEl.classList.remove("hidden");
+        }
+      });
+    }
+
+    if (blocksList) {
+      blocksList.addEventListener("click", async (event) => {
+        const btn = event.target.closest("[data-unblock-id]");
+        if (!btn || !activeBikeId) return;
+        errEl.classList.add("hidden");
+        btn.disabled = true;
+        try {
+          const blkId = btn.getAttribute("data-unblock-id");
+          const data = await requestJson(`${apiBase}/${activeBikeId}/blocks/${blkId}`, { method: "DELETE" });
+          renderModalBike(data.bike);
+          if (typeof onUpdated === "function") await onUpdated();
+          showToast("Date block removed. Dates are open again.", "success");
+        } catch (err) {
+          errEl.textContent = err.message;
+          errEl.classList.remove("hidden");
+          btn.disabled = false;
+        }
+      });
+    }
+
+    return {
+      async open(bikeId) {
+        errEl.classList.add("hidden");
+        try {
+          const data = await requestJson(`${apiBase}/${bikeId}/blocks`);
+          const todayIso = toLocalIsoDate(new Date());
+          if (startInput) startInput.value = todayIso;
+          if (endInput) endInput.value = todayIso;
+          renderModalBike(data.bike);
+          openModal("bike-schedule-modal");
+        } catch (err) {
+          showToast(err.message, "error");
+        }
+      },
+      async quickChangeStatus(bikeId, statusVal) {
+        try {
+          await requestJson(`${apiBase}/${bikeId}/status`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: statusVal }),
+          });
+          if (typeof onUpdated === "function") await onUpdated();
+          showToast(`Motorbike set to ${statusVal}.`, "success");
+        } catch (err) {
+          showToast(err.message, "error");
+          if (typeof onUpdated === "function") await onUpdated();
+        }
+      },
+    };
+  }
+
   window.MotoRide = {
     get shop() {
       return shopConfig;
     },
     escapeHtml,
     formatMoney,
+    formatShortDate,
+    formatDateRangeShort,
+    formatBookedRangesLabel,
+    renderAvailabilityCalendarHtml,
+    renderAdminBikeScheduleSummary,
+    createBikeScheduleController,
     paymentStatusLabel,
     showToast,
     openModal,

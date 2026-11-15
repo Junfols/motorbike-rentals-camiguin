@@ -5,6 +5,8 @@
     escapeHtml,
     formatMoney,
     paymentStatusLabel,
+    renderAdminBikeScheduleSummary,
+    createBikeScheduleController,
     showToast,
     openModal,
     closeModal,
@@ -495,8 +497,10 @@
               <div class="text-muted">
                 Units: ${bike.units_count} (Booked today: ${bike.booked_units}) ${bike.plate_number ? `&bull; ${escapeHtml(bike.plate_number)}` : ""}
               </div>
+              ${renderAdminBikeScheduleSummary(bike)}
               <div class="admin-bike-actions">
-                <button type="button" class="btn btn-sm btn-outline" data-edit-bike="${bike.id}" style="flex:1;">Edit</button>
+                <button type="button" class="btn btn-sm btn-primary" data-manage-dates="${bike.id}" style="flex:1;">Manage Dates</button>
+                <button type="button" class="btn btn-sm btn-outline" data-edit-bike="${bike.id}">Edit</button>
                 <button type="button" class="btn btn-sm btn-danger" data-delete-bike="${bike.id}">Delete</button>
               </div>
             </div>
@@ -617,7 +621,7 @@
     const pillEl = document.getElementById("admin-payment-status-pill");
     const previewImg = document.getElementById("admin-qr-preview-img");
     const removeQrBtn = document.getElementById("remove-qr-btn");
-    
+
     const mode = (s.reservation_mode || "optional").toLowerCase();
     if (modeEl) modeEl.value = mode;
     if (pctEl) pctEl.value = s.reservation_percent ?? "10";
@@ -675,6 +679,7 @@
     }
     return data;
   }
+
   async function runQrUpload(file, { showSuccessToast = true } = {}) {
     if (activeQrUploadPromise) {
       return activeQrUploadPromise;
@@ -993,6 +998,7 @@
       }
       return;
     }
+
     const balanceBtn = event.target.closest("[data-balance-paid]");
     if (balanceBtn) {
       const id = balanceBtn.getAttribute("data-id");
@@ -1058,7 +1064,26 @@
 
   addBikeBtn.addEventListener("click", () => openBikeEditor(null));
 
+  const scheduleCtrl = createBikeScheduleController({
+    apiBase: "/api/admin/bikes",
+    onUpdated: () => Promise.all([loadDashboard(), loadPartners(), loadFleet()]),
+  });
+
+  fleetList.addEventListener("change", (event) => {
+    const statusSel = event.target.closest("[data-quick-status]");
+    if (!statusSel) return;
+    const id = Number(statusSel.getAttribute("data-quick-status"));
+    scheduleCtrl.quickChangeStatus(id, statusSel.value);
+  });
+
   fleetList.addEventListener("click", async (event) => {
+    const manageBtn = event.target.closest("[data-manage-dates]");
+    if (manageBtn) {
+      const id = Number(manageBtn.getAttribute("data-manage-dates"));
+      scheduleCtrl.open(id);
+      return;
+    }
+
     const editBtn = event.target.closest("[data-edit-bike]");
     if (editBtn) {
       const id = Number(editBtn.getAttribute("data-edit-bike"));
@@ -1171,7 +1196,7 @@
     }
   });
 
-    const qrFileInput = document.getElementById("set-qr-image-file");
+  const qrFileInput = document.getElementById("set-qr-image-file");
   if (qrFileInput) {
     qrFileInput.addEventListener("change", () => {
       const file = qrFileInput.files && qrFileInput.files[0];
@@ -1234,6 +1259,7 @@
       }
     });
   }
+
   const testAdminAlertBtn = document.getElementById("test-admin-alert-btn");
   if (testAdminAlertBtn) {
     testAdminAlertBtn.addEventListener("click", async () => {

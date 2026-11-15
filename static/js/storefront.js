@@ -4,6 +4,10 @@
   const {
     escapeHtml,
     formatMoney,
+    formatShortDate,
+    formatDateRangeShort,
+    formatBookedRangesLabel,
+    renderAvailabilityCalendarHtml,
     paymentStatusLabel,
     showToast,
     openModal,
@@ -38,6 +42,8 @@
   const topBoxCheckbox = document.getElementById("booking-top-box");
   const quoteAvailability = document.getElementById("quote-availability");
   const quoteLines = document.getElementById("quote-lines");
+  const modalAvailCalendar = document.getElementById("modal-availability-calendar");
+  const modalNextAvailableBtn = document.getElementById("modal-next-available-btn");
   const bookingFormError = document.getElementById("booking-form-error");
   const bookingSubmitBtn = document.getElementById("booking-submit-btn");
   const paymentQrSection = document.getElementById("payment-qr-section");
@@ -73,6 +79,8 @@
     bikes: [],
     shops: [],
     latestQuote: null,
+    currentBike: null,
+    suggestedOpenWindow: null,
   };
 
   function getSelectedPaymentChannel() {
@@ -245,6 +253,74 @@
     return Math.max(1, diff);
   }
 
+  function addDaysIso(isoStr, days) {
+    if (!isoStr || !/^\d{4}-\d{2}-\d{2}$/.test(isoStr)) return "";
+    const [y, m, d] = isoStr.split("-").map(Number);
+    return toIsoLocal(new Date(y, m - 1, d + days));
+  }
+
+  function hasBookedDayInRange(bike, startIso, endIso) {
+    const ranges = (bike && bike.booked_ranges) || [];
+    const end = endIso || startIso;
+    return ranges.some((r) => r.pickup_date <= end && r.return_date >= startIso);
+  }
+
+  function isDateFullyBooked(bike, isoStr) {
+    if (!bike || !isoStr) return false;
+    if (bike.status !== "available") return true;
+    const calDay = (bike.availability_calendar || []).find((d) => d.date === isoStr);
+    if (calDay) return calDay.status === "booked";
+    return hasBookedDayInRange(bike, isoStr, isoStr);
+  }
+
+  function findNextAvailableRange(bike, startIso, returnIso) {
+    if (!bike || bike.status !== "available") return null;
+    const todayIso = toIsoLocal(new Date());
+    const baseStart = startIso && startIso >= todayIso ? startIso : todayIso;
+    const hasRet = Boolean(returnIso && returnIso >= baseStart);
+    const spanDays = hasRet
+      ? Math.max(0, Math.round((new Date(`${returnIso}T00:00:00`) - new Date(`${baseStart}T00:00:00`)) / 86400000))
+      : 0;
+    const startOffset = startIso && startIso >= todayIso ? 1 : 0;
+    for (let offset = startOffset; offset <= 120; offset += 1) {
+      const candPickup = addDaysIso(baseStart, offset);
+      const candReturn = hasRet ? addDaysIso(candPickup, spanDays) : candPickup;
+      if (!hasBookedDayInRange(bike, candPickup, candReturn)) {
+        return {
+          pickup_date: candPickup,
+          return_date: hasRet ? candReturn : "",
+        };
+      }
+    }
+    return null;
+  }
+
+  function renderModalCalendar() {
+    if (!modalAvailCalendar || !state.currentBike) return;
+    modalAvailCalendar.innerHTML = renderAvailabilityCalendarHtml(
+      state.currentBike.availability_calendar || [],
+      {
+        selectedPickup: bookingPickup ? bookingPickup.value : "",
+        selectedReturn: bookingReturn ? bookingReturn.value : "",
+        interactive: true,
+      }
+    );
+  }
+
+  function syncNextAvailableBtn(suggestion) {
+    if (!modalNextAvailableBtn) return;
+    state.suggestedOpenWindow = suggestion || null;
+    if (!suggestion || !suggestion.pickup_date) {
+      modalNextAvailableBtn.classList.add("hidden");
+      return;
+    }
+    const label = suggestion.return_date
+      ? formatDateRangeShort(suggestion.pickup_date, suggestion.return_date)
+      : formatShortDate(suggestion.pickup_date);
+    modalNextAvailableBtn.textContent = `Use Next Open: ${label}`;
+    modalNextAvailableBtn.classList.remove("hidden");
+  }
+
   async function loadPublicShops() {
     if (!filterShop) return;
     try {
@@ -270,7 +346,6 @@
   async function loadFleet() {
     const todayStr = toIsoLocal(new Date());
     const pickupDate = state.pickupDate || todayStr;
-    const returnDate = state.returnDate || pickupDate;
     const params = new URLSearchParams({
       category: state.category,
       transmission: state.transmission,
@@ -278,9 +353,11 @@
       q: state.q,
       sort: state.sort,
       pickup_date: pickupDate,
-      return_date: returnDate,
       available_only: state.availableOnly ? "1" : "0",
     });
+    if (state.returnDate) {
+      params.set("return_date", state.returnDate);
+    }
     if (state.shopId) {
       params.set("shop_id", state.shopId);
     }
@@ -339,6 +416,32 @@
             ? `<div class="bike-price-weekly">Weekly: ${escapeHtml(formatMoney(bike.weekly_rate))}</div>`
             : "";
 
+        const bookedSummary = formatBookedRangesLabel(bike.booked_ranges, 2);
+        const bookedStrip = bookedSummary
+          ? `<div class="bike-booked-strip">Booked: <strong>${escapeHtml(bookedSummary)}</strong></div>`
+          : "";
+
+        let nextOpenRow = "";
+        if (!bike.is_available && bike.status === "available") {
+          if (bike.next_available_date) {
+            const nextLabel = bike.next_available_return_date
+              ? formatDateRangeShort(bike.next_available_date, bike.next_available_return_date)
+              : formatShortDate(bike.next_available_date);
+            nextOpenRow = `
+              <div class="bike-next-open-row">
+                <span>Next open: <strong>${escapeHtml(nextLabel)}</strong></span>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-primary"
+                  data-use-next-open="${bike.id}"
+                >Book ${escapeHtml(formatShortDate(bike.next_available_date))}</button>
+              </div>
+            `;
+          } else {
+            nextOpenRow = `<div class="bike-next-open-row"><span>Booked for selected dates — check calendar for open days.</span></div>`;
+          }
+        }
+
         return `
           <article class="bike-card" data-bike-id="${bike.id}">
             <div class="bike-card-media">
@@ -361,6 +464,8 @@
                 <span class="spec-pill">${escapeHtml(bike.fuel_type)}</span>
               </div>
               <p class="bike-card-inclusions">${escapeHtml(bike.inclusions || bike.description)}</p>
+              ${bookedStrip}
+              ${nextOpenRow}
               <div class="bike-card-footer">
                 <div>
                   <div class="bike-price-main">
@@ -373,7 +478,7 @@
                   class="btn ${bike.is_available ? "btn-primary" : "btn-outline"}"
                   data-open-bike="${bike.id}"
                 >
-                  ${bike.is_available ? "Book Now" : "Check Dates"}
+                  ${bike.is_available ? "Book Now" : "View Calendar"}
                 </button>
               </div>
             </div>
@@ -392,8 +497,10 @@
       const effectivePickup = state.pickupDate || todayStr;
       const params = new URLSearchParams({
         pickup_date: effectivePickup,
-        return_date: state.returnDate || effectivePickup,
       });
+      if (state.returnDate) {
+        params.set("return_date", state.returnDate);
+      }
       const res = await fetch(`/api/bikes/${bikeId}?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) {
@@ -401,6 +508,7 @@
       }
 
       const bike = data.bike;
+      state.currentBike = bike;
       bookingBikeId.value = bike.id;
       document.getElementById("modal-bike-category").textContent = bike.category;
       document.getElementById("modal-bike-name").textContent = bike.name;
@@ -440,7 +548,7 @@
         rangesEl.innerHTML = ranges
           .map(
             (r) =>
-              `<span class="booked-range-pill">${escapeHtml(r.pickup_date)} &rarr; ${escapeHtml(r.return_date)}</span>`
+              `<span class="booked-range-pill">${escapeHtml(formatDateRangeShort(r.pickup_date, r.return_date))}</span>`
           )
           .join("");
       }
@@ -452,6 +560,7 @@
       bookingReturn.min = modalPickupStr;
       bookingReturn.value = state.returnDate || "";
       syncReturnDateUi();
+      renderModalCalendar();
       const isDelivery = bookingPickupMethod.value === "delivery";
       deliveryAddressGroup.classList.toggle("hidden", !isDelivery);
       deliveryAddressInput.required = isDelivery;
@@ -474,15 +583,39 @@
 
     if (!rDate) {
       state.latestQuote = null;
-      if (quoteAvailability) {
-        quoteAvailability.className = "quote-availability muted";
-        quoteAvailability.textContent = "Select a return date above to check availability & total price.";
+      if (state.currentBike && state.currentBike.status !== "available") {
+        if (quoteAvailability) {
+          quoteAvailability.className = "quote-availability bad";
+          quoteAvailability.textContent = "Currently under maintenance";
+        }
+        if (bookingSubmitBtn) bookingSubmitBtn.disabled = true;
+        syncNextAvailableBtn(null);
+      } else if (state.currentBike && isDateFullyBooked(state.currentBike, pDate)) {
+        if (quoteAvailability) {
+          quoteAvailability.className = "quote-availability bad";
+          quoteAvailability.textContent = `${formatShortDate(pDate)} is already booked — tap a green open date on the calendar above.`;
+        }
+        if (bookingSubmitBtn) bookingSubmitBtn.disabled = true;
+        const serverSug = state.currentBike.next_available_date
+          ? {
+              pickup_date: state.currentBike.next_available_date,
+              return_date: state.currentBike.next_available_return_date || "",
+            }
+          : null;
+        syncNextAvailableBtn(
+          (serverSug && serverSug.pickup_date > pDate ? serverSug : null) ||
+            findNextAvailableRange(state.currentBike, pDate, "")
+        );
+      } else {
+        if (quoteAvailability) {
+          quoteAvailability.className = "quote-availability muted";
+          quoteAvailability.textContent = "Select a return date above to check availability & total price.";
+        }
+        if (bookingSubmitBtn) bookingSubmitBtn.disabled = false;
+        syncNextAvailableBtn(null);
       }
       if (quoteLines) {
         quoteLines.innerHTML = "";
-      }
-      if (bookingSubmitBtn) {
-        bookingSubmitBtn.disabled = false;
       }
       syncReturnDateUi();
       syncPaymentChannelUi(false);
@@ -522,14 +655,19 @@
         quoteAvailability.className = "quote-availability ok";
         quoteAvailability.textContent = `Available (${q.available_units} of ${q.units_count} unit(s) open)`;
         bookingSubmitBtn.disabled = false;
+        syncNextAvailableBtn(null);
       } else if (q.bike_status !== "available") {
         quoteAvailability.className = "quote-availability bad";
         quoteAvailability.textContent = "Currently under maintenance";
         bookingSubmitBtn.disabled = true;
+        syncNextAvailableBtn(null);
       } else {
         quoteAvailability.className = "quote-availability bad";
-        quoteAvailability.textContent = "Already booked for these dates — try another date range";
+        quoteAvailability.textContent = "Already booked for these dates — pick open green dates on the calendar above";
         bookingSubmitBtn.disabled = true;
+        syncNextAvailableBtn(
+          findNextAvailableRange(state.currentBike, bookingPickup.value, bookingReturn.value)
+        );
       }
 
       const dayWord = q.rental_days === 1 ? "day" : "days";
@@ -714,9 +852,73 @@
 
   if (fleetGrid) {
     fleetGrid.addEventListener("click", (event) => {
+      const nextBtn = event.target.closest("[data-use-next-open]");
+      if (nextBtn) {
+        const bikeId = Number(nextBtn.getAttribute("data-use-next-open"));
+        const bike = state.bikes.find((b) => b.id === bikeId);
+        if (bike && bike.next_available_date) {
+          state.pickupDate = bike.next_available_date;
+          state.returnDate = bike.next_available_return_date || "";
+          if (searchPickupInput) searchPickupInput.value = state.pickupDate;
+          if (searchReturnInput) {
+            searchReturnInput.min = state.pickupDate;
+            searchReturnInput.value = state.returnDate;
+          }
+          syncReturnDateUi();
+          loadFleet();
+          openBikeModal(bikeId);
+          return;
+        }
+      }
       const btn = event.target.closest("[data-open-bike]");
       if (!btn) return;
       openBikeModal(Number(btn.getAttribute("data-open-bike")));
+    });
+  }
+
+  if (modalAvailCalendar) {
+    modalAvailCalendar.addEventListener("click", (event) => {
+      const cell = event.target.closest("[data-cal-date]");
+      if (!cell || cell.disabled || !state.currentBike) return;
+      const clicked = cell.getAttribute("data-cal-date");
+      if (!clicked || !bookingPickup || !bookingReturn) return;
+
+      const curPickup = bookingPickup.value;
+      const curReturn = bookingReturn.value;
+      const pickupBlocked = !curPickup || isDateFullyBooked(state.currentBike, curPickup);
+
+      if (
+        pickupBlocked ||
+        curReturn ||
+        clicked < curPickup ||
+        hasBookedDayInRange(state.currentBike, curPickup, clicked)
+      ) {
+        bookingPickup.value = clicked;
+        bookingReturn.min = clicked;
+        bookingReturn.value = "";
+        syncDateWrap(bookingReturn);
+        showToast(`Pickup set to ${formatShortDate(clicked)}. Now tap a return date.`);
+      } else {
+        bookingReturn.min = curPickup;
+        bookingReturn.value = clicked;
+        syncDateWrap(bookingReturn);
+      }
+      renderModalCalendar();
+      refreshQuote();
+    });
+  }
+
+  if (modalNextAvailableBtn) {
+    modalNextAvailableBtn.addEventListener("click", () => {
+      const sug = state.suggestedOpenWindow;
+      if (!sug || !sug.pickup_date || !bookingPickup || !bookingReturn) return;
+      bookingPickup.value = sug.pickup_date;
+      bookingReturn.min = sug.pickup_date;
+      bookingReturn.value = sug.return_date || "";
+      syncDateWrap(bookingReturn);
+      renderModalCalendar();
+      refreshQuote();
+      showToast(`Moved to open date ${formatShortDate(sug.pickup_date)}.`, "success");
     });
   }
 
@@ -739,6 +941,7 @@
           syncDateWrap(bookingReturn);
         }
       }
+      renderModalCalendar();
       refreshQuote();
     });
   }
@@ -749,6 +952,7 @@
         bookingReturn.value = bookingPickup.value;
       }
       syncDateWrap(bookingReturn);
+      renderModalCalendar();
       refreshQuote();
     });
   }

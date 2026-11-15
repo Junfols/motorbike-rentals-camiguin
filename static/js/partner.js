@@ -1,7 +1,15 @@
 (function () {
   "use strict";
 
-  const { escapeHtml, formatMoney, showToast, openModal, closeModal } = window.MotoRide;
+  const {
+    escapeHtml,
+    formatMoney,
+    renderAdminBikeScheduleSummary,
+    createBikeScheduleController,
+    showToast,
+    openModal,
+    closeModal,
+  } = window.MotoRide;
 
   const authView = document.getElementById("partner-auth-view");
   const dashboardView = document.getElementById("partner-dashboard-view");
@@ -231,7 +239,6 @@
         } else if (b.status === "active") {
           actions.push(`<button type="button" class="btn btn-sm btn-success" data-booking-action="completed" data-id="${b.id}">Mark Returned</button>`);
         }
-
         const showBalanceTools = ["confirmed", "active", "completed"].includes(b.status);
         const balanceOwed = Number(b.balance_due !== undefined && b.balance_due !== null ? b.balance_due : b.total_amount) > 0;
         if (showBalanceTools && balanceOwed) {
@@ -360,8 +367,10 @@
               <div class="text-muted">
                 Units: ${bike.units_count} (Booked today: ${bike.booked_units}) ${bike.plate_number ? `&bull; ${escapeHtml(bike.plate_number)}` : ""}
               </div>
+              ${renderAdminBikeScheduleSummary(bike)}
               <div class="admin-bike-actions">
-                <button type="button" class="btn btn-sm btn-outline" data-edit-bike="${bike.id}" style="flex:1;">Edit</button>
+                <button type="button" class="btn btn-sm btn-primary" data-manage-dates="${bike.id}" style="flex:1;">Manage Dates</button>
+                <button type="button" class="btn btn-sm btn-outline" data-edit-bike="${bike.id}">Edit</button>
                 <button type="button" class="btn btn-sm btn-danger" data-delete-bike="${bike.id}">Delete</button>
               </div>
             </div>
@@ -562,7 +571,26 @@
 
   addBikeBtn.addEventListener("click", () => openBikeEditor(null));
 
+  const scheduleCtrl = createBikeScheduleController({
+    apiBase: "/api/partner/bikes",
+    onUpdated: () => Promise.all([loadDashboard(), loadFleet()]),
+  });
+
+  fleetList.addEventListener("change", (event) => {
+    const statusSel = event.target.closest("[data-quick-status]");
+    if (!statusSel) return;
+    const id = Number(statusSel.getAttribute("data-quick-status"));
+    scheduleCtrl.quickChangeStatus(id, statusSel.value);
+  });
+
   fleetList.addEventListener("click", async (event) => {
+    const manageBtn = event.target.closest("[data-manage-dates]");
+    if (manageBtn) {
+      const id = Number(manageBtn.getAttribute("data-manage-dates"));
+      scheduleCtrl.open(id);
+      return;
+    }
+
     const editBtn = event.target.closest("[data-edit-bike]");
     if (editBtn) {
       const id = Number(editBtn.getAttribute("data-edit-bike"));
