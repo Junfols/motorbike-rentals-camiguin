@@ -960,16 +960,9 @@ def calculate_quote(
     weekly_rate = float(bike["weekly_rate"] or 0)
     deposit = float(bike["deposit"] or 0)
 
-    standard_total = rental_days * daily_rate
-    if weekly_rate > 0 and rental_days >= 7:
-        weeks = rental_days // 7
-        rem_days = rental_days % 7
-        weekly_calc = weeks * weekly_rate + rem_days * daily_rate
-        base_subtotal = min(weekly_calc, standard_total)
-    else:
-        base_subtotal = standard_total
-
-    discount_saved = max(0.0, standard_total - base_subtotal)
+        standard_total = rental_days * daily_rate
+    base_subtotal = standard_total
+    discount_saved = 0.0
 
     helmet_fee = float(settings.get("extra_helmet_fee", "50") or 0)
     top_box_fee = float(settings.get("top_box_fee", "100") or 0)
