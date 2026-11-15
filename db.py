@@ -38,6 +38,9 @@ SECRET_SETTING_KEYS = {
     "smtp_from_email",
     "notify_partner_email",
     "notify_customer_email",
+    "paymongo_secret_key",
+    "paymongo_public_key",
+    "paymongo_webhook_secret",
 }
 
 _ALERT_ENV_FALLBACKS = {
@@ -49,6 +52,9 @@ _ALERT_ENV_FALLBACKS = {
     "smtp_username": "SMTP_USERNAME",
     "smtp_password": "SMTP_PASSWORD",
     "smtp_from_email": "SMTP_FROM_EMAIL",
+    "paymongo_secret_key": "PAYMONGO_SECRET_KEY",
+    "paymongo_public_key": "PAYMONGO_PUBLIC_KEY",
+    "paymongo_webhook_secret": "PAYMONGO_WEBHOOK_SECRET",
 }
 
 _PG_INIT_LOCK_KEY = 84729103
@@ -371,6 +377,8 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             payment_proof_url TEXT NOT NULL DEFAULT '',
             payment_status TEXT NOT NULL DEFAULT 'unpaid',
             balance_paid INTEGER NOT NULL DEFAULT 0,
+            payment_link_id TEXT NOT NULL DEFAULT '',
+            payment_checkout_url TEXT NOT NULL DEFAULT '',
             deposit_amount REAL NOT NULL,
             notes TEXT NOT NULL DEFAULT '',
             admin_notes TEXT NOT NULL DEFAULT '',
@@ -486,6 +494,8 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
             payment_proof_url TEXT NOT NULL DEFAULT '',
             payment_status TEXT NOT NULL DEFAULT 'unpaid',
             balance_paid INTEGER NOT NULL DEFAULT 0,
+            payment_link_id TEXT NOT NULL DEFAULT '',
+            payment_checkout_url TEXT NOT NULL DEFAULT '',
             deposit_amount DOUBLE PRECISION NOT NULL,
             notes TEXT NOT NULL DEFAULT '',
             admin_notes TEXT NOT NULL DEFAULT '',
@@ -712,6 +722,14 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
                 conn.execute(
                     "ALTER TABLE bookings ADD COLUMN balance_paid INTEGER NOT NULL DEFAULT 0"
                 )
+            if "payment_link_id" not in booking_cols:
+                conn.execute(
+                    "ALTER TABLE bookings ADD COLUMN payment_link_id TEXT NOT NULL DEFAULT ''"
+                )
+            if "payment_checkout_url" not in booking_cols:
+                conn.execute(
+                    "ALTER TABLE bookings ADD COLUMN payment_checkout_url TEXT NOT NULL DEFAULT ''"
+                )
 
             _create_indexes(conn)
 
@@ -913,10 +931,14 @@ def get_admin_settings_view(conn: DatabaseConnection) -> dict:
     full = get_settings(conn, include_secrets=True)
     token = full.pop("telegram_bot_token", "")
     smtp_pw = full.pop("smtp_password", "")
+    pm_secret = full.pop("paymongo_secret_key", "")
+    pm_wh = full.pop("paymongo_webhook_secret", "")
     full.pop("admin_password_hash", None)
     full.pop("secret_key", None)
     full["has_telegram_bot_token"] = bool(token)
     full["has_smtp_password"] = bool(smtp_pw)
+    full["has_paymongo_secret_key"] = bool(pm_secret)
+    full["has_paymongo_webhook_secret"] = bool(pm_wh)
     return full
 
 
@@ -1359,10 +1381,17 @@ def slugify_shop_name(name: str, conn: DatabaseConnection, exclude_id: int | Non
 
 
 def is_reservation_payment_configured(settings: dict[str, str]) -> bool:
-    """Return True when at least one GCash/Maya receiving channel or QR image is set."""
+    """Return True when at least one GCash/Maya receiving channel, QR image, or PayMongo key is set."""
     return any(
         str(settings.get(key, "") or "").strip()
-        for key in ("gcash_qr_url", "gcash_number", "maya_number")
+        for key in (
+            "gcash_qr_url",
+            "gcash_number",
+            "maya_number",
+            "paymongo_secret_key",
+            "paymongo_public_key",
+            "has_paymongo_secret_key",
+        )
     )
 
 

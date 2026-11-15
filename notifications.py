@@ -326,6 +326,64 @@ def notify_partner_status_change(settings: dict, shop: dict) -> dict:
     return results
 
 
+def notify_payment_verified(settings: dict, shop: dict, booking: dict, payment_info: dict) -> dict:
+    """Alert Admin, Partner Shop, and Customer when an online payment is verified via PayMongo/Gateway."""
+    cur = _currency(settings)
+    platform = settings.get("shop_name") or "Motorbike Rentals Camiguin"
+    amount = float(payment_info.get("amount_php") or booking.get("reservation_fee") or 0)
+    pay_id = payment_info.get("payment_id") or booking.get("payment_reference") or ""
+
+    subject = f"[{platform}] Payment Confirmed ({booking.get('booking_code')}) — {cur}{amount:,.2f}"
+    body = (
+        f"ONLINE PAYMENT CONFIRMED\n"
+        f"Booking Ref: {booking.get('booking_code')}\n"
+        f"Amount Paid: {cur}{amount:,.2f}\n"
+        f"Channel: PayMongo (QR Ph / GCash)\n"
+        f"Payment ID: {pay_id}\n"
+        f"Motorbike: {booking.get('bike_name')}\n"
+        f"Shop: {shop.get('shop_name')} ({shop.get('municipality')})\n"
+        f"Customer: {booking.get('customer_name')} ({booking.get('customer_phone')})\n"
+        f"Dates: {booking.get('pickup_date')} to {booking.get('return_date')}\n"
+        f"Status: Booking is now CONFIRMED automatically!"
+    )
+    results: dict[str, dict] = {}
+    token = (settings.get("telegram_bot_token") or "").strip()
+    admin_chat = (settings.get("admin_telegram_chat_id") or "").strip()
+    partner_chat = (shop.get("telegram_chat_id") or "").strip()
+    if token and admin_chat:
+        ok, detail = send_telegram_message(token, admin_chat, body)
+        results["admin_telegram"] = {"ok": ok, "detail": detail}
+    if token and partner_chat and partner_chat != admin_chat:
+        ok, detail = send_telegram_message(token, partner_chat, body)
+        results["partner_telegram"] = {"ok": ok, "detail": detail}
+
+    if (settings.get("smtp_host") or "").strip():
+        admin_email = (settings.get("admin_notify_email") or "").strip()
+        if admin_email:
+            ok, detail = send_email_message(settings, admin_email, subject, body)
+            results["admin_email"] = {"ok": ok, "detail": detail}
+        partner_email = (shop.get("email") or "").strip()
+        if partner_email and partner_email.lower() != admin_email.lower():
+            ok, detail = send_email_message(settings, partner_email, subject, body)
+            results["partner_email"] = {"ok": ok, "detail": detail}
+        cust_email = (booking.get("customer_email") or "").strip()
+        if cust_email:
+            cust_subject = f"Payment Confirmed! ({booking.get('booking_code')}) — {platform}"
+            cust_body = (
+                f"Hi {booking.get('customer_name')},\n\n"
+                f"Great news! Your online reservation payment of {cur}{amount:,.2f} has been verified.\n\n"
+                f"Booking Code: {booking.get('booking_code')}\n"
+                f"Status: CONFIRMED\n"
+                f"Motorbike: {booking.get('bike_name')}\n"
+                f"Pickup Date: {booking.get('pickup_date')} at {booking.get('pickup_time')}\n"
+                f"Rental Shop: {shop.get('shop_name')} ({shop.get('phone')})\n\n"
+                f"Show your Booking Code ({booking.get('booking_code')}) when picking up your motorbike."
+            )
+            ok, detail = send_email_message(settings, cust_email, cust_subject, cust_body)
+            results["customer_email"] = {"ok": ok, "detail": detail}
+    return results
+
+
 def send_test_alert(
     settings: dict,
     telegram_chat_id: str | None = None,

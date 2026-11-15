@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import secrets
@@ -58,7 +59,14 @@ from notifications import (
     notify_new_booking,
     notify_new_partner_registration,
     notify_partner_status_change,
+    notify_payment_verified,
     send_test_alert,
+)
+from paymongo import (
+    create_payment_link,
+    extract_payment_details_from_webhook,
+    get_payment_link,
+    verify_webhook_signature,
 )
 
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "jfif", "webp"}
@@ -392,6 +400,8 @@ def _serialize_booking(row) -> dict:
         "payment_reference": (row["payment_reference"] if "payment_reference" in row.keys() else "") or "",
         "payment_proof_url": (row["payment_proof_url"] if "payment_proof_url" in row.keys() else "") or "",
         "payment_status": (row["payment_status"] if "payment_status" in row.keys() else "") or "unpaid",
+        "payment_link_id": (row["payment_link_id"] if "payment_link_id" in row.keys() else "") or "",
+        "payment_checkout_url": (row["payment_checkout_url"] if "payment_checkout_url" in row.keys() else "") or "",
         "balance_paid": _row_balance_paid(row),
         "deposit_amount": float(row["deposit_amount"]),
         "notes": row["notes"],
@@ -1059,7 +1069,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             return jsonify({"error": "Invalid pickup method."}), 400
         if pickup_method == "delivery" and not delivery_address:
             return jsonify({"error": "Please enter your resort, port, or delivery address."}), 400
-        if payment_channel not in ("pay_at_shop", "gcash", "maya"):
+        if payment_channel not in ("pay_at_shop", "gcash", "maya", "paymongo"):
             return jsonify({"error": "Invalid payment method selected."}), 400
         try:
             validated_proof = _validate_image_upload(proof_file, prefix="proof")
@@ -1109,7 +1119,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                     409,
                 )
 
-            settings = get_settings(conn)
+            settings = get_settings(conn, include_secrets=True)
             quote = calculate_quote(
                 bike,
                 settings,
@@ -1122,9 +1132,12 @@ def create_app(test_config: dict | None = None) -> Flask:
             )
 
             payment_active = (
-                quote["reservation_mode"] != "off"
-                and quote["reservation_configured"]
-                and quote["reservation_fee"] > 0
+                (
+                    quote["reservation_mode"] != "off"
+                    and quote["reservation_configured"]
+                    and quote["reservation_fee"] > 0
+                )
+                or (payment_channel == "paymongo" and is_reservation_payment_configured(settings))
             )
             if not payment_active:
                 stored_channel = "pay_at_shop"
@@ -1153,6 +1166,17 @@ def create_app(test_config: dict | None = None) -> Flask:
                 stored_payment_status = "unpaid"
                 stored_reservation_fee = 0.0
                 stored_balance_due = quote["total_amount"]
+            elif payment_channel == "paymongo":
+                stored_channel = "paymongo"
+                stored_reference = ""
+                stored_proof_url = ""
+                stored_payment_status = "unpaid"
+                stored_reservation_fee = (
+                    quote["reservation_fee"]
+                    if quote["reservation_fee"] > 0
+                    else quote["total_amount"]
+                )
+                stored_balance_due = max(0.0, round(quote["total_amount"] - stored_reservation_fee, 2))
             else:
                 if payment_reference and len(payment_reference) < 6:
                     conn.rollback()
@@ -1248,13 +1272,40 @@ def create_app(test_config: dict | None = None) -> Flask:
 
         created = _fetch_booking_by_id(conn, booking_id)
         booking_data = _serialize_booking(created)
+
+        checkout_url = ""
+        if stored_channel == "paymongo":
+            secret_settings = get_settings(conn, include_secrets=True)
+            pm_key = secret_settings.get("paymongo_secret_key")
+            if pm_key:
+                charge_amount = stored_reservation_fee if stored_reservation_fee >= 20 else quote["total_amount"]
+                ok, link_res = create_payment_link(
+                    secret_key=pm_key,
+                    amount_php=charge_amount,
+                    description=f"Motoride Camiguin — {quote['rental_days']}d {bike['name']} ({booking_code})",
+                    remarks=booking_code,
+                )
+                if ok and isinstance(link_res, dict):
+                    checkout_url = link_res.get("checkout_url", "")
+                    link_id = link_res.get("link_id", "")
+                    with conn:
+                        conn.execute(
+                            "UPDATE bookings SET payment_link_id = ?, payment_checkout_url = ? WHERE id = ?",
+                            (link_id, checkout_url, booking_id),
+                        )
+                    created = _fetch_booking_by_id(conn, booking_id)
+                    booking_data = _serialize_booking(created)
+
         _dispatch_alert(
             notify_new_booking,
             get_settings(conn, include_secrets=True),
             _serialize_shop(shop_row, include_private=True),
             booking_data,
         )
-        return jsonify({"booking": booking_data, "quote": quote}), 201
+        resp_data = {"booking": booking_data, "quote": quote}
+        if checkout_url:
+            resp_data["checkout_url"] = checkout_url
+        return jsonify(resp_data), 201
 
     def _fetch_booking_by_id(conn, booking_id: int):
         return conn.execute(
@@ -1360,6 +1411,206 @@ def create_app(test_config: dict | None = None) -> Flask:
                 booking_data,
             )
         return jsonify({"booking": booking_data})
+
+    # ------------------------------------------------------------------
+    # PayMongo Online Payment & Webhook Routes
+    # ------------------------------------------------------------------
+    @app.post("/api/webhooks/paymongo")
+    def paymongo_webhook():
+        conn = get_db()
+        raw_payload = request.get_data()
+        signature_header = request.headers.get("Paymongo-Signature", "")
+
+        secret_settings = get_settings(conn, include_secrets=True)
+        webhook_secret = secret_settings.get("paymongo_webhook_secret", "")
+
+        if webhook_secret:
+            if not verify_webhook_signature(raw_payload, signature_header, webhook_secret):
+                return jsonify({"error": "Invalid signature"}), 400
+
+        try:
+            event_payload = json.loads(raw_payload.decode("utf-8"))
+        except Exception:
+            return jsonify({"error": "Invalid JSON"}), 400
+
+        details = extract_payment_details_from_webhook(event_payload)
+        if not details:
+            return jsonify({"received": True, "handled": False}), 200
+
+        link_id = details.get("link_id")
+        remarks = details.get("remarks")
+
+        booking_row = None
+        if link_id:
+            booking_row = conn.execute(
+                "SELECT * FROM bookings WHERE payment_link_id = ?", (link_id,)
+            ).fetchone()
+        if not booking_row and remarks:
+            booking_row = conn.execute(
+                "SELECT * FROM bookings WHERE booking_code = ?", (remarks,)
+            ).fetchone()
+
+        if not booking_row:
+            return jsonify({"received": True, "booking_not_found": True}), 200
+
+        booking_id = int(booking_row["id"])
+        now = datetime.now().isoformat(timespec="seconds")
+
+        if booking_row["payment_status"] == "verified":
+            return jsonify({"received": True, "already_verified": True}), 200
+
+        payment_id = details.get("payment_id") or ""
+        ref_to_save = payment_id or booking_row["payment_reference"] or ""
+
+        with conn:
+            conn.execute(
+                """
+                UPDATE bookings
+                SET status = CASE WHEN status = 'pending' THEN 'confirmed' ELSE status END,
+                    payment_status = 'verified',
+                    payment_channel = 'paymongo',
+                    payment_reference = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (ref_to_save, now, booking_id),
+            )
+
+        updated_row = _fetch_booking_by_id(conn, booking_id)
+        if updated_row:
+            booking_data = _serialize_booking(updated_row)
+            shop_row = conn.execute(
+                "SELECT * FROM shops WHERE id = ?", (updated_row["shop_id"],)
+            ).fetchone()
+            shop_data = _serialize_shop(shop_row, include_private=True) if shop_row else {}
+            _dispatch_alert(
+                notify_payment_verified,
+                secret_settings,
+                shop_data,
+                booking_data,
+                details,
+            )
+
+        return jsonify({"received": True, "verified": True, "booking_code": booking_row["booking_code"]}), 200
+
+    @app.post("/api/bookings/<int:booking_id>/paymongo-link")
+    def generate_booking_paymongo_link(booking_id: int):
+        conn = get_db()
+        booking = _fetch_booking_by_id(conn, booking_id)
+        if not booking:
+            return jsonify({"error": "Booking not found."}), 404
+
+        if booking["payment_status"] == "verified":
+            return jsonify({"error": "Booking payment has already been verified."}), 400
+
+        if booking["payment_checkout_url"]:
+            return jsonify(
+                {
+                    "checkout_url": booking["payment_checkout_url"],
+                    "link_id": booking["payment_link_id"],
+                    "booking_code": booking["booking_code"],
+                }
+            )
+
+        secret_settings = get_settings(conn, include_secrets=True)
+        pm_key = secret_settings.get("paymongo_secret_key")
+        if not pm_key:
+            return jsonify({"error": "Online payment is not configured on this platform."}), 400
+
+        res_fee = float(booking["reservation_fee"] or 0)
+        total_amt = float(booking["total_price"] or 0)
+        charge_amount = res_fee if res_fee >= 20 else total_amt
+
+        bike_name = booking["bike_name"] if "bike_name" in booking.keys() else "Motorbike"
+        desc = f"Motoride Camiguin — {booking['booking_code']} ({bike_name})"
+        ok, link_res = create_payment_link(
+            secret_key=pm_key,
+            amount_php=charge_amount,
+            description=desc,
+            remarks=booking["booking_code"],
+        )
+        if not ok or not isinstance(link_res, dict):
+            return jsonify({"error": f"Failed to generate payment link: {link_res}"}), 502
+
+        checkout_url = link_res.get("checkout_url", "")
+        link_id = link_res.get("link_id", "")
+        with conn:
+            conn.execute(
+                "UPDATE bookings SET payment_link_id = ?, payment_checkout_url = ?, payment_channel = 'paymongo' WHERE id = ?",
+                (link_id, checkout_url, booking_id),
+            )
+
+        return jsonify(
+            {
+                "checkout_url": checkout_url,
+                "link_id": link_id,
+                "booking_code": booking["booking_code"],
+            }
+        )
+
+    @app.get("/api/bookings/<int:booking_id>/paymongo-sync")
+    def sync_booking_paymongo_status(booking_id: int):
+        conn = get_db()
+        booking = _fetch_booking_by_id(conn, booking_id)
+        if not booking:
+            return jsonify({"error": "Booking not found."}), 404
+
+        if booking["payment_status"] == "verified":
+            return jsonify({"booking": _serialize_booking(booking), "status": "already_verified"})
+
+        link_id = booking["payment_link_id"]
+        if not link_id:
+            return jsonify({"error": "No PayMongo payment link associated with this booking."}), 400
+
+        secret_settings = get_settings(conn, include_secrets=True)
+        pm_key = secret_settings.get("paymongo_secret_key")
+        if not pm_key:
+            return jsonify({"error": "Online payment is not configured on this platform."}), 400
+
+        ok, link_res = get_payment_link(pm_key, link_id)
+        if not ok or not isinstance(link_res, dict):
+            return jsonify({"error": f"Failed to fetch payment link status: {link_res}"}), 502
+
+        link_status = link_res.get("status", "")
+        if link_status == "paid":
+            payments = link_res.get("payments", [])
+            payment_id = payments[0].get("id", "") if payments else ""
+            now = datetime.now().isoformat(timespec="seconds")
+            with conn:
+                conn.execute(
+                    """
+                    UPDATE bookings
+                    SET status = CASE WHEN status = 'pending' THEN 'confirmed' ELSE status END,
+                        payment_status = 'verified',
+                        payment_reference = COALESCE(NULLIF(payment_reference, ''), ?),
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (payment_id, now, booking_id),
+                )
+            updated_booking = _fetch_booking_by_id(conn, booking_id)
+            booking_data = _serialize_booking(updated_booking)
+            shop_row = conn.execute(
+                "SELECT * FROM shops WHERE id = ?", (updated_booking["shop_id"],)
+            ).fetchone()
+            shop_data = _serialize_shop(shop_row, include_private=True) if shop_row else {}
+            _dispatch_alert(
+                notify_payment_verified,
+                secret_settings,
+                shop_data,
+                booking_data,
+                {
+                    "link_id": link_id,
+                    "payment_id": payment_id,
+                    "amount_paid": link_res.get("amount", 0) / 100.0,
+                    "fee": 0,
+                    "net_amount": link_res.get("amount", 0) / 100.0,
+                    "status": "paid",
+                },
+            )
+            return jsonify({"booking": booking_data, "status": "paid", "updated": True})
+
+        return jsonify({"booking": _serialize_booking(booking), "status": link_status, "updated": False})
 
     # ------------------------------------------------------------------
     # Shared Bike Extraction Helper (Admin & Partner)
@@ -2899,6 +3150,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             "smtp_port",
             "smtp_username",
             "smtp_from_email",
+            "paymongo_public_key",
         )
         numeric_keys = {
             "delivery_fee",
@@ -2970,6 +3222,16 @@ def create_app(test_config: dict | None = None) -> Flask:
             updates["smtp_password"] = ""
         elif isinstance(payload.get("smtp_password"), str) and payload["smtp_password"].strip():
             updates["smtp_password"] = payload["smtp_password"].strip()
+
+        if payload.get("clear_paymongo_secret_key"):
+            updates["paymongo_secret_key"] = ""
+        elif isinstance(payload.get("paymongo_secret_key"), str) and payload["paymongo_secret_key"].strip():
+            updates["paymongo_secret_key"] = payload["paymongo_secret_key"].strip()
+
+        if payload.get("clear_paymongo_webhook_secret"):
+            updates["paymongo_webhook_secret"] = ""
+        elif isinstance(payload.get("paymongo_webhook_secret"), str) and payload["paymongo_webhook_secret"].strip():
+            updates["paymongo_webhook_secret"] = payload["paymongo_webhook_secret"].strip()
 
         old_qr_url = ""
         if _as_bool(payload.get("clear_gcash_qr")):
