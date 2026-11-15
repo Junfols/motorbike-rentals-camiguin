@@ -421,6 +421,13 @@
 
             ${b.payment_reference ? `<div class="text-muted"><strong>${escapeHtml(payChannelLabel)} Ref #:</strong> ${escapeHtml(b.payment_reference)}</div>` : ""}
             ${b.delivery_address ? `<div class="text-muted"><strong>Delivery to:</strong> ${escapeHtml(b.delivery_address)}${b.google_maps_url ? ` &bull; <a href="${escapeHtml(b.google_maps_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.75rem;display:inline-flex;align-items:center;gap:4px;">🗺️ Open GPS Navigation</a>` : ""}</div>` : ""}
+            ${b.contract_agreed || b.signature_url || b.license_photo_url ? `
+              <div class="contract-badge-row" style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:0.8rem;">
+                <span class="badge badge-verified">&#128221; Digital Contract Signed</span>
+                ${b.license_photo_url ? `<a href="${escapeHtml(b.license_photo_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.75rem;">&#129674; Driver's License Photo</a>` : ""}
+                ${b.signature_url ? `<a href="${escapeHtml(b.signature_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.75rem;">&#9997;&#65039; Signature</a>` : ""}
+              </div>
+            ` : ""}
             ${b.notes ? `<div class="text-muted"><strong>Rider note:</strong> ${escapeHtml(b.notes)}</div>` : ""}
 
             <div class="admin-booking-actions">

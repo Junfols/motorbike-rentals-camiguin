@@ -11,6 +11,17 @@
   const savedListEl = document.getElementById("saved-trips-list");
   const clearSavedBtn = document.getElementById("clear-saved-trips-btn");
 
+  const contractModal = document.getElementById("contract-modal");
+  const contractContent = document.getElementById("contract-modal-body-content");
+  const reviewModal = document.getElementById("review-modal");
+  const reviewForm = document.getElementById("review-form");
+  const reviewError = document.getElementById("review-form-error");
+  const starPicker = document.getElementById("star-picker");
+  const starRatingText = document.getElementById("star-rating-text");
+  const reviewRatingVal = document.getElementById("review-rating-val");
+
+  let activeBooking = null;
+
   const STORAGE_KEY = "motoride_recent_trips";
 
   function statusLabel(status) {
@@ -93,6 +104,7 @@
   }
 
   function renderLookupResult(b) {
+    activeBooking = b;
     const canCancel = b.status === "pending";
     const waDigits = (b.shop_whatsapp || shop.whatsapp_number || "").replace(/\D+/g, "");
     const waLink = waDigits
@@ -162,6 +174,16 @@
 
         <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;">
           ${
+            b.contract_agreed || b.signature_url || b.license_photo_url
+              ? `<button type="button" class="btn btn-outline btn-sm" id="view-contract-btn">📝 View Rental Contract &amp; ID</button>`
+              : ""
+          }
+          ${
+            ["confirmed", "active", "completed"].includes(b.status)
+              ? `<button type="button" class="btn btn-primary btn-sm" id="leave-review-btn">⭐ Leave Review</button>`
+              : ""
+          }
+          ${
             b.payment_checkout_url && b.payment_status !== "verified" && b.status !== "cancelled"
               ? `<a href="${escapeHtml(b.payment_checkout_url)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm" style="background:#008060;border-color:#008060;">⚡ Pay Online (QR Ph / GCash)</a>
                  <button type="button" class="btn btn-sm btn-outline" id="sync-pm-btn" data-booking-id="${b.id}" data-code="${escapeHtml(b.booking_code)}" data-phone="${escapeHtml(b.customer_phone)}">Sync Payment Status</button>`
@@ -183,6 +205,157 @@
     lookupResult.classList.remove("hidden");
   }
 
+  function openContractModal(b) {
+    if (!contractModal || !contractContent) return;
+    contractContent.innerHTML = `
+      <div style="padding:10px 0;">
+        <div style="background:#f8fafc;padding:12px;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div>
+              <strong style="font-size:1.05rem;">Booking #${escapeHtml(b.booking_code)}</strong>
+              <div class="text-muted">${escapeHtml(b.bike_name)} &bull; ${escapeHtml(b.pickup_date)} to ${escapeHtml(b.return_date)}</div>
+            </div>
+            <span class="badge badge-verified">&#10003; Signed Digital Agreement</span>
+          </div>
+          <div style="margin-top:6px;font-size:0.85rem;color:#475569;">
+            <strong>Renter:</strong> ${escapeHtml(b.customer_name)} &bull; <strong>License:</strong> ${escapeHtml(b.license_number)}
+            ${b.contract_signed_at ? `<br><strong>Signed At:</strong> ${escapeHtml(b.contract_signed_at)}` : ""}
+          </div>
+        </div>
+
+        <div style="background:#ffffff;padding:12px;border-radius:8px;border:1px solid #e2e8f0;font-size:0.85rem;margin-bottom:14px;">
+          <h4 style="margin:0 0 6px;">📄 Standard Rental Terms Acknowledged</h4>
+          <ul style="margin:0;padding-left:18px;line-height:1.5;color:#475569;">
+            <li>Renter certifies holding a valid driver's license authorized for motorcycle riding in the Philippines.</li>
+            <li>Renter and backrider agree to wear helmets at all times on Camiguin roads.</li>
+            <li>The motorbike shall be kept on Camiguin Island during the entire rental period.</li>
+            <li>Security deposit will be refunded upon inspection and key return to ${escapeHtml(b.shop_name || "the partner shop")}.</li>
+          </ul>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;">
+          <div style="border:1px solid #cbd5e1;border-radius:8px;padding:10px;background:#f8fafc;text-align:center;">
+            <strong style="display:block;margin-bottom:6px;font-size:0.88rem;">&#129674; Driver's License Photo</strong>
+            ${
+              b.license_photo_url
+                ? `<a href="${escapeHtml(b.license_photo_url)}" target="_blank" rel="noopener"><img src="${escapeHtml(b.license_photo_url)}" alt="Driver's License" style="max-width:100%;max-height:160px;object-fit:contain;border-radius:6px;border:1px solid #e2e8f0;"></a>`
+                : `<div class="text-muted" style="padding:20px 0;">No license photo uploaded</div>`
+            }
+          </div>
+
+          <div style="border:1px solid #cbd5e1;border-radius:8px;padding:10px;background:#f8fafc;text-align:center;">
+            <strong style="display:block;margin-bottom:6px;font-size:0.88rem;">&#9997;&#65039; Digital Finger Signature</strong>
+            ${
+              b.signature_url
+                ? `<a href="${escapeHtml(b.signature_url)}" target="_blank" rel="noopener"><img src="${escapeHtml(b.signature_url)}" alt="Digital Signature" style="max-width:100%;max-height:160px;object-fit:contain;background:#ffffff;border-radius:6px;border:1px solid #e2e8f0;padding:4px;"></a>`
+                : `<div class="text-muted" style="padding:20px 0;">No signature recorded</div>`
+            }
+          </div>
+        </div>
+
+        <div class="info-box" style="margin-top:14px;background:#f0fdf4;border-color:#bbf7d0;">
+          <strong style="color:#166534;">&#127881; Express Key Handover Ready</strong>
+          <p class="text-muted" style="margin:4px 0 0;font-size:0.83rem;">Your contract and license are securely verified on file. When you meet your delivery driver or arrive at ${escapeHtml(b.shop_name || "the rental shop")}, just show this screen to collect your helmet and keys immediately!</p>
+        </div>
+      </div>
+    `;
+    contractModal.classList.remove("hidden");
+  }
+
+  function openReviewModal(b) {
+    if (!reviewModal || !reviewForm) return;
+    document.getElementById("review-booking-code").value = b.booking_code;
+    document.getElementById("review-bike-id").value = b.bike_id;
+    document.getElementById("review-customer-name").value = b.customer_name || "";
+    reviewRatingVal.value = "5";
+    updateStarDisplay(5);
+    reviewError.classList.add("hidden");
+    reviewError.textContent = "";
+    reviewModal.classList.remove("hidden");
+  }
+
+  function updateStarDisplay(val) {
+    if (!starPicker) return;
+    const stars = starPicker.querySelectorAll(".star-pick");
+    stars.forEach((s) => {
+      const v = Number(s.getAttribute("data-val"));
+      if (v <= val) {
+        s.style.color = "#f59e0b";
+      } else {
+        s.style.color = "#cbd5e1";
+      }
+    });
+    const labels = {
+      1: "1 out of 5 — Poor",
+      2: "2 out of 5 — Fair",
+      3: "3 out of 5 — Good",
+      4: "4 out of 5 — Very Good",
+      5: "5 out of 5 — Excellent!",
+    };
+    if (starRatingText) {
+      starRatingText.textContent = labels[val] || `${val} out of 5`;
+    }
+  }
+
+  if (starPicker) {
+    starPicker.addEventListener("click", (e) => {
+      const star = e.target.closest(".star-pick");
+      if (!star) return;
+      const val = Number(star.getAttribute("data-val") || 5);
+      reviewRatingVal.value = String(val);
+      updateStarDisplay(val);
+    });
+  }
+
+  if (reviewForm) {
+    reviewForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      reviewError.classList.add("hidden");
+      reviewError.textContent = "";
+
+      const btn = document.getElementById("submit-review-btn");
+      btn.disabled = true;
+      btn.textContent = "Submitting Review...";
+
+      try {
+        const payload = {
+          booking_code: document.getElementById("review-booking-code").value,
+          bike_id: Number(document.getElementById("review-bike-id").value),
+          rating: Number(reviewRatingVal.value),
+          customer_name: document.getElementById("review-customer-name").value.trim(),
+          comment: document.getElementById("review-comment").value.trim(),
+        };
+
+        const res = await fetch("/api/reviews", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Could not submit review.");
+
+        showToast("Daghang salamat! Your 5-star review has been published ⭐", "success");
+        reviewModal.classList.add("hidden");
+        reviewForm.reset();
+      } catch (err) {
+        reviewError.textContent = err.message;
+        reviewError.classList.remove("hidden");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Submit Review ⭐";
+      }
+    });
+  }
+
+  document.addEventListener("click", (e) => {
+    const closeBtn = e.target.closest("[data-close-modal]");
+    if (closeBtn) {
+      const targetId = closeBtn.getAttribute("data-close-modal");
+      const targetEl = document.getElementById(targetId);
+      if (targetEl) targetEl.classList.add("hidden");
+    }
+  });
+
   lookupForm.addEventListener("submit", (event) => {
     event.preventDefault();
     runLookup(codeInput.value, phoneInput.value);
@@ -199,6 +372,18 @@
   });
 
   lookupResult.addEventListener("click", async (event) => {
+    const contractBtn = event.target.closest("#view-contract-btn");
+    if (contractBtn && activeBooking) {
+      openContractModal(activeBooking);
+      return;
+    }
+
+    const reviewBtn = event.target.closest("#leave-review-btn");
+    if (reviewBtn && activeBooking) {
+      openReviewModal(activeBooking);
+      return;
+    }
+
     const syncBtn = event.target.closest("#sync-pm-btn");
     if (syncBtn) {
       const bId = syncBtn.getAttribute("data-booking-id");

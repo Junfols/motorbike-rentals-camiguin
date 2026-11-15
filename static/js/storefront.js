@@ -690,6 +690,11 @@
               </div>
               <div class="bike-card-title-row">
                 <h3 class="bike-card-title">${escapeHtml(bike.name)}</h3>
+                <div class="bike-rating-pill" title="Average tourist rating">
+                  <span class="rating-star">&#9733;</span>
+                  <strong>${Number(bike.rating_avg || 5.0).toFixed(1)}</strong>
+                  <span class="rating-count">(${bike.rating_count || 0})</span>
+                </div>
               </div>
               <div class="bike-specs-row">
                 <span class="spec-pill">${bike.engine_cc}cc</span>
@@ -896,6 +901,27 @@
                 `<span class="booked-range-pill">${escapeHtml(formatDateRangeShort(r.pickup_date, r.return_date))}</span>`
             )
             .join("");
+        }
+      }
+
+      const avgEl = document.getElementById("modal-rating-avg");
+      if (avgEl) avgEl.textContent = Number(bike.rating_avg || 5.0).toFixed(1);
+      const countEl = document.getElementById("modal-rating-count");
+      if (countEl) countEl.textContent = String(bike.rating_count || 0);
+      const reviewsListEl = document.getElementById("modal-reviews-list");
+      if (reviewsListEl) {
+        if (Array.isArray(bike.reviews) && bike.reviews.length) {
+          reviewsListEl.innerHTML = bike.reviews.map(r => `
+            <div style="padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:0.8rem;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <strong>${escapeHtml(r.customer_name)}</strong>
+                <span style="color:#f59e0b;">${'★'.repeat(Math.max(1, Math.min(5, r.rating || 5)))}</span>
+              </div>
+              <div class="text-muted" style="margin-top:2px;">&ldquo;${escapeHtml(r.comment)}&rdquo;</div>
+            </div>
+          `).join("");
+        } else {
+          reviewsListEl.innerHTML = `<div class="text-muted" style="font-size:0.82rem;">No reviews yet for this motorbike.</div>`;
         }
       }
 
@@ -1801,6 +1827,124 @@
     });
   }
 
+  // Digital Contract & Signature Pad setup
+  const licenseInput = document.getElementById("booking-license-photo");
+  const licensePreviewWrap = document.getElementById("license-preview-container");
+  const licensePreviewImg = document.getElementById("license-preview-img");
+  const removeLicenseBtn = document.getElementById("remove-license-photo-btn");
+
+  if (licenseInput) {
+    licenseInput.addEventListener("change", () => {
+      const file = licenseInput.files && licenseInput.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          if (licensePreviewImg) licensePreviewImg.src = e.target.result;
+          if (licensePreviewWrap) licensePreviewWrap.classList.remove("hidden");
+        };
+        reader.readAsDataURL(file);
+      } else {
+        if (licensePreviewWrap) licensePreviewWrap.classList.add("hidden");
+      }
+    });
+  }
+
+  if (removeLicenseBtn && licenseInput) {
+    removeLicenseBtn.addEventListener("click", () => {
+      licenseInput.value = "";
+      if (licensePreviewWrap) licensePreviewWrap.classList.add("hidden");
+      if (licensePreviewImg) licensePreviewImg.src = "";
+    });
+  }
+
+  const sigCanvas = document.getElementById("signature-pad");
+  const sigStatus = document.getElementById("signature-status");
+  const clearSigBtn = document.getElementById("clear-signature-btn");
+  let isDrawingSig = false;
+  let hasSigned = false;
+
+  function initSignaturePad() {
+    if (!sigCanvas) return;
+    const ctx = sigCanvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.strokeStyle = "#0f172a";
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    function getPos(e) {
+      const rect = sigCanvas.getBoundingClientRect();
+      const scaleX = sigCanvas.width / (rect.width || 1);
+      const scaleY = sigCanvas.height / (rect.height || 1);
+      if (e.touches && e.touches[0]) {
+        return {
+          x: (e.touches[0].clientX - rect.left) * scaleX,
+          y: (e.touches[0].clientY - rect.top) * scaleY,
+        };
+      }
+      return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY,
+      };
+    }
+
+    function startDraw(e) {
+      isDrawingSig = true;
+      hasSigned = true;
+      const pos = getPos(e);
+      ctx.beginPath();
+      ctx.moveTo(pos.x, pos.y);
+      if (sigStatus) {
+        sigStatus.textContent = "✓ Signature recorded";
+        sigStatus.style.color = "#16a34a";
+      }
+    }
+
+    function draw(e) {
+      if (!isDrawingSig) return;
+      if (e.cancelable) e.preventDefault();
+      const pos = getPos(e);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+    }
+
+    function stopDraw() {
+      if (!isDrawingSig) return;
+      isDrawingSig = false;
+      ctx.closePath();
+    }
+
+    sigCanvas.addEventListener("mousedown", startDraw);
+    sigCanvas.addEventListener("mousemove", draw);
+    window.addEventListener("mouseup", stopDraw);
+
+    sigCanvas.addEventListener("touchstart", (e) => {
+      if (e.cancelable) e.preventDefault();
+      startDraw(e);
+    }, { passive: false });
+    sigCanvas.addEventListener("touchmove", (e) => {
+      if (e.cancelable) e.preventDefault();
+      draw(e);
+    }, { passive: false });
+    sigCanvas.addEventListener("touchend", stopDraw);
+
+    if (clearSigBtn) {
+      clearSigBtn.addEventListener("click", () => {
+        ctx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
+        hasSigned = false;
+        if (sigStatus) {
+          sigStatus.textContent = "✍️ Sign above using finger or stylus";
+          sigStatus.style.color = "";
+        }
+        const sigDataInput = document.getElementById("booking-signature-data");
+        if (sigDataInput) sigDataInput.value = "";
+      });
+    }
+  }
+
+  initSignaturePad();
+
   if (bookingForm) {
     bookingForm.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -1817,6 +1961,23 @@
           } catch (_) {}
         }
         return;
+      }
+
+      const contractAgree = document.getElementById("booking-contract-agree");
+      if (contractAgree && !contractAgree.checked) {
+        const msg = "Please agree to the Digital Rental Agreement before submitting.";
+        bookingFormError.textContent = msg;
+        bookingFormError.classList.remove("hidden");
+        showToast(msg, "error");
+        contractAgree.focus();
+        return;
+      }
+
+      let sigData = "";
+      if (sigCanvas && hasSigned) {
+        try {
+          sigData = sigCanvas.toDataURL("image/png");
+        } catch (_) {}
       }
 
       const payload = {
@@ -1889,14 +2050,18 @@
 
       try {
         let fetchOpts;
-        if (proofFile && paymentActive && selectedChannel !== "pay_at_shop") {
+        const licenseFile = licenseInput && licenseInput.files ? licenseInput.files[0] : null;
+        if ((proofFile && paymentActive && selectedChannel !== "pay_at_shop") || licenseFile || sigData) {
           const fd = new FormData();
           Object.entries(payload).forEach(([k, v]) => {
             fd.append(k, typeof v === "boolean" ? (v ? "true" : "false") : String(v ?? ""));
           });
           fd.append("payment_channel", selectedChannel);
-          fd.append("payment_reference", paymentReference);
-          fd.append("payment_proof", proofFile);
+          fd.append("payment_reference", selectedChannel === "pay_at_shop" ? "" : paymentReference);
+          if (proofFile) fd.append("payment_proof", proofFile);
+          if (licenseFile) fd.append("license_photo", licenseFile);
+          if (sigData) fd.append("signature_data", sigData);
+          fd.append("contract_agreed", "1");
           fetchOpts = { method: "POST", body: fd };
         } else {
           fetchOpts = {
@@ -1906,6 +2071,8 @@
               ...payload,
               payment_channel: selectedChannel,
               payment_reference: selectedChannel === "pay_at_shop" ? "" : paymentReference,
+              signature_data: sigData,
+              contract_agreed: true,
             }),
           };
         }
@@ -1919,6 +2086,8 @@
         saveRecentTrip(booking);
         closeModal("booking-modal");
         bookingForm.reset();
+        if (clearSigBtn) clearSigBtn.click();
+        if (licensePreviewWrap) licensePreviewWrap.classList.add("hidden");
         syncReturnDateUi();
         deliveryAddressGroup.classList.add("hidden");
         deliveryAddressInput.required = false;
@@ -1992,6 +2161,21 @@
       }
     });
   }
+
+  document.addEventListener("click", (e) => {
+    const guideBtn = e.target.closest("[data-guide-category]");
+    if (guideBtn) {
+      const cat = guideBtn.getAttribute("data-guide-category");
+      const fleetEl = document.getElementById("fleet");
+      if (fleetEl) {
+        fleetEl.scrollIntoView({ behavior: "smooth" });
+      }
+      const pill = document.querySelector(`#category-pills [data-category="${cat}"]`);
+      if (pill) {
+        pill.click();
+      }
+    }
+  });
 
   bindDatePickerPlaceholder(searchReturnInput);
   bindDatePickerPlaceholder(bookingReturn);
