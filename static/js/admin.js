@@ -269,6 +269,7 @@
       .map((s) => {
         const actions = [];
         if (!s.is_main) {
+          actions.push(`<button type="button" class="btn btn-sm btn-primary" data-set-main-shop="${s.id}">Set as Main Hub</button>`);
           if (s.status !== "approved") {
             actions.push(`<button type="button" class="btn btn-sm btn-success" data-shop-action="approved" data-id="${s.id}">Approve Shop</button>`);
           }
@@ -777,6 +778,9 @@
       document.getElementById("edit-bike-id").value = "";
       if (adminState.fleetShopId) {
         editBikeShopSelect.value = adminState.fleetShopId;
+      } else {
+        const mainShop = (adminState.allShops || []).find((s) => s.is_main);
+        if (mainShop) editBikeShopSelect.value = String(mainShop.id);
       }
       document.getElementById("edit-bike-image-url").value = "/static/images/bike-click125.jpg";
     }
@@ -901,6 +905,25 @@
   });
 
   partnersList.addEventListener("click", async (event) => {
+    const mainBtn = event.target.closest("[data-set-main-shop]");
+    if (mainBtn) {
+      const id = mainBtn.getAttribute("data-set-main-shop");
+      mainBtn.disabled = true;
+      try {
+        const res = await apiJson(`/api/admin/shops/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_main: true }),
+        });
+        await Promise.all([loadDashboard(), loadPartners(), loadFleet()]);
+        showToast(`${res.shop.shop_name} is now the Main Hub!`, "success");
+      } catch (err) {
+        showToast(err.message, "error");
+        mainBtn.disabled = false;
+      }
+      return;
+    }
+
     const actionBtn = event.target.closest("[data-shop-action]");
     if (actionBtn) {
       const id = actionBtn.getAttribute("data-id");
