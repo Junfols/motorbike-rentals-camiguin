@@ -108,12 +108,92 @@
     });
   }
 
+  function getShopInitials(name) {
+    const words = String(name || "Shop")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!words.length) return "SH";
+    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+    return `${words[0][0]}${words[1][0]}`.toUpperCase();
+  }
+
+  function getPartnerPublicUrl(shop) {
+    if (!shop) return `${window.location.origin}/`;
+    const slug = shop.slug || shop.id;
+    return `${window.location.origin}/shop/${encodeURIComponent(slug)}`;
+  }
+
   function renderShopHeader(shop) {
     state.shop = shop;
     shopTitle.textContent = shop.shop_name;
     shopSubtitle.textContent = `${shop.municipality}, Camiguin • ${shop.owner_name} • ${shop.email}`;
     shopStatusBadge.className = `badge badge-${escapeHtml(shop.status)}`;
     shopStatusBadge.textContent = statusLabel(shop.status);
+
+    const initials = getShopInitials(shop.shop_name);
+    const topAvatar = document.getElementById("partner-top-avatar");
+    if (topAvatar) {
+      if (shop.logo_url) {
+        topAvatar.innerHTML = `<img src="${escapeHtml(shop.logo_url)}" alt="${escapeHtml(shop.shop_name)}" class="partner-top-avatar-img">`;
+      } else {
+        topAvatar.textContent = initials;
+      }
+    }
+
+    const publicUrl = getPartnerPublicUrl(shop);
+    const publicPath = shop.share_url || `/shop/${encodeURIComponent(shop.slug || shop.id)}`;
+    const fbShareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(publicUrl)}`;
+
+    const topPreviewLink = document.getElementById("partner-preview-shop-link");
+    if (topPreviewLink) topPreviewLink.href = publicPath;
+
+    const openPublicBtn = document.getElementById("prof-open-public-btn");
+    if (openPublicBtn) openPublicBtn.href = publicPath;
+
+    const fbShareBtn = document.getElementById("prof-fb-share-btn");
+    if (fbShareBtn) fbShareBtn.href = fbShareUrl;
+
+    const shareUrlInput = document.getElementById("prof-share-url-input");
+    if (shareUrlInput) shareUrlInput.value = publicUrl;
+
+    const previewName = document.getElementById("prof-preview-shop-name");
+    if (previewName) previewName.textContent = shop.shop_name || "Partner Shop";
+
+    const previewMeta = document.getElementById("prof-preview-shop-meta");
+    if (previewMeta) {
+      previewMeta.textContent = [shop.address, `${shop.municipality || "Mambajao"}, Camiguin`]
+        .filter(Boolean)
+        .join(" • ");
+    }
+
+    const coverImg = document.getElementById("prof-cover-preview-img");
+    const clearCoverBtn = document.getElementById("prof-clear-cover-btn");
+    if (coverImg) {
+      coverImg.src = shop.cover_url || "/static/images/hero-scooter.jpg";
+    }
+    if (clearCoverBtn) {
+      clearCoverBtn.classList.toggle("hidden", !shop.cover_url);
+    }
+
+    const logoImg = document.getElementById("prof-logo-preview-img");
+    const logoFallback = document.getElementById("prof-logo-fallback");
+    const clearLogoBtn = document.getElementById("prof-clear-logo-btn");
+    if (logoImg && logoFallback) {
+      if (shop.logo_url) {
+        logoImg.src = shop.logo_url;
+        logoImg.classList.remove("hidden");
+        logoFallback.classList.add("hidden");
+      } else {
+        logoImg.src = "";
+        logoImg.classList.add("hidden");
+        logoFallback.textContent = initials;
+        logoFallback.classList.remove("hidden");
+      }
+    }
+    if (clearLogoBtn) {
+      clearLogoBtn.classList.toggle("hidden", !shop.logo_url);
+    }
 
     if (shop.status === "pending") {
       statusBanner.className = "status-notice pending";
@@ -652,31 +732,116 @@
     }
   }
 
+  async function uploadPartnerBrandingMedia(formData, successMessage) {
+    profileError.classList.add("hidden");
+    try {
+      const data = await apiJson("/api/partner/profile/media", {
+        method: "POST",
+        body: formData,
+      });
+      if (data && data.shop) {
+        renderShopHeader(data.shop);
+      }
+      showToast(successMessage || "Shop photo updated!", "success");
+    } catch (err) {
+      profileError.textContent = err.message;
+      profileError.classList.remove("hidden");
+      showToast(err.message, "error");
+    }
+  }
+
+  const profLogoFile = document.getElementById("prof-logo-file");
+  if (profLogoFile) {
+    profLogoFile.addEventListener("change", async () => {
+      if (!profLogoFile.files || !profLogoFile.files[0]) return;
+      const fd = new FormData();
+      fd.append("logo_image", profLogoFile.files[0]);
+      await uploadPartnerBrandingMedia(fd, "Profile picture uploaded!");
+      profLogoFile.value = "";
+    });
+  }
+
+  const profCoverFile = document.getElementById("prof-cover-file");
+  if (profCoverFile) {
+    profCoverFile.addEventListener("change", async () => {
+      if (!profCoverFile.files || !profCoverFile.files[0]) return;
+      const fd = new FormData();
+      fd.append("cover_image", profCoverFile.files[0]);
+      await uploadPartnerBrandingMedia(fd, "Cover photo uploaded!");
+      profCoverFile.value = "";
+    });
+  }
+
+  const clearLogoBtn = document.getElementById("prof-clear-logo-btn");
+  if (clearLogoBtn) {
+    clearLogoBtn.addEventListener("click", async () => {
+      const fd = new FormData();
+      fd.append("clear_logo", "1");
+      await uploadPartnerBrandingMedia(fd, "Profile picture removed.");
+    });
+  }
+
+  const clearCoverBtn = document.getElementById("prof-clear-cover-btn");
+  if (clearCoverBtn) {
+    clearCoverBtn.addEventListener("click", async () => {
+      const fd = new FormData();
+      fd.append("clear_cover", "1");
+      await uploadPartnerBrandingMedia(fd, "Cover photo removed.");
+    });
+  }
+
+  async function copyShopShareLink() {
+    const url = getPartnerPublicUrl(state.shop);
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast("Shop profile link copied! Ready to paste on your Facebook Page.", "success");
+    } catch (_) {
+      showToast(`Shop Link: ${url}`, "success");
+    }
+  }
+
+  const quickCopyLinkBtn = document.getElementById("partner-quick-copy-link-btn");
+  if (quickCopyLinkBtn) {
+    quickCopyLinkBtn.addEventListener("click", copyShopShareLink);
+  }
+
+  const profCopyLinkBtn = document.getElementById("prof-copy-link-btn");
+  if (profCopyLinkBtn) {
+    profCopyLinkBtn.addEventListener("click", copyShopShareLink);
+  }
+
   profileForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     profileError.classList.add("hidden");
     try {
+      const fd = new FormData();
+      fd.append("shop_name", document.getElementById("prof-shop-name").value.trim());
+      fd.append("owner_name", document.getElementById("prof-owner-name").value.trim());
+      fd.append("phone", document.getElementById("prof-phone").value.trim());
+      fd.append("whatsapp_number", document.getElementById("prof-whatsapp").value.trim());
+      fd.append("telegram_chat_id", document.getElementById("prof-telegram-chat-id").value.trim());
+      fd.append("municipality", document.getElementById("prof-municipality").value);
+      fd.append("delivery_fee", document.getElementById("prof-delivery-fee").value);
+      fd.append("address", document.getElementById("prof-address").value.trim());
+      fd.append("description", document.getElementById("prof-description").value.trim());
+      fd.append("current_password", document.getElementById("prof-current-password").value);
+      fd.append("new_password", document.getElementById("prof-new-password").value);
+      if (profLogoFile && profLogoFile.files && profLogoFile.files[0]) {
+        fd.append("logo_image", profLogoFile.files[0]);
+      }
+      if (profCoverFile && profCoverFile.files && profCoverFile.files[0]) {
+        fd.append("cover_image", profCoverFile.files[0]);
+      }
       const data = await apiJson("/api/partner/profile", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          shop_name: document.getElementById("prof-shop-name").value.trim(),
-          owner_name: document.getElementById("prof-owner-name").value.trim(),
-          phone: document.getElementById("prof-phone").value.trim(),
-          whatsapp_number: document.getElementById("prof-whatsapp").value.trim(),
-          telegram_chat_id: document.getElementById("prof-telegram-chat-id").value.trim(),
-          municipality: document.getElementById("prof-municipality").value,
-          delivery_fee: document.getElementById("prof-delivery-fee").value,
-          address: document.getElementById("prof-address").value.trim(),
-          description: document.getElementById("prof-description").value.trim(),
-          current_password: document.getElementById("prof-current-password").value,
-          new_password: document.getElementById("prof-new-password").value,
-        }),
+        body: fd,
       });
       renderShopHeader(data.shop);
       updatePlatformAlertStatus(data);
       document.getElementById("prof-current-password").value = "";
       document.getElementById("prof-new-password").value = "";
+      if (profLogoFile) profLogoFile.value = "";
+      if (profCoverFile) profCoverFile.value = "";
       showToast("Shop profile saved!", "success");
     } catch (err) {
       profileError.textContent = err.message;
