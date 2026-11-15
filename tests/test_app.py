@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import os
@@ -1636,13 +1637,13 @@ class MotorbikeRentalPWATests(unittest.TestCase):
     def test_qr_upload_accepts_jfif_and_highres_images_and_network_first_scripts(self):
         with self.client.get("/sw.js") as sw_resp:
             sw_text = sw_resp.get_data(as_text=True)
-        self.assertIn("motoride-pwa-v16", sw_text)
+        self.assertIn("motoride-pwa-v17", sw_text)
         self.assertIn('/static/js/', sw_text)
 
         login_resp = self.client.post("/api/admin/login", json={"password": "admin1234"})
         self.assertEqual(login_resp.status_code, 200)
         admin_html = self.client.get("/admin").get_data(as_text=True)
-        self.assertIn('/static/js/admin.js?v=16', admin_html)
+        self.assertIn('/static/js/admin.js?v=17', admin_html)
         self.assertIn('.jfif', admin_html)
 
         # Windows/Edge/Messenger saves often use .jfif -> served cleanly as image/jpeg
@@ -1681,8 +1682,8 @@ class MotorbikeRentalPWATests(unittest.TestCase):
 
     def test_return_date_defaults_to_select_date_prompt_without_prefill(self):
         index_html = self.client.get("/").get_data(as_text=True)
-        self.assertIn('/static/css/style.css?v=16', index_html)
-        self.assertIn('/static/js/storefront.js?v=16', index_html)
+        self.assertIn('/static/css/style.css?v=17', index_html)
+        self.assertIn('/static/js/storefront.js?v=17', index_html)
         self.assertIn('class="bike-card"', index_html)
         self.assertNotIn('<div class="loading-state">Loading motorbikes...</div>', index_html)
         self.assertIn('id="modal-availability-calendar"', index_html)
@@ -1953,7 +1954,7 @@ class MotorbikeRentalPWATests(unittest.TestCase):
 
         partner_html = self.client.get("/partner").get_data(as_text=True)
         self.assertIn('id="bike-schedule-modal"', partner_html)
-        self.assertIn('/static/js/partner.js?v=16', partner_html)
+        self.assertIn('/static/js/partner.js?v=17', partner_html)
         admin_html = self.client.get("/admin").get_data(as_text=True)
         self.assertIn('id="bike-schedule-modal"', admin_html)
 
@@ -2310,6 +2311,92 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertIn('id="homepage-map"', index_html)
         self.assertIn('Camiguin Tourist &amp; Delivery Map', index_html)
         self.assertIn('Island Map 🗺️', index_html)
+
+    def test_digital_contract_route_guide_and_reviews(self):
+        # 1. Test homepage features: Route Guide & Verified Reviews
+        index_html = self.client.get("/").get_data(as_text=True)
+        self.assertIn('id="island-guide"', index_html)
+        self.assertIn('Where to Go in Camiguin &amp; Best Bike Match', index_html)
+        self.assertIn('Circumferential Highway Scenic Tour', index_html)
+        self.assertIn('Katibawasan &amp; Tuasan Mountain Ascent', index_html)
+        self.assertIn('Cross-Island Trans-Mountain Highway', index_html)
+        self.assertIn('Mantigue Island &amp; East Coast Trail', index_html)
+        self.assertIn('id="reviews-section"', index_html)
+        self.assertIn('Verified Tourist Reviews', index_html)
+        self.assertIn('bike-rating-pill', index_html)
+
+        # 2. Test booking with Digital Contract, License Upload, and E-Signature
+        png_1x1 = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+        sig_data_b64 = "data:image/png;base64," + base64.b64encode(png_1x1).decode("ascii")
+
+        booking_payload = {
+            "bike_id": 1,
+            "customer_name": "Maria Tourist",
+            "customer_phone": "09187654321",
+            "customer_email": "maria@tourist.ph",
+            "license_number": "D02-24-998877",
+            "pickup_date": "2026-11-20",
+            "return_date": "2026-11-22",
+            "pickup_time": "09:00",
+            "pickup_method": "shop",
+            "payment_channel": "pay_at_shop",
+            "contract_agreed": "1",
+            "signature_data": sig_data_b64,
+            "license_photo": (io.BytesIO(png_1x1), "license_photo.png"),
+        }
+
+        booking_resp = self.client.post(
+            "/api/bookings",
+            data=booking_payload,
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(booking_resp.status_code, 201)
+        booking = booking_resp.get_json()["booking"]
+        self.assertTrue(booking["contract_agreed"])
+        self.assertIsNotNone(booking["contract_signed_at"])
+        self.assertIsNotNone(booking["license_photo_url"])
+        self.assertIsNotNone(booking["signature_url"])
+
+        # Check lookup includes contract details
+        lookup_resp = self.client.get(
+            f"/api/bookings/lookup?code={booking['booking_code']}&phone=09187654321"
+        )
+        self.assertEqual(lookup_resp.status_code, 200)
+        lookup_booking = lookup_resp.get_json()["booking"]
+        self.assertTrue(lookup_booking["contract_agreed"])
+        self.assertEqual(lookup_booking["license_photo_url"], booking["license_photo_url"])
+        self.assertEqual(lookup_booking["signature_url"], booking["signature_url"])
+
+        # 3. Test Reviews API
+        rev_post = self.client.post(
+            "/api/reviews",
+            json={
+                "bike_id": 1,
+                "booking_code": booking["booking_code"],
+                "customer_name": "Maria Tourist",
+                "rating": 5,
+                "comment": "Had an unforgettable time exploring Camiguin! The Click 125 was very economical and handled the island road beautifully.",
+            },
+        )
+        self.assertEqual(rev_post.status_code, 201)
+        rev_data = rev_post.get_json()
+        self.assertTrue(rev_data["success"])
+        self.assertEqual(rev_data["review"]["rating"], 5)
+
+        # Test GET /api/reviews
+        get_revs = self.client.get("/api/reviews")
+        self.assertEqual(get_revs.status_code, 200)
+        revs_list = get_revs.get_json()["reviews"]
+        self.assertTrue(len(revs_list) >= 1)
+
+        # Test GET /api/bikes/1 includes reviews and rating stats
+        bike_resp = self.client.get("/api/bikes/1")
+        self.assertEqual(bike_resp.status_code, 200)
+        bike_data = bike_resp.get_json()["bike"]
+        self.assertIn("rating_avg", bike_data)
+        self.assertIn("rating_count", bike_data)
+        self.assertIn("reviews", bike_data)
+        self.assertTrue(len(bike_data["reviews"]) >= 1)
 
 
 if __name__ == "__main__":
