@@ -1636,13 +1636,13 @@ class MotorbikeRentalPWATests(unittest.TestCase):
     def test_qr_upload_accepts_jfif_and_highres_images_and_network_first_scripts(self):
         with self.client.get("/sw.js") as sw_resp:
             sw_text = sw_resp.get_data(as_text=True)
-        self.assertIn("motoride-pwa-v14", sw_text)
+        self.assertIn("motoride-pwa-v15", sw_text)
         self.assertIn('/static/js/', sw_text)
 
         login_resp = self.client.post("/api/admin/login", json={"password": "admin1234"})
         self.assertEqual(login_resp.status_code, 200)
         admin_html = self.client.get("/admin").get_data(as_text=True)
-        self.assertIn('/static/js/admin.js?v=14', admin_html)
+        self.assertIn('/static/js/admin.js?v=15', admin_html)
         self.assertIn('.jfif', admin_html)
 
         # Windows/Edge/Messenger saves often use .jfif -> served cleanly as image/jpeg
@@ -1681,8 +1681,8 @@ class MotorbikeRentalPWATests(unittest.TestCase):
 
     def test_return_date_defaults_to_select_date_prompt_without_prefill(self):
         index_html = self.client.get("/").get_data(as_text=True)
-        self.assertIn('/static/css/style.css?v=14', index_html)
-        self.assertIn('/static/js/storefront.js?v=14', index_html)
+        self.assertIn('/static/css/style.css?v=15', index_html)
+        self.assertIn('/static/js/storefront.js?v=15', index_html)
         self.assertIn('class="bike-card"', index_html)
         self.assertNotIn('<div class="loading-state">Loading motorbikes...</div>', index_html)
         self.assertIn('id="modal-availability-calendar"', index_html)
@@ -1953,7 +1953,7 @@ class MotorbikeRentalPWATests(unittest.TestCase):
 
         partner_html = self.client.get("/partner").get_data(as_text=True)
         self.assertIn('id="bike-schedule-modal"', partner_html)
-        self.assertIn('/static/js/partner.js?v=14', partner_html)
+        self.assertIn('/static/js/partner.js?v=15', partner_html)
         admin_html = self.client.get("/admin").get_data(as_text=True)
         self.assertIn('id="bike-schedule-modal"', admin_html)
 
@@ -2264,6 +2264,45 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         sync_resp = self.client.get(f"/api/bookings/{booking_id}/paymongo-sync")
         self.assertEqual(sync_resp.status_code, 200)
         self.assertEqual(sync_resp.get_json()["status"], "already_verified")
+
+    def test_delivery_map_pinning_and_navigation_link(self):
+        bike_row = self.client.get("/api/bikes").get_json()["bikes"][0]
+        bike_id = bike_row["id"]
+        p_date = self._future_str(3)
+        r_date = self._future_str(5)
+
+        booking_resp = self.client.post(
+            "/api/bookings",
+            json={
+                "bike_id": bike_id,
+                "pickup_date": p_date,
+                "return_date": r_date,
+                "customer_name": "Juan Tourist",
+                "customer_phone": "09171234567",
+                "license_number": "D01-22-334455",
+                "pickup_method": "delivery",
+                "delivery_address": "Paras Beach Resort, Yumbing, Camiguin",
+                "delivery_lat": 9.2553,
+                "delivery_lng": 124.6468,
+            },
+        )
+        self.assertEqual(booking_resp.status_code, 201)
+        booking = booking_resp.get_json()["booking"]
+        self.assertEqual(booking["pickup_method"], "delivery")
+        self.assertEqual(booking["delivery_address"], "Paras Beach Resort, Yumbing, Camiguin")
+        self.assertEqual(booking["delivery_lat"], 9.2553)
+        self.assertEqual(booking["delivery_lng"], 124.6468)
+        self.assertIn("https://www.google.com/maps/dir/?api=1&destination=9.2553,124.6468", booking["google_maps_url"])
+
+        # Check lookup booking includes delivery lat/lng & maps link
+        lookup_resp = self.client.get(
+            f"/api/bookings/lookup?code={booking['booking_code']}&phone=09171234567"
+        )
+        self.assertEqual(lookup_resp.status_code, 200)
+        lookup_booking = lookup_resp.get_json()["booking"]
+        self.assertEqual(lookup_booking["delivery_lat"], 9.2553)
+        self.assertEqual(lookup_booking["delivery_lng"], 124.6468)
+        self.assertEqual(lookup_booking["google_maps_url"], booking["google_maps_url"])
 
 
 if __name__ == "__main__":
