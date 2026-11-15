@@ -2222,14 +2222,25 @@ def create_app(test_config: dict | None = None) -> Flask:
         if not existing:
             return jsonify({"error": "Partner shop not found."}), 404
 
-        new_status = (payload.get("status") or existing["status"]).strip().lower()
-        if new_status not in VALID_SHOP_STATUSES:
-            return jsonify({"error": "Invalid shop status."}), 400
-        if existing["is_main"] and new_status != "approved":
-            return jsonify({"error": "The main platform hub cannot be suspended."}), 400
+        set_main = payload.get("is_main") in (True, 1, "1", "true", "yes")
+        if set_main:
+            new_status = "approved"
+        else:
+            new_status = (payload.get("status") or existing["status"]).strip().lower()
+            if new_status not in VALID_SHOP_STATUSES:
+                return jsonify({"error": "Invalid shop status."}), 400
+            if existing["is_main"] and new_status != "approved":
+                return jsonify({"error": "The main platform hub cannot be suspended."}), 400
 
         with conn:
-            conn.execute("UPDATE shops SET status = ? WHERE id = ?", (new_status, shop_id))
+            if set_main:
+                conn.execute("UPDATE shops SET is_main = 0 WHERE is_main != 0")
+                conn.execute(
+                    "UPDATE shops SET is_main = 1, status = 'approved' WHERE id = ?",
+                    (shop_id,),
+                )
+            else:
+                conn.execute("UPDATE shops SET status = ? WHERE id = ?", (new_status, shop_id))
         updated = conn.execute("SELECT * FROM shops WHERE id = ?", (shop_id,)).fetchone()
         if new_status != existing["status"] and new_status in ("approved", "suspended"):
             secret_settings = get_settings(conn, include_secrets=True)
@@ -2438,7 +2449,12 @@ def create_app(test_config: dict | None = None) -> Flask:
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
 
-        raw_shop_id = fields.get("shop_id") or 1
+        raw_shop_id = fields.get("shop_id")
+        if not raw_shop_id:
+            main_row = conn.execute(
+                "SELECT id FROM shops WHERE is_main = 1 ORDER BY id ASC LIMIT 1"
+            ).fetchone()
+            raw_shop_id = int(main_row["id"]) if main_row else 1
         try:
             shop_id = int(raw_shop_id)
         except (TypeError, ValueError):

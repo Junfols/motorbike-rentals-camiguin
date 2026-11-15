@@ -707,6 +707,24 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
 
             _create_indexes(conn)
 
+            # Promote RAFOLS MOTORBIKE RENTAL to Main Hub once if present in existing DB
+            rafols_row = conn.execute(
+                "SELECT id, is_main FROM shops WHERE LOWER(shop_name) = 'rafols motorbike rental' ORDER BY id ASC LIMIT 1"
+            ).fetchone()
+            if rafols_row:
+                migrated_flag = conn.execute(
+                    "SELECT value FROM settings WHERE key = 'main_hub_rafols_migrated'"
+                ).fetchone()
+                if not migrated_flag:
+                    conn.execute("UPDATE shops SET is_main = 0 WHERE is_main != 0")
+                    conn.execute(
+                        "UPDATE shops SET is_main = 1, status = 'approved' WHERE id = ?",
+                        (int(rafols_row["id"]),),
+                    )
+                    conn.execute(
+                        "INSERT INTO settings (key, value) VALUES ('main_hub_rafols_migrated', '1') ON CONFLICT (key) DO NOTHING"
+                    )
+
             existing_bikes = conn.execute("SELECT COUNT(*) FROM bikes").fetchone()[0]
             if existing_bikes == 0:
                 shop_id_by_slug = {
