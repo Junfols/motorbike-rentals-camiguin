@@ -73,7 +73,7 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         dominar = bikes[0]
         self.assertEqual(dominar["name"], "Kawasaki Dominar 400")
 
-        # 8-day rental should apply 1 weekly rate (9600) + 1 daily rate (1600) = 11200, saving 1600
+        # 8-day rental uses standard daily rate (8 * 1600 = 12800) with weekly rate savings removed
         p = self._future_str(2)
         r = self._future_str(10)
         quote_resp = self.client.get(
@@ -83,14 +83,14 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertEqual(quote_resp.status_code, 200)
         q = quote_resp.get_json()["quote"]
         self.assertEqual(q["rental_days"], 8)
-        self.assertEqual(q["base_subtotal"], 11200.0)
-        self.assertEqual(q["discount_saved"], 1600.0)
+        self.assertEqual(q["base_subtotal"], 12800.0)
+        self.assertEqual(q["discount_saved"], 0.0)
         self.assertEqual(q["addons_total"], 1200.0)  # (50 + 100) * 8
         self.assertEqual(q["delivery_total"], 150.0)   # Benoni Port Moto Express delivery rate
-        self.assertEqual(q["total_amount"], 12550.0)
+        self.assertEqual(q["total_amount"], 14150.0)
         self.assertEqual(q["commission_rate"], 10.0)
-        self.assertEqual(q["platform_fee"], 1255.0)
-        self.assertEqual(q["shop_payout"], 11295.0)
+        self.assertEqual(q["platform_fee"], 1415.0)
+        self.assertEqual(q["shop_payout"], 12735.0)
         self.assertTrue(q["is_available"])
 
     def test_booking_conflict_and_lookup_and_cancel(self):
