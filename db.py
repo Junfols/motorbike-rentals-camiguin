@@ -379,6 +379,8 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             balance_paid INTEGER NOT NULL DEFAULT 0,
             payment_link_id TEXT NOT NULL DEFAULT '',
             payment_checkout_url TEXT NOT NULL DEFAULT '',
+            delivery_lat REAL DEFAULT NULL,
+            delivery_lng REAL DEFAULT NULL,
             deposit_amount REAL NOT NULL,
             notes TEXT NOT NULL DEFAULT '',
             admin_notes TEXT NOT NULL DEFAULT '',
@@ -496,6 +498,8 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
             balance_paid INTEGER NOT NULL DEFAULT 0,
             payment_link_id TEXT NOT NULL DEFAULT '',
             payment_checkout_url TEXT NOT NULL DEFAULT '',
+            delivery_lat DOUBLE PRECISION DEFAULT NULL,
+            delivery_lng DOUBLE PRECISION DEFAULT NULL,
             deposit_amount DOUBLE PRECISION NOT NULL,
             notes TEXT NOT NULL DEFAULT '',
             admin_notes TEXT NOT NULL DEFAULT '',
@@ -729,6 +733,14 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
             if "payment_checkout_url" not in booking_cols:
                 conn.execute(
                     "ALTER TABLE bookings ADD COLUMN payment_checkout_url TEXT NOT NULL DEFAULT ''"
+                )
+            if "delivery_lat" not in booking_cols:
+                conn.execute(
+                    "ALTER TABLE bookings ADD COLUMN delivery_lat REAL DEFAULT NULL"
+                )
+            if "delivery_lng" not in booking_cols:
+                conn.execute(
+                    "ALTER TABLE bookings ADD COLUMN delivery_lng REAL DEFAULT NULL"
                 )
 
             _create_indexes(conn)

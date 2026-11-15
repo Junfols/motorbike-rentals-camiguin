@@ -402,6 +402,24 @@ def _serialize_booking(row) -> dict:
         "payment_status": (row["payment_status"] if "payment_status" in row.keys() else "") or "unpaid",
         "payment_link_id": (row["payment_link_id"] if "payment_link_id" in row.keys() else "") or "",
         "payment_checkout_url": (row["payment_checkout_url"] if "payment_checkout_url" in row.keys() else "") or "",
+        "delivery_lat": (
+            float(row["delivery_lat"])
+            if "delivery_lat" in row.keys() and row["delivery_lat"] is not None
+            else None
+        ),
+        "delivery_lng": (
+            float(row["delivery_lng"])
+            if "delivery_lng" in row.keys() and row["delivery_lng"] is not None
+            else None
+        ),
+        "google_maps_url": (
+            f"https://www.google.com/maps/dir/?api=1&destination={row['delivery_lat']},{row['delivery_lng']}"
+            if "delivery_lat" in row.keys()
+            and row["delivery_lat"] is not None
+            and "delivery_lng" in row.keys()
+            and row["delivery_lng"] is not None
+            else ""
+        ),
         "balance_paid": _row_balance_paid(row),
         "deposit_amount": float(row["deposit_amount"]),
         "notes": row["notes"],
@@ -1047,6 +1065,20 @@ def create_app(test_config: dict | None = None) -> Flask:
         pickup_time = (payload.get("pickup_time") or "09:00").strip()
         pickup_method = (payload.get("pickup_method") or "shop").strip().lower()
         delivery_address = (payload.get("delivery_address") or "").strip()
+        delivery_lat_raw = payload.get("delivery_lat")
+        delivery_lng_raw = payload.get("delivery_lng")
+        delivery_lat = None
+        delivery_lng = None
+        if delivery_lat_raw is not None and str(delivery_lat_raw).strip():
+            try:
+                delivery_lat = float(delivery_lat_raw)
+            except (ValueError, TypeError):
+                delivery_lat = None
+        if delivery_lng_raw is not None and str(delivery_lng_raw).strip():
+            try:
+                delivery_lng = float(delivery_lng_raw)
+            except (ValueError, TypeError):
+                delivery_lng = None
         extra_helmet = _as_bool(payload.get("extra_helmet"), default=False)
         top_box = _as_bool(payload.get("top_box"), default=False)
         notes = (payload.get("notes") or "").strip()
@@ -1223,12 +1255,12 @@ def create_app(test_config: dict | None = None) -> Flask:
                 INSERT INTO bookings (
                     booking_code, bike_id, shop_id, customer_name, customer_phone, customer_email,
                     license_number, pickup_date, return_date, pickup_time, pickup_method,
-                    delivery_address, extra_helmet, top_box, rental_days, base_subtotal,
+                    delivery_address, delivery_lat, delivery_lng, extra_helmet, top_box, rental_days, base_subtotal,
                     addons_total, delivery_total, total_amount, commission_rate, platform_fee,
                     shop_payout, reservation_fee, balance_due, payment_channel, payment_reference,
                     payment_proof_url, payment_status, deposit_amount, notes, admin_notes, status,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'pending', ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'pending', ?, ?)
                 """,
                 (
                     booking_code,
@@ -1243,6 +1275,8 @@ def create_app(test_config: dict | None = None) -> Flask:
                     pickup_time,
                     pickup_method,
                     delivery_address,
+                    delivery_lat,
+                    delivery_lng,
                     1 if extra_helmet else 0,
                     1 if top_box else 0,
                     quote["rental_days"],

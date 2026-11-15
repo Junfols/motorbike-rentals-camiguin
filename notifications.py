@@ -123,11 +123,13 @@ def format_new_booking_message(settings: dict, shop: dict, booking: dict) -> tup
     """Build subject and body for new booking notifications."""
     cur = _currency(settings)
     platform = settings.get("shop_name") or "Motorbike Rentals Camiguin"
-    method_label = (
-        f"Delivery ({booking.get('delivery_address')})"
-        if booking.get("pickup_method") == "delivery"
-        else f"Shop Pickup ({shop.get('address') or shop.get('municipality')})"
-    )
+    maps_link = booking.get("google_maps_url") or ""
+    if booking.get("pickup_method") == "delivery":
+        method_label = f"Delivery ({booking.get('delivery_address')})"
+        if maps_link:
+            method_label += f"\n   Map/GPS: {maps_link}"
+    else:
+        method_label = f"Shop Pickup ({shop.get('address') or shop.get('municipality')})"
     addons = []
     if booking.get("extra_helmet"):
         addons.append("Extra Helmet")
