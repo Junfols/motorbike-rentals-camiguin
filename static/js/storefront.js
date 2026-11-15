@@ -99,12 +99,23 @@
     if (!paymentQrSection) return;
     const wasHidden = paymentQrSection.classList.contains("hidden");
     const q = state.latestQuote;
-    const active = Boolean(
-      q &&
-        q.reservation_mode !== "off" &&
-        q.reservation_configured &&
-        Number(q.reservation_fee || 0) > 0
+    const qrUrl = (shop.gcash_qr_url || "").trim();
+    const gcashNum = (shop.gcash_number || "").trim();
+    const gcashName = (shop.gcash_account_name || "").trim();
+    const mayaNum = (shop.maya_number || "").trim();
+    const hasGcash = Boolean(qrUrl || gcashNum);
+    const hasMaya = Boolean(mayaNum);
+    const mode = String((q && q.reservation_mode) || shop.reservation_mode || "optional").toLowerCase();
+    const percent = Number(
+      q && q.reservation_percent !== undefined ? q.reservation_percent : shop.reservation_percent || 10
     );
+    const isConfigured = Boolean((q && q.reservation_configured) || hasGcash || hasMaya);
+    const fallbackDaily = state.currentBike ? Number(state.currentBike.daily_rate || 0) : 0;
+    const feeAmount =
+      q && Number(q.reservation_fee || 0) > 0
+        ? Number(q.reservation_fee)
+        : Math.round(fallbackDaily * (percent / 100) * 100) / 100;
+    const active = Boolean(mode !== "off" && isConfigured && feeAmount > 0);
     paymentQrSection.classList.toggle("hidden", !active);
     if (!active) {
       selectPaymentChannel("pay_at_shop");
@@ -112,13 +123,7 @@
       return;
     }
 
-    const isReq = q.reservation_mode === "required";
-    const qrUrl = (shop.gcash_qr_url || "").trim();
-    const gcashNum = (shop.gcash_number || "").trim();
-    const gcashName = (shop.gcash_account_name || "").trim();
-    const mayaNum = (shop.maya_number || "").trim();
-    const hasGcash = Boolean(qrUrl || gcashNum);
-    const hasMaya = Boolean(mayaNum);
+    const isReq = mode === "required";
     const preferredOnline = hasGcash ? "gcash" : hasMaya ? "maya" : "pay_at_shop";
 
     if (paymentModePill) {
@@ -126,7 +131,7 @@
       paymentModePill.className = isReq ? "status-pill-inline ready" : "status-pill-inline muted";
     }
     if (paymentFeeBadge) {
-      paymentFeeBadge.textContent = `Pay Now (${q.reservation_percent}%): ${formatMoney(q.reservation_fee)}`;
+      paymentFeeBadge.textContent = `Pay Now (${percent}%): ${formatMoney(feeAmount)}`;
     }
     if (paymentInstructionsText) {
       paymentInstructionsText.textContent =
@@ -581,56 +586,18 @@
     const rDate = bookingReturn.value;
     if (!bikeId || !pDate) return;
 
-    if (!rDate) {
-      state.latestQuote = null;
-      if (state.currentBike && state.currentBike.status !== "available") {
-        if (quoteAvailability) {
-          quoteAvailability.className = "quote-availability bad";
-          quoteAvailability.textContent = "Currently under maintenance";
-        }
-        if (bookingSubmitBtn) bookingSubmitBtn.disabled = true;
-        syncNextAvailableBtn(null);
-      } else if (state.currentBike && isDateFullyBooked(state.currentBike, pDate)) {
-        if (quoteAvailability) {
-          quoteAvailability.className = "quote-availability bad";
-          quoteAvailability.textContent = `${formatShortDate(pDate)} is already booked — tap a green open date on the calendar above.`;
-        }
-        if (bookingSubmitBtn) bookingSubmitBtn.disabled = true;
-        const serverSug = state.currentBike.next_available_date
-          ? {
-              pickup_date: state.currentBike.next_available_date,
-              return_date: state.currentBike.next_available_return_date || "",
-            }
-          : null;
-        syncNextAvailableBtn(
-          (serverSug && serverSug.pickup_date > pDate ? serverSug : null) ||
-            findNextAvailableRange(state.currentBike, pDate, "")
-        );
-      } else {
-        if (quoteAvailability) {
-          quoteAvailability.className = "quote-availability muted";
-          quoteAvailability.textContent = "Select a return date above to check availability & total price.";
-        }
-        if (bookingSubmitBtn) bookingSubmitBtn.disabled = false;
-        syncNextAvailableBtn(null);
-      }
-      if (quoteLines) {
-        quoteLines.innerHTML = "";
-      }
-      syncReturnDateUi();
-      syncPaymentChannelUi(false);
-      return;
-    }
-
-    if (rDate < pDate) {
+    const hasExplicitReturn = Boolean(rDate);
+    if (hasExplicitReturn && rDate < pDate) {
       bookingReturn.value = pDate;
       syncDateWrap(bookingReturn);
     }
+    syncReturnDateUi();
+    const effectiveReturn = bookingReturn.value || pDate;
 
     const params = new URLSearchParams({
       bike_id: bikeId,
-      pickup_date: bookingPickup.value,
-      return_date: bookingReturn.value,
+      pickup_date: pDate,
+      return_date: effectiveReturn,
       pickup_method: bookingPickupMethod.value,
       extra_helmet: extraHelmetCheckbox.checked ? "1" : "0",
       top_box: topBoxCheckbox.checked ? "1" : "0",
@@ -651,23 +618,30 @@
 
       const q = data.quote;
       state.latestQuote = q;
-      if (q.is_available) {
-        quoteAvailability.className = "quote-availability ok";
-        quoteAvailability.textContent = `Available (${q.available_units} of ${q.units_count} unit(s) open)`;
-        bookingSubmitBtn.disabled = false;
-        syncNextAvailableBtn(null);
-      } else if (q.bike_status !== "available") {
+      if (q.bike_status !== "available") {
         quoteAvailability.className = "quote-availability bad";
         quoteAvailability.textContent = "Currently under maintenance";
         bookingSubmitBtn.disabled = true;
         syncNextAvailableBtn(null);
-      } else {
+      } else if (!q.is_available) {
         quoteAvailability.className = "quote-availability bad";
-        quoteAvailability.textContent = "Already booked for these dates — pick open green dates on the calendar above";
+        quoteAvailability.textContent = hasExplicitReturn
+          ? "Already booked for these dates — pick open green dates on the calendar above"
+          : `${formatShortDate(pDate)} is already booked — tap a green open date on the calendar above.`;
         bookingSubmitBtn.disabled = true;
         syncNextAvailableBtn(
-          findNextAvailableRange(state.currentBike, bookingPickup.value, bookingReturn.value)
+          findNextAvailableRange(state.currentBike, pDate, hasExplicitReturn ? bookingReturn.value : "")
         );
+      } else if (!hasExplicitReturn) {
+        quoteAvailability.className = "quote-availability muted";
+        quoteAvailability.textContent = "Select a return date above to check availability & total price.";
+        bookingSubmitBtn.disabled = false;
+        syncNextAvailableBtn(null);
+      } else {
+        quoteAvailability.className = "quote-availability ok";
+        quoteAvailability.textContent = `Available (${q.available_units} of ${q.units_count} unit(s) open)`;
+        bookingSubmitBtn.disabled = false;
+        syncNextAvailableBtn(null);
       }
 
       const dayWord = q.rental_days === 1 ? "day" : "days";
