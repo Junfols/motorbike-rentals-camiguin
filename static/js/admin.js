@@ -435,7 +435,7 @@
             </div>
 
             ${(b.payment_reference || b.payment_proof_url) ? `<div class="text-muted"><strong>Payment Proof:</strong> ${escapeHtml(payChannelLabel)}${b.payment_reference ? ` &bull; Ref # ${escapeHtml(b.payment_reference)}` : ""}${b.payment_proof_url ? ` &bull; <a href="${escapeHtml(b.payment_proof_url)}" target="_blank" rel="noopener" class="payment-proof-link">View Receipt Screenshot</a>` : ""}</div>` : ""}
-            ${b.delivery_address ? `<div class="text-muted"><strong>Delivery to:</strong> ${escapeHtml(b.delivery_address)}</div>` : ""}
+            ${b.delivery_address ? `<div class="text-muted"><strong>Delivery to:</strong> ${escapeHtml(b.delivery_address)}${b.google_maps_url ? ` &bull; <a href="${escapeHtml(b.google_maps_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.75rem;display:inline-flex;align-items:center;gap:4px;">🗺️ Open GPS Navigation</a>` : ""}</div>` : ""}
             ${b.notes ? `<div class="text-muted"><strong>Customer note:</strong> ${escapeHtml(b.notes)}</div>` : ""}
 
             <div class="admin-booking-actions">

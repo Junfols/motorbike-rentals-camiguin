@@ -157,7 +157,7 @@
         </div>
 
         ${(b.payment_reference || b.payment_proof_url) ? `<p class="text-muted"><strong>Reservation Payment:</strong> ${escapeHtml((b.payment_channel || "gcash").toUpperCase())}${b.payment_reference ? ` &bull; Ref # ${escapeHtml(b.payment_reference)}` : ""}${b.payment_proof_url ? ` &bull; <a href="${escapeHtml(b.payment_proof_url)}" target="_blank" rel="noopener" class="payment-proof-link">View Receipt</a>` : ""}</p>` : ""}
-        ${b.delivery_address ? `<p class="text-muted"><strong>Delivery Address:</strong> ${escapeHtml(b.delivery_address)}</p>` : ""}
+        ${b.delivery_address ? `<p class="text-muted"><strong>Delivery Address:</strong> ${escapeHtml(b.delivery_address)}${b.google_maps_url ? ` &bull; <a href="${escapeHtml(b.google_maps_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.75rem;display:inline-flex;align-items:center;gap:4px;">🗺️ Open in Google Maps</a>` : ""}</p>` : ""}
         ${b.admin_notes ? `<div class="info-box"><h4>Shop Note</h4><p>${escapeHtml(b.admin_notes)}</p></div>` : ""}
 
         <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;">

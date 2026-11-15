@@ -804,6 +804,9 @@
       const isDelivery = bookingPickupMethod.value === "delivery";
       if (deliveryAddressGroup) deliveryAddressGroup.classList.toggle("hidden", !isDelivery);
       if (deliveryAddressInput) deliveryAddressInput.required = isDelivery;
+      if (isDelivery) {
+        initOrUpdateDeliveryMap();
+      }
     }
     if (bookingPaymentRef) bookingPaymentRef.value = "";
     if (bookingPaymentProof) bookingPaymentProof.value = "";
@@ -1265,12 +1268,119 @@
     });
   }
 
+  let deliveryMapInstance = null;
+  let deliveryMarker = null;
+
+  function initOrUpdateDeliveryMap(targetLat, targetLng) {
+    const mapEl = document.getElementById("delivery-map");
+    if (!mapEl || typeof L === "undefined") return;
+
+    const defaultLat = targetLat || 9.2450;
+    const defaultLng = targetLng || 124.6850;
+
+    if (!deliveryMapInstance) {
+      deliveryMapInstance = L.map("delivery-map", {
+        center: [defaultLat, defaultLng],
+        zoom: 12,
+        minZoom: 10,
+        maxZoom: 18,
+      });
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; OpenStreetMap',
+        maxZoom: 19,
+      }).addTo(deliveryMapInstance);
+
+      deliveryMarker = L.marker([defaultLat, defaultLng], {
+        draggable: true,
+      }).addTo(deliveryMapInstance);
+
+      deliveryMarker.on("dragend", (e) => {
+        const pos = e.target.getLatLng();
+        setDeliveryCoordinates(pos.lat, pos.lng);
+      });
+
+      deliveryMapInstance.on("click", (e) => {
+        const pos = e.latlng;
+        deliveryMarker.setLatLng(pos);
+        setDeliveryCoordinates(pos.lat, pos.lng);
+      });
+    }
+
+    setTimeout(() => {
+      if (deliveryMapInstance) {
+        deliveryMapInstance.invalidateSize();
+        if (targetLat && targetLng) {
+          deliveryMapInstance.setView([targetLat, targetLng], 14);
+          if (deliveryMarker) deliveryMarker.setLatLng([targetLat, targetLng]);
+        }
+      }
+    }, 200);
+  }
+
+  function setDeliveryCoordinates(lat, lng, addressLabel) {
+    const latInput = document.getElementById("booking-delivery-lat");
+    const lngInput = document.getElementById("booking-delivery-lng");
+    const coordsText = document.getElementById("delivery-coords-text");
+    if (latInput) latInput.value = lat.toFixed(6);
+    if (lngInput) lngInput.value = lng.toFixed(6);
+    if (coordsText) coordsText.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}${addressLabel ? ` (${addressLabel})` : ""}`;
+    if (addressLabel && deliveryAddressInput) {
+      deliveryAddressInput.value = addressLabel;
+    }
+  }
+
   if (bookingPickupMethod) {
     bookingPickupMethod.addEventListener("change", () => {
       const isDelivery = bookingPickupMethod.value === "delivery";
       deliveryAddressGroup.classList.toggle("hidden", !isDelivery);
       deliveryAddressInput.required = isDelivery;
+      if (isDelivery) {
+        initOrUpdateDeliveryMap();
+      }
       refreshQuote();
+    });
+  }
+
+  const landmarkChipsEl = document.getElementById("landmark-chips");
+  if (landmarkChipsEl) {
+    landmarkChipsEl.addEventListener("click", (e) => {
+      const chip = e.target.closest(".landmark-chip");
+      if (!chip) return;
+      const lat = parseFloat(chip.getAttribute("data-lat"));
+      const lng = parseFloat(chip.getAttribute("data-lng"));
+      const name = chip.getAttribute("data-name");
+      initOrUpdateDeliveryMap(lat, lng);
+      setDeliveryCoordinates(lat, lng, name);
+    });
+  }
+
+  const locateMeBtn = document.getElementById("locate-me-btn");
+  if (locateMeBtn) {
+    locateMeBtn.addEventListener("click", () => {
+      if (!navigator.geolocation) {
+        showToast("Geolocation is not supported by your browser.", "error");
+        return;
+      }
+      locateMeBtn.disabled = true;
+      locateMeBtn.textContent = "Locating...";
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          locateMeBtn.disabled = false;
+          locateMeBtn.textContent = "📍 My GPS Location";
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          initOrUpdateDeliveryMap(lat, lng);
+          setDeliveryCoordinates(lat, lng, "Current GPS Location");
+          showToast("Pinned your exact GPS location!", "success");
+        },
+        (err) => {
+          locateMeBtn.disabled = false;
+          locateMeBtn.textContent = "📍 My GPS Location";
+          showToast("Could not get GPS location: " + err.message, "error");
+        },
+        { timeout: 10000, enableHighAccuracy: true }
+      );
     });
   }
 
@@ -1355,6 +1465,8 @@
         pickup_time: document.getElementById("booking-pickup-time").value,
         pickup_method: bookingPickupMethod.value,
         delivery_address: deliveryAddressInput.value.trim(),
+        delivery_lat: document.getElementById("booking-delivery-lat")?.value || null,
+        delivery_lng: document.getElementById("booking-delivery-lng")?.value || null,
         extra_helmet: extraHelmetCheckbox.checked,
         top_box: topBoxCheckbox.checked,
         customer_name: document.getElementById("booking-customer-name").value.trim(),
