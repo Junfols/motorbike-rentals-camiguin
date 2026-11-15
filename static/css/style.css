@@ -2028,6 +2028,12 @@ textarea:focus {
   margin: 0;
 }
 
+.paymongo-info-box {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  margin: 10px 0 14px;
+}
+
 .payment-proof-inputs {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2906,7 +2912,6 @@ textarea:focus {
 .partner-fb-share-box {
   margin: 0 20px 20px;
   padding: 14px 16px;
-  border-radius: 999px;
   border-radius: var(--radius-md);
   background: var(--primary-soft);
   border: 1px solid #fed7aa;
