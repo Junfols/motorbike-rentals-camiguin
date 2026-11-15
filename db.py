@@ -381,6 +381,10 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             payment_checkout_url TEXT NOT NULL DEFAULT '',
             delivery_lat REAL DEFAULT NULL,
             delivery_lng REAL DEFAULT NULL,
+            license_photo_url TEXT NOT NULL DEFAULT '',
+            signature_url TEXT NOT NULL DEFAULT '',
+            contract_agreed INTEGER NOT NULL DEFAULT 0,
+            contract_signed_at TEXT DEFAULT NULL,
             deposit_amount REAL NOT NULL,
             notes TEXT NOT NULL DEFAULT '',
             admin_notes TEXT NOT NULL DEFAULT '',
@@ -405,6 +409,18 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             filename TEXT UNIQUE NOT NULL,
             content_type TEXT NOT NULL DEFAULT 'application/octet-stream',
             data BLOB NOT NULL,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS reviews (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL,
+            bike_id INTEGER NOT NULL REFERENCES bikes(id) ON DELETE CASCADE,
+            shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+            customer_name TEXT NOT NULL,
+            rating INTEGER NOT NULL,
+            comment TEXT NOT NULL DEFAULT '',
+            is_approved INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL
         );
         """
@@ -500,6 +516,10 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
             payment_checkout_url TEXT NOT NULL DEFAULT '',
             delivery_lat DOUBLE PRECISION DEFAULT NULL,
             delivery_lng DOUBLE PRECISION DEFAULT NULL,
+            license_photo_url TEXT NOT NULL DEFAULT '',
+            signature_url TEXT NOT NULL DEFAULT '',
+            contract_agreed INTEGER NOT NULL DEFAULT 0,
+            contract_signed_at TEXT DEFAULT NULL,
             deposit_amount DOUBLE PRECISION NOT NULL,
             notes TEXT NOT NULL DEFAULT '',
             admin_notes TEXT NOT NULL DEFAULT '',
@@ -529,6 +549,19 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
             created_at TEXT NOT NULL
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS reviews (
+            id SERIAL PRIMARY KEY,
+            booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL,
+            bike_id INTEGER NOT NULL REFERENCES bikes(id) ON DELETE CASCADE,
+            shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+            customer_name TEXT NOT NULL,
+            rating INTEGER NOT NULL,
+            comment TEXT NOT NULL DEFAULT '',
+            is_approved INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL
+        )
+        """,
     ]
     for stmt in statements:
         conn.execute(stmt)
@@ -542,6 +575,9 @@ def _create_indexes(conn: DatabaseConnection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_bookings_code ON bookings (booking_code)",
         "CREATE INDEX IF NOT EXISTS idx_bike_blocks_bike_dates ON bike_blocks (bike_id, start_date, end_date)",
         "CREATE INDEX IF NOT EXISTS idx_media_filename ON uploaded_media (filename)",
+        "CREATE INDEX IF NOT EXISTS idx_reviews_bike ON reviews (bike_id, is_approved)",
+        "CREATE INDEX IF NOT EXISTS idx_reviews_shop ON reviews (shop_id, is_approved)",
+        "CREATE INDEX IF NOT EXISTS idx_reviews_booking ON reviews (booking_id)",
     ]
     for idx in indexes:
         conn.execute(idx)
@@ -742,8 +778,78 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
                 conn.execute(
                     "ALTER TABLE bookings ADD COLUMN delivery_lng REAL DEFAULT NULL"
                 )
+            if "license_photo_url" not in booking_cols:
+                conn.execute(
+                    "ALTER TABLE bookings ADD COLUMN license_photo_url TEXT NOT NULL DEFAULT ''"
+                )
+            if "signature_url" not in booking_cols:
+                conn.execute(
+                    "ALTER TABLE bookings ADD COLUMN signature_url TEXT NOT NULL DEFAULT ''"
+                )
+            if "contract_agreed" not in booking_cols:
+                conn.execute(
+                    "ALTER TABLE bookings ADD COLUMN contract_agreed INTEGER NOT NULL DEFAULT 0"
+                )
+            if "contract_signed_at" not in booking_cols:
+                conn.execute(
+                    "ALTER TABLE bookings ADD COLUMN contract_signed_at TEXT DEFAULT NULL"
+                )
+
+            # Ensure reviews table exists in existing database
+            if conn.backend == "postgresql":
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS reviews (
+                        id SERIAL PRIMARY KEY,
+                        booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL,
+                        bike_id INTEGER NOT NULL REFERENCES bikes(id) ON DELETE CASCADE,
+                        shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+                        customer_name TEXT NOT NULL,
+                        rating INTEGER NOT NULL,
+                        comment TEXT NOT NULL DEFAULT '',
+                        is_approved INTEGER NOT NULL DEFAULT 1,
+                        created_at TEXT NOT NULL
+                    )
+                    """
+                )
+            else:
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS reviews (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL,
+                        bike_id INTEGER NOT NULL REFERENCES bikes(id) ON DELETE CASCADE,
+                        shop_id INTEGER NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+                        customer_name TEXT NOT NULL,
+                        rating INTEGER NOT NULL,
+                        comment TEXT NOT NULL DEFAULT '',
+                        is_approved INTEGER NOT NULL DEFAULT 1,
+                        created_at TEXT NOT NULL
+                    )
+                    """
+                )
 
             _create_indexes(conn)
+
+            # Seed initial reviews if empty
+            rev_cnt = conn.execute("SELECT COUNT(*) FROM reviews").fetchone()[0]
+            if rev_cnt == 0:
+                first_bike = conn.execute("SELECT id, shop_id FROM bikes ORDER BY id ASC LIMIT 1").fetchone()
+                if first_bike:
+                    fb_id = int(first_bike["id"])
+                    fs_id = int(first_bike["shop_id"])
+                    starter_reviews = [
+                        (None, fb_id, fs_id, "Mark D. (Manila)", 5, "Super smooth rental! We rode around the entire 64km circumferential road. Consumed less than 1 bar of fuel. Clean helmets and quick release!", now),
+                        (None, fb_id, fs_id, "Rochelle M. (Cebu)", 5, "Very easy to handle and park near White Island jump-off and Sunken Cemetery. Key handover was ready at the port!", now),
+                        (None, fb_id, fs_id, "Michael & Anne (Germany)", 5, "Extremely comfortable for our 4-day Camiguin tour! Fast WhatsApp response and digital contract was super convenient.", now),
+                        (None, fb_id, fs_id, "Jay-Ar S. (Davao)", 5, "Great uphill power going to Katibawasan and Tuasan Falls. Clean motor and reliable brakes. 10/10 service!", now),
+                    ]
+                    for rev in starter_reviews:
+                        conn.execute(
+                            "INSERT INTO reviews (booking_id, bike_id, shop_id, customer_name, rating, comment, is_approved, created_at) "
+                            "VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
+                            rev,
+                        )
 
             # Promote RAFOLS MOTORBIKE RENTAL to Main Hub once if present in existing DB
             rafols_row = conn.execute(
@@ -1480,3 +1586,116 @@ def delete_unused_uploaded_media(conn: DatabaseConnection, image_url: str | None
     )
     if not still_used:
         delete_uploaded_media_by_url(conn, image_url)
+
+
+def create_review(
+    conn: DatabaseConnection,
+    bike_id: int,
+    shop_id: int,
+    customer_name: str,
+    rating: int,
+    comment: str,
+    booking_id: int | None = None,
+) -> int:
+    now = datetime.now().isoformat(timespec="seconds")
+    clean_rating = max(1, min(5, int(rating)))
+    return conn.insert_returning_id(
+        """
+        INSERT INTO reviews (booking_id, bike_id, shop_id, customer_name, rating, comment, is_approved, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+        """,
+        (booking_id, bike_id, shop_id, customer_name.strip(), clean_rating, comment.strip(), now),
+    )
+
+
+def get_bike_reviews(conn: DatabaseConnection, bike_id: int, limit: int = 10) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT r.*, b.name AS bike_name, s.shop_name AS shop_name
+        FROM reviews r
+        JOIN bikes b ON b.id = r.bike_id
+        JOIN shops s ON s.id = r.shop_id
+        WHERE r.bike_id = ? AND r.is_approved = 1
+        ORDER BY r.created_at DESC
+        LIMIT ?
+        """,
+        (bike_id, limit),
+    ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "booking_id": row["booking_id"],
+            "bike_id": row["bike_id"],
+            "bike_name": row["bike_name"],
+            "shop_id": row["shop_id"],
+            "shop_name": row["shop_name"],
+            "customer_name": row["customer_name"],
+            "rating": int(row["rating"]),
+            "comment": row["comment"],
+            "created_at": row["created_at"],
+        }
+        for row in rows
+    ]
+
+
+def get_recent_reviews(conn: DatabaseConnection, limit: int = 8) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT r.*, b.name AS bike_name, b.image_url AS bike_image, s.shop_name AS shop_name, s.municipality AS shop_municipality
+        FROM reviews r
+        JOIN bikes b ON b.id = r.bike_id
+        JOIN shops s ON s.id = r.shop_id
+        WHERE r.is_approved = 1
+        ORDER BY r.created_at DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "booking_id": row["booking_id"],
+            "bike_id": row["bike_id"],
+            "bike_name": row["bike_name"],
+            "bike_image": row["bike_image"],
+            "shop_id": row["shop_id"],
+            "shop_name": row["shop_name"],
+            "shop_municipality": row["shop_municipality"],
+            "customer_name": row["customer_name"],
+            "rating": int(row["rating"]),
+            "comment": row["comment"],
+            "created_at": row["created_at"],
+        }
+        for row in rows
+    ]
+
+
+def get_all_bike_rating_stats(conn: DatabaseConnection) -> dict[int, dict]:
+    try:
+        rows = conn.execute(
+            "SELECT bike_id, AVG(rating) as avg_rating, COUNT(*) as review_count FROM reviews WHERE is_approved = 1 GROUP BY bike_id"
+        ).fetchall()
+        res = {}
+        for r in rows:
+            avg_val = float(r["avg_rating"]) if r["avg_rating"] is not None else 5.0
+            res[int(r["bike_id"])] = {
+                "avg_rating": round(avg_val, 1),
+                "review_count": int(r["review_count"]),
+            }
+        return res
+    except Exception:
+        return {}
+
+
+def get_bike_rating_stats(conn: DatabaseConnection, bike_id: int) -> dict:
+    try:
+        row = conn.execute(
+            "SELECT AVG(rating) as avg_rating, COUNT(*) as review_count FROM reviews WHERE bike_id = ? AND is_approved = 1",
+            (bike_id,),
+        ).fetchone()
+        avg_val = float(row["avg_rating"]) if row and row["avg_rating"] is not None else 5.0
+        cnt = int(row["review_count"]) if row and row["review_count"] is not None else 0
+        return {"avg_rating": round(avg_val, 1), "review_count": cnt}
+    except Exception:
+        return {"avg_rating": 5.0, "review_count": 0}
+

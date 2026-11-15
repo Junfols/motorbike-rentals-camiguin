@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import re
@@ -36,11 +37,16 @@ from db import (
     build_bike_schedules,
     calculate_quote,
     count_overlapping_bookings,
+    create_review,
     delete_unused_uploaded_media,
     generate_booking_code,
     get_admin_settings_view,
+    get_all_bike_rating_stats,
+    get_bike_rating_stats,
+    get_bike_reviews,
     get_connection,
     get_database_url,
+    get_recent_reviews,
     get_settings,
     get_uploaded_media,
     init_db,
@@ -178,10 +184,12 @@ def _serialize_shop(row, include_private: bool = False) -> dict:
     return data
 
 
-def _serialize_bike(row, booked_units: int = 0, schedule: dict | None = None) -> dict:
+def _serialize_bike(row, booked_units: int = 0, schedule: dict | None = None, rating_stats: dict | None = None) -> dict:
     keys = row.keys()
     units_count = int(row["units_count"] or 1)
     available_units = max(0, units_count - booked_units) if row["status"] == "available" else 0
+    r_avg = float(rating_stats.get("avg_rating", 5.0)) if rating_stats else (float(row["rating_avg"]) if "rating_avg" in keys and row["rating_avg"] is not None else 5.0)
+    r_cnt = int(rating_stats.get("review_count", 0)) if rating_stats else (int(row["rating_count"]) if "rating_count" in keys and row["rating_count"] is not None else 0)
     data = {
         "id": row["id"],
         "shop_id": int(row["shop_id"]),
@@ -210,6 +218,8 @@ def _serialize_bike(row, booked_units: int = 0, schedule: dict | None = None) ->
         "booked_units": booked_units,
         "available_units": available_units,
         "is_available": row["status"] == "available" and available_units > 0,
+        "rating_avg": r_avg,
+        "rating_count": r_cnt,
         "plate_number": row["plate_number"],
         "inclusions": row["inclusions"],
         "description": row["description"],
@@ -412,6 +422,10 @@ def _serialize_booking(row) -> dict:
             if "delivery_lng" in row.keys() and row["delivery_lng"] is not None
             else None
         ),
+        "license_photo_url": (row["license_photo_url"] if "license_photo_url" in row.keys() else "") or "",
+        "signature_url": (row["signature_url"] if "signature_url" in row.keys() else "") or "",
+        "contract_agreed": bool(row["contract_agreed"]) if "contract_agreed" in row.keys() else False,
+        "contract_signed_at": (row["contract_signed_at"] if "contract_signed_at" in row.keys() else "") or "",
         "google_maps_url": (
             f"https://www.google.com/maps/dir/?api=1&destination={row['delivery_lat']},{row['delivery_lng']}"
             if "delivery_lat" in row.keys()
@@ -627,10 +641,18 @@ def create_app(test_config: dict | None = None) -> Flask:
             include_admin_details=False,
         )
         bikes_list = []
+        ratings_map = get_all_bike_rating_stats(conn)
         for row in bike_rows:
             sched = schedules.get(int(row["id"]))
             booked = int((sched or {}).get("ref_booked_units", 0))
-            bikes_list.append(_serialize_bike(row, booked_units=booked, schedule=sched))
+            bikes_list.append(
+                _serialize_bike(
+                    row,
+                    booked_units=booked,
+                    schedule=sched,
+                    rating_stats=ratings_map.get(int(row["id"])),
+                )
+            )
         return {
             "shops": shops_list,
             "bikes": bikes_list,
@@ -651,6 +673,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             active_nav="fleet",
             featured_shop=featured_shop,
             storefront_bootstrap=_build_storefront_bootstrap(conn, featured_shop),
+            recent_reviews=get_recent_reviews(conn, limit=6),
         )
 
     @app.get("/shop/<slug>")
@@ -662,6 +685,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             active_nav="fleet",
             featured_shop=featured_shop,
             storefront_bootstrap=_build_storefront_bootstrap(conn, featured_shop),
+            recent_reviews=get_recent_reviews(conn, limit=6),
         )
 
     @app.get("/bookings")
@@ -924,6 +948,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             include_admin_details=False,
         )
         today_iso = date.today().isoformat()
+        ratings_map = get_all_bike_rating_stats(conn)
         bikes = []
         for row in rows:
             sched = schedules.get(int(row["id"]))
@@ -931,7 +956,12 @@ def create_app(test_config: dict | None = None) -> Flask:
                 booked = int(sched["ref_booked_units"])
             else:
                 booked = count_overlapping_bookings(conn, row["id"], pickup_date, return_date)
-            item = _serialize_bike(row, booked_units=booked, schedule=sched)
+            item = _serialize_bike(
+                row,
+                booked_units=booked,
+                schedule=sched,
+                rating_stats=ratings_map.get(int(row["id"])),
+            )
             if available_only and not item["is_available"]:
                 continue
             bikes.append(item)
@@ -990,7 +1020,10 @@ def create_app(test_config: dict | None = None) -> Flask:
             include_calendar=True,
             include_admin_details=False,
         ).get(bike_id)
-        bike_data = _serialize_bike(row, booked_units=booked, schedule=sched)
+        rating_stats = get_bike_rating_stats(conn, bike_id)
+        reviews = get_bike_reviews(conn, bike_id, limit=6)
+        bike_data = _serialize_bike(row, booked_units=booked, schedule=sched, rating_stats=rating_stats)
+        bike_data["reviews"] = reviews
         return jsonify({"bike": bike_data})
 
     @app.get("/api/quote")
@@ -1051,9 +1084,14 @@ def create_app(test_config: dict | None = None) -> Flask:
         if request.content_type and "multipart/form-data" in request.content_type:
             payload = request.form
             proof_file = request.files.get("payment_proof")
+            license_file = request.files.get("license_photo")
         else:
             payload = request.get_json(silent=True) or {}
             proof_file = None
+            license_file = None
+
+        signature_data = (payload.get("signature_data") or "").strip()
+        contract_agreed = _as_bool(payload.get("contract_agreed"), default=False)
 
         bike_id = payload.get("bike_id")
         customer_name = (payload.get("customer_name") or "").strip()
@@ -1107,6 +1145,24 @@ def create_app(test_config: dict | None = None) -> Flask:
             validated_proof = _validate_image_upload(proof_file, prefix="proof")
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
+
+        validated_license = None
+        if license_file:
+            try:
+                validated_license = _validate_image_upload(license_file, prefix="license")
+            except ValueError as exc:
+                return jsonify({"error": f"Driver's License upload: {exc}"}), 400
+
+        validated_signature = None
+        if signature_data:
+            try:
+                raw_b64 = signature_data.split(",", 1)[1] if "," in signature_data else signature_data
+                sig_bytes = base64.b64decode(raw_b64)
+                if len(sig_bytes) > 0 and len(sig_bytes) <= 2 * 1024 * 1024:
+                    sig_name = f"sig_{secrets.token_hex(8)}.png"
+                    validated_signature = (sig_name, sig_bytes, "image/png")
+            except Exception:
+                pass
 
         try:
             p_dt = parse_iso_date(pickup_date)
@@ -1299,6 +1355,21 @@ def create_app(test_config: dict | None = None) -> Flask:
                     now,
                 ),
             )
+
+            stored_license_url = ""
+            if validated_license:
+                stored_license_url = _save_validated_image(conn, validated_license, use_tx=False)
+            stored_sig_url = ""
+            if validated_signature:
+                stored_sig_url = _save_validated_image(conn, validated_signature, use_tx=False)
+            contract_signed_at = now if (contract_agreed or stored_sig_url) else None
+
+            if stored_license_url or stored_sig_url or contract_agreed:
+                conn.execute(
+                    "UPDATE bookings SET license_photo_url = ?, signature_url = ?, contract_agreed = ?, contract_signed_at = ? WHERE id = ?",
+                    (stored_license_url, stored_sig_url, 1 if contract_agreed else 0, contract_signed_at, booking_id),
+                )
+
             conn.commit()
         except Exception:
             conn.rollback()
@@ -1445,6 +1516,88 @@ def create_app(test_config: dict | None = None) -> Flask:
                 booking_data,
             )
         return jsonify({"booking": booking_data})
+
+    # ------------------------------------------------------------------
+    # Customer Reviews & 5-Star Rating Routes
+    # ------------------------------------------------------------------
+    @app.post("/api/reviews")
+    def submit_review():
+        conn = get_db()
+        payload = request.get_json(silent=True) or {}
+        bike_id = payload.get("bike_id")
+        booking_code = (payload.get("booking_code") or "").strip().upper()
+        customer_name = (payload.get("customer_name") or "").strip()
+        comment = (payload.get("comment") or "").strip()
+        rating_raw = payload.get("rating")
+
+        try:
+            rating = int(rating_raw)
+            if rating < 1 or rating > 5:
+                raise ValueError()
+        except (TypeError, ValueError):
+            return jsonify({"error": "Please provide a valid rating between 1 and 5 stars."}), 400
+
+        booking_id = None
+        shop_id = None
+
+        if booking_code:
+            b_row = conn.execute("SELECT * FROM bookings WHERE UPPER(booking_code) = ?", (booking_code,)).fetchone()
+            if b_row:
+                booking_id = int(b_row["id"])
+                bike_id = int(b_row["bike_id"])
+                shop_id = int(b_row["shop_id"])
+                if not customer_name:
+                    customer_name = b_row["customer_name"]
+
+        if not customer_name:
+            return jsonify({"error": "Please provide your name or nickname."}), 400
+
+        if not bike_id:
+            return jsonify({"error": "Please specify which motorbike you are reviewing."}), 400
+
+        if not shop_id:
+            bike_row = conn.execute("SELECT shop_id FROM bikes WHERE id = ?", (bike_id,)).fetchone()
+            if not bike_row:
+                return jsonify({"error": "Motorbike not found."}), 404
+            shop_id = int(bike_row["shop_id"])
+
+        rev_id = create_review(
+            conn=conn,
+            bike_id=bike_id,
+            shop_id=shop_id,
+            customer_name=customer_name,
+            rating=rating,
+            comment=comment,
+            booking_id=booking_id,
+        )
+        conn.commit()
+        return jsonify({
+            "ok": True,
+            "success": True,
+            "review_id": rev_id,
+            "review": {
+                "id": rev_id,
+                "bike_id": bike_id,
+                "rating": rating,
+                "customer_name": customer_name,
+                "comment": comment,
+            },
+            "message": "Thank you! Your review has been submitted.",
+        }), 201
+
+    @app.get("/api/reviews")
+    def list_recent_reviews():
+        conn = get_db()
+        limit = min(50, max(1, request.args.get("limit", default=12, type=int)))
+        return jsonify({"reviews": get_recent_reviews(conn, limit=limit)})
+
+    @app.get("/api/reviews/bike/<int:bike_id>")
+    def list_bike_reviews(bike_id: int):
+        conn = get_db()
+        return jsonify({
+            "reviews": get_bike_reviews(conn, bike_id, limit=20),
+            "stats": get_bike_rating_stats(conn, bike_id),
+        })
 
     # ------------------------------------------------------------------
     # PayMongo Online Payment & Webhook Routes
