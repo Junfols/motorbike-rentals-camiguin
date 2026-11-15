@@ -968,7 +968,7 @@ def calculate_quote(
     weekly_rate = float(bike["weekly_rate"] or 0)
     deposit = float(bike["deposit"] or 0)
 
-        standard_total = rental_days * daily_rate
+    standard_total = rental_days * daily_rate
     base_subtotal = standard_total
     discount_saved = 0.0
 
