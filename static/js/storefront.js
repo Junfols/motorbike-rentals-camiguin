@@ -37,6 +37,10 @@
     typeof window.INITIAL_FEATURED_SHOP === "object" && window.INITIAL_FEATURED_SHOP
       ? window.INITIAL_FEATURED_SHOP
       : null;
+  const initialBootstrap =
+    typeof window.INITIAL_STOREFRONT_BOOTSTRAP === "object" && window.INITIAL_STOREFRONT_BOOTSTRAP
+      ? window.INITIAL_STOREFRONT_BOOTSTRAP
+      : null;
 
   // Booking Modal Elements
   const bookingForm = document.getElementById("booking-form");
@@ -513,6 +517,28 @@
     }
   }
 
+  function populateShopFilterOptions() {
+    if (!filterShop) return;
+    if (
+      state.featuredShop &&
+      !state.shops.some((s) => String(s.id) === String(state.featuredShop.id))
+    ) {
+      state.shops.unshift(state.featuredShop);
+    }
+    const targetVal = state.shopId || filterShop.value || "";
+    filterShop.innerHTML =
+      `<option value="">All Rental Shops (${state.shops.length})</option>` +
+      state.shops
+        .map(
+          (s) =>
+            `<option value="${s.id}">${escapeHtml(s.shop_name)} (${escapeHtml(s.municipality)})</option>`
+        )
+        .join("");
+    filterShop.value = targetVal;
+    renderPartnerShopsStrip();
+    renderShopProfileBanner();
+  }
+
   async function loadPublicShops() {
     if (!filterShop) return;
     try {
@@ -520,24 +546,7 @@
       const data = await res.json();
       if (!res.ok) return;
       state.shops = data.shops || [];
-      if (
-        state.featuredShop &&
-        !state.shops.some((s) => String(s.id) === String(state.featuredShop.id))
-      ) {
-        state.shops.unshift(state.featuredShop);
-      }
-      const targetVal = state.shopId || filterShop.value || "";
-      filterShop.innerHTML =
-        `<option value="">All Rental Shops (${state.shops.length})</option>` +
-        state.shops
-          .map(
-            (s) =>
-              `<option value="${s.id}">${escapeHtml(s.shop_name)} (${escapeHtml(s.municipality)})</option>`
-          )
-          .join("");
-      filterShop.value = targetVal;
-      renderPartnerShopsStrip();
-      renderShopProfileBanner();
+      populateShopFilterOptions();
     } catch (_) {
       // Keep default option offline
       renderShopProfileBanner();
@@ -1368,6 +1377,17 @@
   bindDatePickerPlaceholder(searchReturnInput);
   bindDatePickerPlaceholder(bookingReturn);
   initDefaultDates();
-  loadPublicShops();
-  loadFleet();
+  if (
+    initialBootstrap &&
+    Array.isArray(initialBootstrap.shops) &&
+    Array.isArray(initialBootstrap.bikes)
+  ) {
+    state.shops = initialBootstrap.shops;
+    state.bikes = initialBootstrap.bikes;
+    populateShopFilterOptions();
+    renderFleet();
+  } else {
+    loadPublicShops();
+    loadFleet();
+  }
 })();
