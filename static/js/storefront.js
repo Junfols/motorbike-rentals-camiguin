@@ -105,7 +105,7 @@
     const mayaNum = (shop.maya_number || "").trim();
     const hasGcash = Boolean(qrUrl || gcashNum);
     const hasMaya = Boolean(mayaNum);
-    const mode = String((q && q.reservation_mode) || shop.reservation_mode || "optional").toLowerCase();
+    const mode = String((q && q.reservation_mode) || shop.reservation_mode || "required").toLowerCase();
     const percent = Number(
       q && q.reservation_percent !== undefined ? q.reservation_percent : shop.reservation_percent || 10
     );
@@ -996,30 +996,44 @@
       };
 
       const q = state.latestQuote;
+      const qrUrl = (shop.gcash_qr_url || "").trim();
+      const gcashNum = (shop.gcash_number || "").trim();
+      const mayaNum = (shop.maya_number || "").trim();
+      const hasOnlineChannel = Boolean(qrUrl || gcashNum || mayaNum);
+      const effectiveMode = String(
+        (q && q.reservation_mode) || shop.reservation_mode || "required"
+      ).toLowerCase();
       const paymentActive = Boolean(
-        q &&
-          q.reservation_mode !== "off" &&
-          q.reservation_configured &&
-          Number(q.reservation_fee || 0) > 0
+        effectiveMode !== "off" &&
+          ((q && q.reservation_configured && Number(q.reservation_fee || 0) > 0) || hasOnlineChannel)
       );
-      const selectedChannel = paymentActive ? getSelectedPaymentChannel() : "pay_at_shop";
+      let selectedChannel = paymentActive ? getSelectedPaymentChannel() : "pay_at_shop";
+      if (paymentActive && effectiveMode === "required" && selectedChannel === "pay_at_shop") {
+        selectedChannel = qrUrl || gcashNum ? "gcash" : "maya";
+        selectPaymentChannel(selectedChannel);
+      }
       const paymentReference = bookingPaymentRef ? bookingPaymentRef.value.trim() : "";
       const proofFile =
         bookingPaymentProof && bookingPaymentProof.files ? bookingPaymentProof.files[0] : null;
 
       if (paymentActive && selectedChannel !== "pay_at_shop") {
         if (paymentReference && paymentReference.length < 6) {
-          bookingFormError.textContent =
-            "Please enter your full GCash / Maya Reference No. (at least 6 characters).";
+          const msg = "Please enter your full GCash / Maya Reference No. (at least 6 characters).";
+          bookingFormError.textContent = msg;
           bookingFormError.classList.remove("hidden");
+          showToast(msg, "error");
+          bookingPaymentRef?.focus();
           return;
         }
         if (!paymentReference && !proofFile) {
-          bookingFormError.textContent =
-            q.reservation_mode === "required"
-              ? "Please enter your GCash / Maya Reference No. or upload your payment receipt screenshot."
+          const msg =
+            effectiveMode === "required"
+              ? "Reservation fee is required: please pay via GCash and enter your Reference No. or upload your receipt screenshot before proceeding."
               : "Please enter your Reference No., upload a receipt screenshot, or choose 'Pay Full at Shop on Pickup'.";
+          bookingFormError.textContent = msg;
           bookingFormError.classList.remove("hidden");
+          showToast(msg, "error");
+          bookingPaymentRef?.focus();
           return;
         }
       }
