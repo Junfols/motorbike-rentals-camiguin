@@ -1791,7 +1791,7 @@ textarea:focus {
   .form-group select,
   .form-group textarea,
   .select-compact,
-    .search-input-wrap input,
+  .search-input-wrap input,
   .date-input-wrap .date-placeholder {
     font-size: 16px;
   }
@@ -1927,6 +1927,7 @@ textarea:focus {
 .alert-test-result.err {
   color: var(--danger);
 }
+
 /* --- GCash / Maya Reservation Fee & Payment Verification --- */
 .payment-qr-section {
   background: var(--bg);
@@ -2092,9 +2093,311 @@ textarea:focus {
   font-weight: 600;
 }
 
+/* Storefront Booked Dates & 35-Day Availability Calendar */
+.bike-booked-strip {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.bike-next-open-row {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #fed7aa;
+  background: var(--primary-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  color: var(--ink-secondary);
+}
+
+.modal-avail-wrap {
+  margin: 10px 0 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.modal-avail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  font-size: 0.88rem;
+}
+
+.modal-avail-calendar {
+  display: block;
+}
+
+.avail-cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-bottom: 8px;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.cal-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+}
+
+.cal-dot-open {
+  background: var(--success-soft);
+  border-color: #86efac;
+}
+
+.cal-dot-limited {
+  background: var(--warning-soft);
+  border-color: #fcd34d;
+}
+
+.cal-dot-booked {
+  background: var(--danger-soft);
+  border-color: #fca5a5;
+}
+
+.cal-dot-selected {
+  background: var(--primary);
+  border-color: var(--primary-dark);
+}
+
+.avail-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 4px;
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.avail-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.cal-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 4px 2px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-family: inherit;
+  text-align: center;
+  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.cal-cell.cal-empty {
+  background: transparent;
+  border-color: transparent;
+  min-height: 0;
+}
+
+.cal-cell.cal-available {
+  background: var(--success-soft);
+  border-color: #86efac;
+  color: var(--success);
+}
+
+.cal-cell.cal-limited {
+  background: var(--warning-soft);
+  border-color: #fcd34d;
+  color: var(--warning);
+}
+
+.cal-cell.cal-booked {
+  background: var(--danger-soft);
+  border-color: #fca5a5;
+  color: var(--danger);
+  opacity: 0.78;
+  cursor: not-allowed;
+}
+
+.cal-cell.cal-interactive:not(:disabled) {
+  cursor: pointer;
+}
+
+.cal-cell.cal-interactive:not(:disabled):hover {
+  transform: translateY(-1px);
+  border-color: var(--primary);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+}
+
+.cal-cell.cal-in-range {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary-dark);
+}
+
+.cal-cell.cal-pickup,
+.cal-cell.cal-return {
+  background: var(--primary);
+  border-color: var(--primary-dark);
+  color: #ffffff;
+  box-shadow: 0 0 0 2px var(--primary-ring);
+}
+
+.cal-cell.cal-pickup .cal-day-status,
+.cal-cell.cal-return .cal-day-status,
+.cal-cell.cal-pickup .cal-month-tag,
+.cal-cell.cal-return .cal-month-tag {
+  color: #ffffff;
+}
+
+.cal-month-tag {
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.cal-day-num {
+  font-size: 0.84rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.cal-day-status {
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+/* Partner & Admin Quick Status & Schedule Modal */
+.quick-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.bike-quick-status {
+  max-width: 145px;
+}
+
+.bike-sched-line {
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 0.79rem;
+  line-height: 1.35;
+}
+
+.bike-sched-line.warn {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.bike-sched-line.ok {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.bike-sched-sub {
+  margin-top: 4px;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.sched-panel {
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.sched-panel h4 {
+  margin: 0 0 10px;
+  font-size: 0.96rem;
+}
+
+.sched-status-row {
+  display: grid;
+  grid-template-columns: 1fr 120px auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.sched-block-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 110px 1.2fr auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.sched-block-grid .form-group {
+  margin-bottom: 0;
+}
+
+.sched-lists-grid {
+  margin-bottom: 12px;
+}
+
+.sched-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.sched-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 0.84rem;
+}
+
 @media (max-width: 600px) {
   .payment-qr-grid,
-  .payment-proof-inputs {
+  .payment-proof-inputs,
+  .sched-status-row,
+  .sched-block-grid {
     grid-template-columns: 1fr;
+  }
+
+  .cal-cell {
+    min-height: 38px;
+    padding: 3px 1px;
+  }
+
+  .cal-day-status {
+    font-size: 0.56rem;
   }
 }
