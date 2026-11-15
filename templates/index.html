@@ -1,6 +1,32 @@
 {% extends "base.html" %}
 
-{% block title %}{{ shop.shop_name }} — Centralized Island Motorbike Rentals{% endblock %}
+{% block title %}{% if featured_shop %}{{ featured_shop.shop_name }} ({{ featured_shop.municipality }}, Camiguin) — {{ shop.shop_name }}{% else %}{{ shop.shop_name }} — Centralized Island Motorbike Rentals{% endif %}{% endblock %}
+
+{% block head_extra %}
+  {% set base_origin = request.url_root.rstrip('/') %}
+  {% if featured_shop %}
+    {% set raw_og_img = featured_shop.cover_url or featured_shop.logo_url or '/static/images/hero-scooter.jpg' %}
+    {% set og_img_abs = raw_og_img if raw_og_img.startswith('http') else (base_origin ~ raw_og_img) %}
+    {% set og_title = featured_shop.shop_name ~ ' — Motorbike Rental in ' ~ featured_shop.municipality ~ ', Camiguin' %}
+    {% set og_desc = featured_shop.description or ('Book verified motorbikes directly from ' ~ featured_shop.shop_name ~ ' in ' ~ featured_shop.municipality ~ ', Camiguin Island.') %}
+    {% set og_url = base_origin ~ '/shop/' ~ featured_shop.slug %}
+  {% else %}
+    {% set og_img_abs = base_origin ~ '/static/images/hero-scooter.jpg' %}
+    {% set og_title = shop.shop_name ~ ' — Island Motorbike Marketplace' %}
+    {% set og_desc = shop.tagline %}
+    {% set og_url = base_origin ~ '/' %}
+  {% endif %}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ shop.shop_name }}">
+  <meta property="og:title" content="{{ og_title }}">
+  <meta property="og:description" content="{{ og_desc }}">
+  <meta property="og:image" content="{{ og_img_abs }}">
+  <meta property="og:url" content="{{ og_url }}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ og_title }}">
+  <meta name="twitter:description" content="{{ og_desc }}">
+  <meta name="twitter:image" content="{{ og_img_abs }}">
+{% endblock %}
 
 {% block content %}
 <section class="hero-section">
@@ -60,6 +86,21 @@
 </section>
 
 <section id="fleet" class="section container">
+  <!-- Verified Partner Shops Strip -->
+  <div id="partner-shops-strip-wrap" class="partner-shops-strip-wrap hidden">
+    <div class="partner-shops-strip-header">
+      <div>
+        <span class="eyebrow-tag">Verified Island Partners</span>
+        <h3 class="partner-shops-strip-title">Browse by Partner Rental Shop</h3>
+      </div>
+      <button type="button" id="partner-shops-reset-btn" class="btn btn-sm btn-outline hidden">Show All Island Shops</button>
+    </div>
+    <div id="partner-shops-strip" class="partner-shops-strip" role="list" aria-label="Verified Partner Rental Shops"></div>
+  </div>
+
+  <!-- Featured / Selected Partner Shop Profile Banner (Facebook Page Style) -->
+  <div id="shop-profile-banner" class="shop-profile-banner hidden" aria-live="polite"></div>
+
   <div class="section-header-row">
     <div>
       <h2 class="section-title">Available Motorbikes Across Camiguin</h2>
@@ -384,5 +425,8 @@
 {% endblock %}
 
 {% block scripts %}
+<script>
+  window.INITIAL_FEATURED_SHOP = {{ (featured_shop or None) | tojson }};
+</script>
 <script src="/static/js/storefront.js?v=9"></script>
 {% endblock %}
