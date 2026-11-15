@@ -618,7 +618,9 @@
           statusBadge = `<span class="badge badge-available">${escapeHtml(unitLabel)}</span>`;
         } else {
           statusBadge = `<span class="badge badge-booked">Booked for Dates</span>`;
-        }        const bookedSummary = formatBookedRangesLabel(bike.booked_ranges, 2);
+        }
+
+        const bookedSummary = formatBookedRangesLabel(bike.booked_ranges, 2);
         const bookedStrip = bookedSummary
           ? `<div class="bike-booked-strip">Booked: <strong>${escapeHtml(bookedSummary)}</strong></div>`
           : "";
@@ -697,190 +699,190 @@
   }
 
   async function openBikeModal(bikeId) {
-  if (!bikeId) return;
-  if (bookingFormError) {
-    bookingFormError.classList.add("hidden");
-    bookingFormError.textContent = "";
-  }
-
-  const todayStr = toIsoLocal(new Date());
-  const effectivePickup = state.pickupDate || todayStr;
-  if (state.returnDate && state.returnDate < effectivePickup) {
-    state.returnDate = "";
-  }
-
-  // Step 1: Pre-populate modal immediately from memory if bike exists
-  const localBike = (state.bikes || []).find((b) => Number(b.id) === Number(bikeId));
-  if (localBike) {
-    state.currentBike = localBike;
-    if (bookingBikeId) bookingBikeId.value = localBike.id;
-    const catEl = document.getElementById("modal-bike-category");
-    if (catEl) catEl.textContent = localBike.category || "Scooter";
-    const nameEl = document.getElementById("modal-bike-name");
-    if (nameEl) nameEl.textContent = localBike.name || "Motorbike";
-    const img = document.getElementById("modal-bike-img");
-    if (img) {
-      img.src = localBike.image_url || "/static/images/hero-scooter.jpg";
-      img.alt = localBike.name || "";
-    }
-    const shopNameEl = document.getElementById("modal-shop-name");
-    if (shopNameEl) shopNameEl.textContent = localBike.shop_name || "Verified Partner Shop";
-    const shopLocEl = document.getElementById("modal-shop-location");
-    if (shopLocEl) {
-      shopLocEl.textContent = [localBike.shop_address, localBike.shop_municipality].filter(Boolean).join(" • ");
-    }
-    const shopPhoneEl = document.getElementById("modal-shop-phone");
-    if (shopPhoneEl) {
-      shopPhoneEl.textContent = localBike.shop_phone ? `Contact: ${localBike.shop_phone}` : "";
-    }
-    if (deliveryOptionLabel) {
-      const fee = localBike.shop_delivery_fee ?? shop.delivery_fee ?? 250;
-      deliveryOptionLabel.textContent = `Resort / Port Delivery (+${formatMoney(fee)})`;
-    }
-    const specsEl = document.getElementById("modal-bike-specs");
-    if (specsEl) {
-      specsEl.innerHTML = `
-        <span class="spec-pill">${localBike.engine_cc || 125}cc</span>
-        <span class="spec-pill">${escapeHtml(localBike.transmission || "Automatic")}</span>
-        <span class="spec-pill">${escapeHtml(localBike.fuel_type || "Gasoline")}</span>
-        <span class="spec-pill">${localBike.units_count || 1} fleet unit(s)</span>
-      `;
-    }
-    const descEl = document.getElementById("modal-bike-desc");
-    if (descEl) descEl.textContent = localBike.description || "";
-    const incEl = document.getElementById("modal-bike-inclusions");
-    if (incEl) incEl.textContent = localBike.inclusions || "2 Helmets";
-    const rateEl = document.getElementById("modal-daily-rate");
-    if (rateEl) rateEl.textContent = `${formatMoney(localBike.daily_rate || 0)} / day`;
-    const depEl = document.getElementById("modal-deposit-rate");
-    if (depEl) depEl.textContent = formatMoney(localBike.deposit || 0);
-  }
-
-  const modalTodayStr = toIsoLocal(new Date());
-  const modalPickupStr = state.pickupDate || modalTodayStr;
-  if (bookingPickup) {
-    bookingPickup.min = modalTodayStr;
-    bookingPickup.value = modalPickupStr;
-  }
-  if (bookingReturn) {
-    bookingReturn.min = modalPickupStr;
-    bookingReturn.value = state.returnDate || "";
-  }
-  syncReturnDateUi();
-
-  if (modalAvailCalendar) {
-    if (localBike && Array.isArray(localBike.availability_calendar) && localBike.availability_calendar.length) {
-      renderModalCalendar();
-    } else {
-      modalAvailCalendar.innerHTML = `<div class="loading-state" style="padding:16px 8px;font-size:0.86rem;">Checking 35-day live calendar...</div>`;
-    }
-  }
-
-  if (bookingPickupMethod) {
-    const isDelivery = bookingPickupMethod.value === "delivery";
-    if (deliveryAddressGroup) deliveryAddressGroup.classList.toggle("hidden", !isDelivery);
-    if (deliveryAddressInput) deliveryAddressInput.required = isDelivery;
-  }
-  if (bookingPaymentRef) bookingPaymentRef.value = "";
-  if (bookingPaymentProof) bookingPaymentProof.value = "";
-  if (bookingSubmitBtn) {
-    bookingSubmitBtn.textContent = "Confirm Booking Request";
-    bookingSubmitBtn.disabled = false;
-  }
-
-  // Open modal immediately for instant feedback
-  openModal("booking-modal");
-  syncPaymentChannelUi(true);
-
-  // Step 2: Fetch full live schedule and quote in the background
-  try {
-    const params = new URLSearchParams({
-      pickup_date: effectivePickup,
-    });
-    if (state.returnDate) {
-      params.set("return_date", state.returnDate);
-    }
-    const res = await fetch(`/api/bikes/${bikeId}?${params.toString()}`);
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || "Could not load bike details.");
+    if (!bikeId) return;
+    if (bookingFormError) {
+      bookingFormError.classList.add("hidden");
+      bookingFormError.textContent = "";
     }
 
-    const bike = data.bike;
-    state.currentBike = bike;
-    if (bookingBikeId) bookingBikeId.value = bike.id;
-    const catEl = document.getElementById("modal-bike-category");
-    if (catEl) catEl.textContent = bike.category;
-    const nameEl = document.getElementById("modal-bike-name");
-    if (nameEl) nameEl.textContent = bike.name;
-    const img = document.getElementById("modal-bike-img");
-    if (img) {
-      img.src = bike.image_url;
-      img.alt = bike.name;
+    const todayStr = toIsoLocal(new Date());
+    const effectivePickup = state.pickupDate || todayStr;
+    if (state.returnDate && state.returnDate < effectivePickup) {
+      state.returnDate = "";
     }
 
-    const shopNameEl = document.getElementById("modal-shop-name");
-    if (shopNameEl) shopNameEl.textContent = bike.shop_name || "Verified Partner Shop";
-    const shopLocEl = document.getElementById("modal-shop-location");
-    if (shopLocEl) {
-      shopLocEl.textContent = [bike.shop_address, bike.shop_municipality].filter(Boolean).join(" • ");
-    }
-    const shopPhoneEl = document.getElementById("modal-shop-phone");
-    if (shopPhoneEl) {
-      shopPhoneEl.textContent = bike.shop_phone ? `Contact: ${bike.shop_phone}` : "";
+    // Step 1: Pre-populate modal immediately from memory if bike exists
+    const localBike = (state.bikes || []).find((b) => Number(b.id) === Number(bikeId));
+    if (localBike) {
+      state.currentBike = localBike;
+      if (bookingBikeId) bookingBikeId.value = localBike.id;
+      const catEl = document.getElementById("modal-bike-category");
+      if (catEl) catEl.textContent = localBike.category || "Scooter";
+      const nameEl = document.getElementById("modal-bike-name");
+      if (nameEl) nameEl.textContent = localBike.name || "Motorbike";
+      const img = document.getElementById("modal-bike-img");
+      if (img) {
+        img.src = localBike.image_url || "/static/images/hero-scooter.jpg";
+        img.alt = localBike.name || "";
+      }
+      const shopNameEl = document.getElementById("modal-shop-name");
+      if (shopNameEl) shopNameEl.textContent = localBike.shop_name || "Verified Partner Shop";
+      const shopLocEl = document.getElementById("modal-shop-location");
+      if (shopLocEl) {
+        shopLocEl.textContent = [localBike.shop_address, localBike.shop_municipality].filter(Boolean).join(" • ");
+      }
+      const shopPhoneEl = document.getElementById("modal-shop-phone");
+      if (shopPhoneEl) {
+        shopPhoneEl.textContent = localBike.shop_phone ? `Contact: ${localBike.shop_phone}` : "";
+      }
+      if (deliveryOptionLabel) {
+        const fee = localBike.shop_delivery_fee ?? shop.delivery_fee ?? 250;
+        deliveryOptionLabel.textContent = `Resort / Port Delivery (+${formatMoney(fee)})`;
+      }
+      const specsEl = document.getElementById("modal-bike-specs");
+      if (specsEl) {
+        specsEl.innerHTML = `
+          <span class="spec-pill">${localBike.engine_cc || 125}cc</span>
+          <span class="spec-pill">${escapeHtml(localBike.transmission || "Automatic")}</span>
+          <span class="spec-pill">${escapeHtml(localBike.fuel_type || "Gasoline")}</span>
+          <span class="spec-pill">${localBike.units_count || 1} fleet unit(s)</span>
+        `;
+      }
+      const descEl = document.getElementById("modal-bike-desc");
+      if (descEl) descEl.textContent = localBike.description || "";
+      const incEl = document.getElementById("modal-bike-inclusions");
+      if (incEl) incEl.textContent = localBike.inclusions || "2 Helmets";
+      const rateEl = document.getElementById("modal-daily-rate");
+      if (rateEl) rateEl.textContent = `${formatMoney(localBike.daily_rate || 0)} / day`;
+      const depEl = document.getElementById("modal-deposit-rate");
+      if (depEl) depEl.textContent = formatMoney(localBike.deposit || 0);
     }
 
-    if (deliveryOptionLabel) {
-      const fee = bike.shop_delivery_fee ?? shop.delivery_fee ?? 250;
-      deliveryOptionLabel.textContent = `Resort / Port Delivery (+${formatMoney(fee)})`;
+    const modalTodayStr = toIsoLocal(new Date());
+    const modalPickupStr = state.pickupDate || modalTodayStr;
+    if (bookingPickup) {
+      bookingPickup.min = modalTodayStr;
+      bookingPickup.value = modalPickupStr;
     }
-
-    const specsEl = document.getElementById("modal-bike-specs");
-    if (specsEl) {
-      specsEl.innerHTML = `
-        <span class="spec-pill">${bike.engine_cc}cc</span>
-        <span class="spec-pill">${escapeHtml(bike.transmission)}</span>
-        <span class="spec-pill">${escapeHtml(bike.fuel_type)}</span>
-        <span class="spec-pill">${bike.units_count} fleet unit(s)</span>
-      `;
+    if (bookingReturn) {
+      bookingReturn.min = modalPickupStr;
+      bookingReturn.value = state.returnDate || "";
     }
-    const descEl = document.getElementById("modal-bike-desc");
-    if (descEl) descEl.textContent = bike.description || "";
-    const incEl = document.getElementById("modal-bike-inclusions");
-    if (incEl) incEl.textContent = bike.inclusions || "2 Helmets";
-    const rateEl = document.getElementById("modal-daily-rate");
-    if (rateEl) rateEl.textContent = `${formatMoney(bike.daily_rate)} / day`;
-    const depEl = document.getElementById("modal-deposit-rate");
-    if (depEl) depEl.textContent = formatMoney(bike.deposit);
+    syncReturnDateUi();
 
-    const rangesEl = document.getElementById("modal-booked-ranges");
-    if (rangesEl) {
-      const ranges = bike.booked_ranges || [];
-      if (!ranges.length) {
-        rangesEl.innerHTML = `<span class="text-muted">No upcoming bookings yet — wide open!</span>`;
+    if (modalAvailCalendar) {
+      if (localBike && Array.isArray(localBike.availability_calendar) && localBike.availability_calendar.length) {
+        renderModalCalendar();
       } else {
-        rangesEl.innerHTML = ranges
-          .map(
-            (r) =>
-              `<span class="booked-range-pill">${escapeHtml(formatDateRangeShort(r.pickup_date, r.return_date))}</span>`
-          )
-          .join("");
+        modalAvailCalendar.innerHTML = `<div class="loading-state" style="padding:16px 8px;font-size:0.86rem;">Checking 35-day live calendar...</div>`;
       }
     }
 
-    renderModalCalendar();
-    await refreshQuote();
-    syncPaymentChannelUi(false);
-  } catch (err) {
-    if (bookingFormError) {
-      bookingFormError.textContent = err.message;
-      bookingFormError.classList.remove("hidden");
+    if (bookingPickupMethod) {
+      const isDelivery = bookingPickupMethod.value === "delivery";
+      if (deliveryAddressGroup) deliveryAddressGroup.classList.toggle("hidden", !isDelivery);
+      if (deliveryAddressInput) deliveryAddressInput.required = isDelivery;
     }
-    await refreshQuote();
-  }
-}
+    if (bookingPaymentRef) bookingPaymentRef.value = "";
+    if (bookingPaymentProof) bookingPaymentProof.value = "";
+    if (bookingSubmitBtn) {
+      bookingSubmitBtn.textContent = "Confirm Booking Request";
+      bookingSubmitBtn.disabled = false;
+    }
 
-async function refreshQuote() {
+    // Open modal immediately for instant feedback
+    openModal("booking-modal");
+    syncPaymentChannelUi(true);
+
+    // Step 2: Fetch full live schedule and quote in the background
+    try {
+      const params = new URLSearchParams({
+        pickup_date: effectivePickup,
+      });
+      if (state.returnDate) {
+        params.set("return_date", state.returnDate);
+      }
+      const res = await fetch(`/api/bikes/${bikeId}?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Could not load bike details.");
+      }
+
+      const bike = data.bike;
+      state.currentBike = bike;
+      if (bookingBikeId) bookingBikeId.value = bike.id;
+      const catEl = document.getElementById("modal-bike-category");
+      if (catEl) catEl.textContent = bike.category;
+      const nameEl = document.getElementById("modal-bike-name");
+      if (nameEl) nameEl.textContent = bike.name;
+      const img = document.getElementById("modal-bike-img");
+      if (img) {
+        img.src = bike.image_url;
+        img.alt = bike.name;
+      }
+
+      const shopNameEl = document.getElementById("modal-shop-name");
+      if (shopNameEl) shopNameEl.textContent = bike.shop_name || "Verified Partner Shop";
+      const shopLocEl = document.getElementById("modal-shop-location");
+      if (shopLocEl) {
+        shopLocEl.textContent = [bike.shop_address, bike.shop_municipality].filter(Boolean).join(" • ");
+      }
+      const shopPhoneEl = document.getElementById("modal-shop-phone");
+      if (shopPhoneEl) {
+        shopPhoneEl.textContent = bike.shop_phone ? `Contact: ${bike.shop_phone}` : "";
+      }
+
+      if (deliveryOptionLabel) {
+        const fee = bike.shop_delivery_fee ?? shop.delivery_fee ?? 250;
+        deliveryOptionLabel.textContent = `Resort / Port Delivery (+${formatMoney(fee)})`;
+      }
+
+      const specsEl = document.getElementById("modal-bike-specs");
+      if (specsEl) {
+        specsEl.innerHTML = `
+          <span class="spec-pill">${bike.engine_cc}cc</span>
+          <span class="spec-pill">${escapeHtml(bike.transmission)}</span>
+          <span class="spec-pill">${escapeHtml(bike.fuel_type)}</span>
+          <span class="spec-pill">${bike.units_count} fleet unit(s)</span>
+        `;
+      }
+      const descEl = document.getElementById("modal-bike-desc");
+      if (descEl) descEl.textContent = bike.description || "";
+      const incEl = document.getElementById("modal-bike-inclusions");
+      if (incEl) incEl.textContent = bike.inclusions || "2 Helmets";
+      const rateEl = document.getElementById("modal-daily-rate");
+      if (rateEl) rateEl.textContent = `${formatMoney(bike.daily_rate)} / day`;
+      const depEl = document.getElementById("modal-deposit-rate");
+      if (depEl) depEl.textContent = formatMoney(bike.deposit);
+
+      const rangesEl = document.getElementById("modal-booked-ranges");
+      if (rangesEl) {
+        const ranges = bike.booked_ranges || [];
+        if (!ranges.length) {
+          rangesEl.innerHTML = `<span class="text-muted">No upcoming bookings yet — wide open!</span>`;
+        } else {
+          rangesEl.innerHTML = ranges
+            .map(
+              (r) =>
+                `<span class="booked-range-pill">${escapeHtml(formatDateRangeShort(r.pickup_date, r.return_date))}</span>`
+            )
+            .join("");
+        }
+      }
+
+      renderModalCalendar();
+      await refreshQuote();
+      syncPaymentChannelUi(false);
+    } catch (err) {
+      if (bookingFormError) {
+        bookingFormError.textContent = err.message;
+        bookingFormError.classList.remove("hidden");
+      }
+      await refreshQuote();
+    }
+  }
+
+  async function refreshQuote() {
     const bikeId = bookingBikeId.value;
     const pDate = bookingPickup.value;
     const rDate = bookingReturn.value;
@@ -950,10 +952,7 @@ async function refreshQuote() {
           <span>Rental (${q.rental_days} ${dayWord})</span>
           <span>${escapeHtml(formatMoney(q.base_subtotal))}</span>
         </div>
-      `;</span>
-          </div>
-        `;
-      }
+      `;
       if (q.addons_total > 0) {
         linesHtml += `
           <div class="quote-line">
