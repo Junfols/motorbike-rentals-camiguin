@@ -2259,21 +2259,25 @@ def create_app(test_config: dict | None = None) -> Flask:
 
         bike_cnt = conn.execute("SELECT COUNT(*) FROM bikes WHERE shop_id = ?", (shop_id,)).fetchone()[0]
         booking_cnt = conn.execute("SELECT COUNT(*) FROM bookings WHERE shop_id = ?", (shop_id,)).fetchone()[0]
-        if bike_cnt > 0 or booking_cnt > 0:
-            return (
-                jsonify(
-                    {
-                        "error": (
-                            f"Cannot delete {existing['shop_name']} because it has {bike_cnt} bike(s) "
-                            f"and {booking_cnt} booking(s). Suspend it instead."
-                        )
-                    }
-                ),
-                409,
-            )
         with conn:
+            conn.execute(
+                "DELETE FROM bike_blocks WHERE shop_id = ? OR bike_id IN (SELECT id FROM bikes WHERE shop_id = ?)",
+                (shop_id, shop_id),
+            )
+            conn.execute(
+                "DELETE FROM bookings WHERE shop_id = ? OR bike_id IN (SELECT id FROM bikes WHERE shop_id = ?)",
+                (shop_id, shop_id),
+            )
+            conn.execute("DELETE FROM bikes WHERE shop_id = ?", (shop_id,))
             conn.execute("DELETE FROM shops WHERE id = ?", (shop_id,))
-        return jsonify({"deleted": True, "id": shop_id})
+        return jsonify(
+            {
+                "deleted": True,
+                "id": shop_id,
+                "deleted_bikes": int(bike_cnt),
+                "deleted_bookings": int(booking_cnt),
+            }
+        )
 
     @app.get("/api/admin/bookings")
     @admin_required
