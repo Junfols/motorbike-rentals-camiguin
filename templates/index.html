@@ -209,6 +209,14 @@
           </div>
         </div>
 
+        <div id="modal-availability-wrap" class="modal-avail-wrap">
+          <div class="modal-avail-head">
+            <span><strong>35-Day Availability</strong> <small class="text-muted">(Tap dates to choose Pickup &amp; Return)</small></span>
+            <button type="button" id="modal-next-available-btn" class="btn btn-sm btn-outline hidden">Next Available Date</button>
+          </div>
+          <div id="modal-availability-calendar" class="modal-avail-calendar"></div>
+        </div>
+
         <div class="form-grid-2">
           <div class="form-group">
             <label for="booking-pickup-time">Pickup Time *</label>
@@ -380,5 +388,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/storefront.js?v=8"></script>
+<script src="/static/js/storefront.js?v=9"></script>
 {% endblock %}
