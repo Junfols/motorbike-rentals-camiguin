@@ -74,7 +74,9 @@
   const copyMayaBtn = document.getElementById("copy-maya-btn");
   const channelGcashWrap = document.getElementById("channel-gcash-wrap");
   const channelMayaWrap = document.getElementById("channel-maya-wrap");
+  const channelPaymongoWrap = document.getElementById("channel-paymongo-wrap");
   const channelShopWrap = document.getElementById("channel-shop-wrap");
+  const paymongoInfoBox = document.getElementById("paymongo-info-box");
   const paymentProofFields = document.getElementById("payment-proof-fields");
   const bookingPaymentRef = document.getElementById("booking-payment-reference");
   const bookingPaymentProof = document.getElementById("booking-payment-proof");
@@ -134,11 +136,11 @@
     if (!active) {
       selectPaymentChannel("pay_at_shop");
       if (paymentProofFields) paymentProofFields.classList.add("hidden");
+      if (paymongoInfoBox) paymongoInfoBox.classList.add("hidden");
       return;
     }
 
     const isReq = mode === "required";
-    const preferredOnline = hasGcash ? "gcash" : hasMaya ? "maya" : "pay_at_shop";
 
     if (paymentModePill) {
       paymentModePill.textContent = isReq ? "Required" : "Optional";
@@ -152,34 +154,6 @@
         (shop.payment_instructions || "").trim() ||
         "Scan the QR code or send the reservation fee below, then enter your Reference No. before submitting.";
     }
-    if (paymentQrBox && paymentQrImg) {
-      if (qrUrl) {
-        paymentQrImg.src = qrUrl;
-        paymentQrBox.classList.remove("hidden");
-      } else {
-        paymentQrImg.src = "";
-        paymentQrBox.classList.add("hidden");
-      }
-    }
-    if (paymentGcashRow && paymentGcashNumber) {
-      if (gcashNum) {
-        paymentGcashNumber.textContent = gcashNum;
-        if (paymentGcashName) {
-          paymentGcashName.textContent = gcashName ? `Account Name: ${gcashName}` : "";
-        }
-        paymentGcashRow.classList.remove("hidden");
-      } else {
-        paymentGcashRow.classList.add("hidden");
-      }
-    }
-    if (paymentMayaRow && paymentMayaNumber) {
-      if (mayaNum) {
-        paymentMayaNumber.textContent = mayaNum;
-        paymentMayaRow.classList.remove("hidden");
-      } else {
-        paymentMayaRow.classList.add("hidden");
-      }
-    }
 
     if (channelGcashWrap) channelGcashWrap.classList.toggle("hidden", !hasGcash);
     if (channelMayaWrap) channelMayaWrap.classList.toggle("hidden", !hasMaya);
@@ -187,21 +161,69 @@
 
     let current = getSelectedPaymentChannel();
     if (resetDefault || wasHidden) {
-      current = preferredOnline;
+      current = "paymongo";
       selectPaymentChannel(current);
     } else if (isReq && current === "pay_at_shop") {
-      current = preferredOnline;
+      current = "paymongo";
       selectPaymentChannel(current);
     } else if (current === "gcash" && !hasGcash) {
-      current = hasMaya ? "maya" : "pay_at_shop";
+      current = "paymongo";
       selectPaymentChannel(current);
     } else if (current === "maya" && !hasMaya) {
-      current = hasGcash ? "gcash" : "pay_at_shop";
+      current = "paymongo";
       selectPaymentChannel(current);
     }
 
-    if (paymentProofFields) {
-      paymentProofFields.classList.toggle("hidden", current === "pay_at_shop");
+    // Toggle sub-sections depending on whether PayMongo, Manual QR, or Shop pickup is active
+    if (current === "paymongo") {
+      if (paymongoInfoBox) paymongoInfoBox.classList.remove("hidden");
+      if (paymentProofFields) paymentProofFields.classList.add("hidden");
+      if (paymentQrBox) paymentQrBox.classList.add("hidden");
+      if (paymentGcashRow) paymentGcashRow.classList.add("hidden");
+      if (paymentMayaRow) paymentMayaRow.classList.add("hidden");
+    } else if (current === "gcash") {
+      if (paymongoInfoBox) paymongoInfoBox.classList.add("hidden");
+      if (paymentProofFields) paymentProofFields.classList.remove("hidden");
+      if (paymentQrBox && paymentQrImg) {
+        if (qrUrl) {
+          paymentQrImg.src = qrUrl;
+          paymentQrBox.classList.remove("hidden");
+        } else {
+          paymentQrBox.classList.add("hidden");
+        }
+      }
+      if (paymentGcashRow && paymentGcashNumber) {
+        if (gcashNum) {
+          paymentGcashNumber.textContent = gcashNum;
+          if (paymentGcashName) {
+            paymentGcashName.textContent = gcashName ? `Account Name: ${gcashName}` : "";
+          }
+          paymentGcashRow.classList.remove("hidden");
+        } else {
+          paymentGcashRow.classList.add("hidden");
+        }
+      }
+      if (paymentMayaRow) paymentMayaRow.classList.add("hidden");
+    } else if (current === "maya") {
+      if (paymongoInfoBox) paymongoInfoBox.classList.add("hidden");
+      if (paymentProofFields) paymentProofFields.classList.remove("hidden");
+      if (paymentQrBox) paymentQrBox.classList.add("hidden");
+      if (paymentGcashRow) paymentGcashRow.classList.add("hidden");
+      if (paymentMayaRow && paymentMayaNumber) {
+        if (mayaNum) {
+          paymentMayaNumber.textContent = mayaNum;
+          paymentMayaRow.classList.remove("hidden");
+        } else {
+          paymentMayaRow.classList.add("hidden");
+        }
+      }
+    } else {
+      // pay_at_shop
+      if (paymongoInfoBox) paymongoInfoBox.classList.add("hidden");
+      if (paymentProofFields) paymentProofFields.classList.add("hidden");
+      if (paymentQrBox) paymentQrBox.classList.add("hidden");
+      if (paymentGcashRow) paymentGcashRow.classList.add("hidden");
+      if (paymentMayaRow) paymentMayaRow.classList.add("hidden");
     }
   }
 
@@ -1364,24 +1386,28 @@
         bookingPaymentProof && bookingPaymentProof.files ? bookingPaymentProof.files[0] : null;
 
       if (paymentActive && selectedChannel !== "pay_at_shop") {
-        if (paymentReference && paymentReference.length < 6) {
-          const msg = "Please enter your full GCash / Maya Reference No. (at least 6 characters).";
-          bookingFormError.textContent = msg;
-          bookingFormError.classList.remove("hidden");
-          showToast(msg, "error");
-          bookingPaymentRef?.focus();
-          return;
-        }
-        if (!paymentReference && !proofFile) {
-          const msg =
-            effectiveMode === "required"
-              ? "Reservation fee is required: please pay via GCash and enter your Reference No. or upload your receipt screenshot before proceeding."
-              : "Please enter your Reference No., upload a receipt screenshot, or choose 'Pay Full at Shop on Pickup'.";
-          bookingFormError.textContent = msg;
-          bookingFormError.classList.remove("hidden");
-          showToast(msg, "error");
-          bookingPaymentRef?.focus();
-          return;
+        if (selectedChannel === "paymongo") {
+          // Automatic online payment via PayMongo: no manual receipt or reference number needed
+        } else {
+          if (paymentReference && paymentReference.length < 6) {
+            const msg = "Please enter your full GCash / Maya Reference No. (at least 6 characters).";
+            bookingFormError.textContent = msg;
+            bookingFormError.classList.remove("hidden");
+            showToast(msg, "error");
+            bookingPaymentRef?.focus();
+            return;
+          }
+          if (!paymentReference && !proofFile) {
+            const msg =
+              effectiveMode === "required"
+                ? "Reservation fee is required: please pay via GCash/Maya and enter your Reference No. or upload your receipt screenshot before proceeding."
+                : "Please enter your Reference No., upload a receipt screenshot, or choose 'Pay Full at Shop on Pickup'.";
+            bookingFormError.textContent = msg;
+            bookingFormError.classList.remove("hidden");
+            showToast(msg, "error");
+            bookingPaymentRef?.focus();
+            return;
+          }
         }
       }
 
@@ -1424,7 +1450,7 @@
         deliveryAddressGroup.classList.add("hidden");
         deliveryAddressInput.required = false;
 
-        showConfirmationModal(booking);
+        showConfirmationModal(booking, data.checkout_url);
         loadFleet();
         showToast("Booking request submitted!", "success");
       } catch (err) {
@@ -1437,8 +1463,20 @@
     });
   }
 
-  function showConfirmationModal(booking) {
+  function showConfirmationModal(booking, checkoutUrl) {
     document.getElementById("confirm-booking-code").textContent = booking.booking_code;
+
+    const payUrl = checkoutUrl || booking.payment_checkout_url;
+    const onlineBox = document.getElementById("confirm-online-pay-box");
+    const paymongoLink = document.getElementById("confirm-paymongo-link");
+    if (onlineBox && paymongoLink) {
+      if (payUrl && booking.payment_status !== "verified") {
+        paymongoLink.href = payUrl;
+        onlineBox.classList.remove("hidden");
+      } else {
+        onlineBox.classList.add("hidden");
+      }
+    }
     document.getElementById("confirm-summary").innerHTML = `
       <div><strong>Rental Shop:</strong> ${escapeHtml(booking.shop_name || "Verified Partner")} (${escapeHtml(booking.shop_municipality || "Camiguin")})</div>
       <div><strong>Motorbike:</strong> ${escapeHtml(booking.bike_name)}</div>

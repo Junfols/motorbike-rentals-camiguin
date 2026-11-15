@@ -162,6 +162,12 @@
 
         <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;">
           ${
+            b.payment_checkout_url && b.payment_status !== "verified" && b.status !== "cancelled"
+              ? `<a href="${escapeHtml(b.payment_checkout_url)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm" style="background:#008060;border-color:#008060;">⚡ Pay Online (QR Ph / GCash)</a>
+                 <button type="button" class="btn btn-sm btn-outline" id="sync-pm-btn" data-booking-id="${b.id}" data-code="${escapeHtml(b.booking_code)}" data-phone="${escapeHtml(b.customer_phone)}">Sync Payment Status</button>`
+              : ""
+          }
+          ${
             canCancel
               ? `<button type="button" class="btn btn-danger btn-sm" id="cancel-trip-btn" data-code="${escapeHtml(b.booking_code)}" data-phone="${escapeHtml(b.customer_phone)}">Cancel Request</button>`
               : ""
@@ -193,6 +199,32 @@
   });
 
   lookupResult.addEventListener("click", async (event) => {
+    const syncBtn = event.target.closest("#sync-pm-btn");
+    if (syncBtn) {
+      const bId = syncBtn.getAttribute("data-booking-id");
+      const bCode = syncBtn.getAttribute("data-code");
+      const bPhone = syncBtn.getAttribute("data-phone");
+      syncBtn.disabled = true;
+      syncBtn.textContent = "Checking...";
+      try {
+        const res = await fetch(`/api/bookings/${bId}/paymongo-sync`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Could not check payment status.");
+        if (data.status === "paid" || data.status === "already_verified") {
+          showToast("Payment verified & confirmed!", "success");
+          runLookup(bCode, bPhone);
+        } else {
+          showToast(`PayMongo status: ${data.status || "unpaid"}. If you just paid, please wait a moment and try again.`, "info");
+        }
+      } catch (err) {
+        showToast(err.message, "error");
+      } finally {
+        syncBtn.disabled = false;
+        syncBtn.textContent = "Sync Payment Status";
+      }
+      return;
+    }
+
     const btn = event.target.closest("#cancel-trip-btn");
     if (!btn) return;
     if (!window.confirm("Are you sure you want to cancel this pending booking?")) return;

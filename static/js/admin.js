@@ -491,7 +491,8 @@
               <div class="text-muted" style="margin:4px 0 8px;">
                 ${escapeHtml(bike.category)} &bull; ${bike.engine_cc}cc &bull; ${escapeHtml(bike.transmission)}
               </div>
-              <div style="font-size:0.88rem;margin-bottom:6px;">                <strong>${escapeHtml(formatMoney(bike.daily_rate))}/day</strong>
+              <div style="font-size:0.88rem;margin-bottom:6px;">
+                <strong>${escapeHtml(formatMoney(bike.daily_rate))}/day</strong>
               </div>
               <div class="text-muted">
                 Units: ${bike.units_count} (Booked today: ${bike.booked_units}) ${bike.plate_number ? `&bull; ${escapeHtml(bike.plate_number)}` : ""}
@@ -663,6 +664,40 @@
         : "Choose your GCash / Maya InstaPay QR image (PNG/JPG, up to 8 MB) — it uploads automatically once selected.",
       qrUrl ? "success" : "neutral"
     );
+
+    const pmPubEl = document.getElementById("set-paymongo-public-key");
+    if (pmPubEl) pmPubEl.value = s.paymongo_public_key || "";
+
+    const pmSecretInput = document.getElementById("set-paymongo-secret-key");
+    if (pmSecretInput) pmSecretInput.value = "";
+    const clearPmSecretBox = document.getElementById("clear-paymongo-secret-key");
+    if (clearPmSecretBox) clearPmSecretBox.checked = false;
+    const clearPmSecretWrap = document.getElementById("clear-paymongo-secret-wrap");
+    if (clearPmSecretWrap) clearPmSecretWrap.classList.toggle("hidden", !s.has_paymongo_secret_key);
+    updateAlertStatusPill(
+      document.getElementById("paymongo-secret-status"),
+      Boolean(s.has_paymongo_secret_key),
+      "Active",
+      "Not set"
+    );
+
+    const pmWhInput = document.getElementById("set-paymongo-webhook-secret");
+    if (pmWhInput) pmWhInput.value = "";
+    const clearPmWhBox = document.getElementById("clear-paymongo-webhook-secret");
+    if (clearPmWhBox) clearPmWhBox.checked = false;
+    const clearPmWhWrap = document.getElementById("clear-paymongo-webhook-wrap");
+    if (clearPmWhWrap) clearPmWhWrap.classList.toggle("hidden", !s.has_paymongo_webhook_secret);
+    updateAlertStatusPill(
+      document.getElementById("paymongo-webhook-status"),
+      Boolean(s.has_paymongo_webhook_secret),
+      "Configured",
+      "Not set"
+    );
+
+    const whDisplay = document.getElementById("paymongo-webhook-url-display");
+    if (whDisplay) {
+      whDisplay.value = `${window.location.origin}/api/webhooks/paymongo`;
+    }
   }
 
   async function uploadQrImageFile(file) {
@@ -1176,6 +1211,11 @@
       gcash_number: document.getElementById("set-gcash-number").value.trim(),
       maya_number: document.getElementById("set-maya-number").value.trim(),
       payment_instructions: document.getElementById("set-payment-instructions").value.trim(),
+      paymongo_public_key: (document.getElementById("set-paymongo-public-key")?.value || "").trim(),
+      paymongo_secret_key: (document.getElementById("set-paymongo-secret-key")?.value || "").trim(),
+      clear_paymongo_secret_key: Boolean(document.getElementById("clear-paymongo-secret-key")?.checked),
+      paymongo_webhook_secret: (document.getElementById("set-paymongo-webhook-secret")?.value || "").trim(),
+      clear_paymongo_webhook_secret: Boolean(document.getElementById("clear-paymongo-webhook-secret")?.checked),
       admin_telegram_chat_id: document.getElementById("set-admin-telegram-chat-id").value.trim(),
       telegram_bot_token: document.getElementById("set-telegram-bot-token").value.trim(),
       clear_telegram_bot_token: document.getElementById("clear-telegram-bot-token").checked,
@@ -1324,6 +1364,20 @@
       } finally {
         testAdminAlertBtn.disabled = false;
         testAdminAlertBtn.textContent = "Send Test Alert";
+      }
+    });
+  }
+
+  const copyPmWhBtn = document.getElementById("copy-paymongo-webhook-url-btn");
+  if (copyPmWhBtn) {
+    copyPmWhBtn.addEventListener("click", async () => {
+      const url = document.getElementById("paymongo-webhook-url-display")?.value || "";
+      if (!url) return;
+      try {
+        await navigator.clipboard.writeText(url);
+        showToast("PayMongo Webhook URL copied!", "success");
+      } catch (_) {
+        showToast(`Webhook URL: ${url}`, "success");
       }
     });
   }
