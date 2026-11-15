@@ -801,11 +801,15 @@
     }
 
     if (bookingPickupMethod) {
-      const isDelivery = bookingPickupMethod.value === "delivery";
-      if (deliveryAddressGroup) deliveryAddressGroup.classList.toggle("hidden", !isDelivery);
-      if (deliveryAddressInput) deliveryAddressInput.required = isDelivery;
-      if (isDelivery) {
-        initOrUpdateDeliveryMap();
+      if (pendingDeliverySpot) {
+        applyPendingDeliverySpot();
+      } else {
+        const isDelivery = bookingPickupMethod.value === "delivery";
+        if (deliveryAddressGroup) deliveryAddressGroup.classList.toggle("hidden", !isDelivery);
+        if (deliveryAddressInput) deliveryAddressInput.required = isDelivery;
+        if (isDelivery) {
+          initOrUpdateDeliveryMap();
+        }
       }
     }
     if (bookingPaymentRef) bookingPaymentRef.value = "";
@@ -1384,6 +1388,363 @@
     });
   }
 
+  const CAMIGUIN_LANDMARKS = [
+    {
+      id: "benoni-port",
+      name: "🚢 Benoni Ferry Port",
+      category: "port",
+      badgeClass: "badge-port",
+      typeLabel: "Ferry Terminal",
+      lat: 9.1672,
+      lng: 124.8028,
+      desc: "Main gateway port to Camiguin from Balingoan, Misamis Oriental / CDO. Fastcraft and RoRo dock here.",
+      address: "Benoni Port, Mahinog, Camiguin"
+    },
+    {
+      id: "balbagon-port",
+      name: "⛴️ Balbagon Port",
+      category: "port",
+      badgeClass: "badge-port",
+      typeLabel: "Ferry Port",
+      lat: 9.2530,
+      lng: 124.7170,
+      desc: "Ferry terminal connecting Camiguin to Jagna, Bohol (Super Shuttle Ferry).",
+      address: "Balbagon Port, Mambajao, Camiguin"
+    },
+    {
+      id: "camiguin-airport",
+      name: "✈️ Camiguin Airport (CGM)",
+      category: "port",
+      badgeClass: "badge-port",
+      typeLabel: "Airport",
+      lat: 9.2520,
+      lng: 124.7060,
+      desc: "Camiguin domestic commercial airport in Mambajao with flights from Cebu / Manila.",
+      address: "Camiguin Airport, Mambajao, Camiguin"
+    },
+    {
+      id: "white-island",
+      name: "🏖️ White Island Sandbar",
+      category: "beach",
+      badgeClass: "badge-spot",
+      typeLabel: "Tourist Attraction",
+      lat: 9.2580,
+      lng: 124.6540,
+      desc: "Iconic uninhabited white sandbar with Mt. Hibok-Hibok view. Boat jump-off at Yumbing.",
+      address: "White Island Jump-off, Yumbing, Mambajao"
+    },
+    {
+      id: "mantigue-island",
+      name: "🏝️ Mantigue Island Nature Park",
+      category: "beach",
+      badgeClass: "badge-spot",
+      typeLabel: "Tourist Attraction",
+      lat: 9.1720,
+      lng: 124.8230,
+      desc: "4-hectare marine sanctuary with crystal clear water and lush mini-forest.",
+      address: "Mantigue Island Boat Jump-off, San Roque, Mahinog"
+    },
+    {
+      id: "sunken-cemetery",
+      name: "🌊 Sunken Cemetery & Cross",
+      category: "history",
+      badgeClass: "badge-spot",
+      typeLabel: "Historical Landmark",
+      lat: 9.2010,
+      lng: 124.6320,
+      desc: "Famous underwater cemetery submerged during the 1871 Mt. Vulcan eruption.",
+      address: "Sunken Cemetery, Bonbon, Catarman"
+    },
+    {
+      id: "church-ruins",
+      name: "⛪ Old Spanish Church Ruins (Guiob)",
+      category: "history",
+      badgeClass: "badge-spot",
+      typeLabel: "Historical Landmark",
+      lat: 9.2070,
+      lng: 124.6300,
+      desc: "16th-century stone church walls preserved after the 1871 volcanic eruption.",
+      address: "Guiob Church Ruins, Bonbon, Catarman"
+    },
+    {
+      id: "katibawasan-falls",
+      name: "💧 Katibawasan Falls",
+      category: "nature",
+      badgeClass: "badge-spot",
+      typeLabel: "Nature / Waterfall",
+      lat: 9.2150,
+      lng: 124.7170,
+      desc: "Stunning 250-foot waterfall cascading into a natural boulder basin.",
+      address: "Katibawasan Falls, Upper Mambajao"
+    },
+    {
+      id: "tuasan-falls",
+      name: "🏞️ Tuasan Falls",
+      category: "nature",
+      badgeClass: "badge-spot",
+      typeLabel: "Nature / Waterfall",
+      lat: 9.1760,
+      lng: 124.6750,
+      desc: "Pristine wild waterfall tucked in lush jungle scenery with refreshing plunge pool.",
+      address: "Tuasan Falls, Mainit, Catarman"
+    },
+    {
+      id: "ardent-springs",
+      name: "♨️ Ardent Hibok-Hibok Hot Springs",
+      category: "nature",
+      badgeClass: "badge-spot",
+      typeLabel: "Thermal Spring",
+      lat: 9.2210,
+      lng: 124.6760,
+      desc: "Natural geothermal warm pools surrounded by tropical greenery at Mt. Hibok-Hibok foot.",
+      address: "Ardent Hot Springs, Esperanza, Mambajao"
+    },
+    {
+      id: "stonino-springs",
+      name: "🧊 Sto. Niño Cold Springs",
+      category: "nature",
+      badgeClass: "badge-spot",
+      typeLabel: "Natural Cold Spring",
+      lat: 9.1410,
+      lng: 124.7210,
+      desc: "Huge spring-fed freshwater pool with chilly crystal-clear spring water.",
+      address: "Sto. Niño Cold Springs, Sagay, Camiguin"
+    },
+    {
+      id: "paras-beach-resort",
+      name: "🌴 Paras Beach Resort",
+      category: "resort",
+      badgeClass: "badge-resort",
+      typeLabel: "Beach Resort",
+      lat: 9.2480,
+      lng: 124.6620,
+      desc: "Popular beachfront resort facing White Island in Yumbing, Mambajao.",
+      address: "Paras Beach Resort, Yumbing, Mambajao"
+    },
+    {
+      id: "balyali-resort",
+      name: "🌴 Balyali Resort Camiguin",
+      category: "resort",
+      badgeClass: "badge-resort",
+      typeLabel: "Beachfront Resort",
+      lat: 9.2465,
+      lng: 124.6730,
+      desc: "Cozy boutique resort with stunning beach sunset views in Agoho, Mambajao.",
+      address: "Balyali Resort, Agoho, Mambajao"
+    },
+    {
+      id: "tongatok-cliff",
+      name: "🌅 Tongatok Cliff Resort",
+      category: "resort",
+      badgeClass: "badge-resort",
+      typeLabel: "Cliffside Resort",
+      lat: 9.2415,
+      lng: 124.6465,
+      desc: "Cliffside resort and cafe known for dramatic rocky cove vistas and sunset cocktails.",
+      address: "Tongatok Cliff Resort, Mambajao, Camiguin"
+    },
+    {
+      id: "lanzones-resort",
+      name: "🌿 Lanzones Resort Camiguin",
+      category: "resort",
+      badgeClass: "badge-resort",
+      typeLabel: "Resort",
+      lat: 9.2420,
+      lng: 124.6680,
+      desc: "Peaceful villa resort surrounded by verdant Lanzones fruit orchards in Agoho.",
+      address: "Lanzones Resort, Agoho, Mambajao"
+    },
+    {
+      id: "nouveau-resort",
+      name: "✨ Nouveau Resort Camiguin",
+      category: "resort",
+      badgeClass: "badge-resort",
+      typeLabel: "Luxury Resort",
+      lat: 9.1760,
+      lng: 124.7890,
+      desc: "Premier 4-star luxury seaside resort with infinity pool facing Bohol Sea.",
+      address: "Nouveau Resort, San Jose, Mahinog"
+    }
+  ];
+
+  let pendingDeliverySpot = null;
+
+  function prefillDeliveryForSpot(spot) {
+    pendingDeliverySpot = spot;
+    const modal = document.getElementById("booking-modal");
+    if (modal && !modal.classList.contains("hidden")) {
+      applyPendingDeliverySpot();
+      showToast(`Set delivery to ${spot.name}!`, "success");
+    } else {
+      const firstAvailBike = (state.bikes || []).find((b) => b.is_available) || (state.bikes || [])[0];
+      if (firstAvailBike) {
+        openBikeModal(firstAvailBike.id);
+        setTimeout(() => {
+          applyPendingDeliverySpot();
+        }, 150);
+        showToast(`Selected ${spot.name}! Motorbike ready for booking.`, "success");
+      } else {
+        document.getElementById("fleet")?.scrollIntoView({ behavior: "smooth" });
+        showToast(`Selected ${spot.name}! Please choose a motorbike from the fleet below.`, "success");
+      }
+    }
+  }
+
+  function applyPendingDeliverySpot() {
+    if (!pendingDeliverySpot) return;
+    if (bookingPickupMethod) {
+      bookingPickupMethod.value = "delivery";
+      deliveryAddressGroup.classList.remove("hidden");
+      deliveryAddressInput.required = true;
+      initOrUpdateDeliveryMap(pendingDeliverySpot.lat, pendingDeliverySpot.lng);
+      setDeliveryCoordinates(
+        pendingDeliverySpot.lat,
+        pendingDeliverySpot.lng,
+        pendingDeliverySpot.address || pendingDeliverySpot.name
+      );
+      refreshQuote();
+    }
+    pendingDeliverySpot = null;
+  }
+
+  let homepageMapInstance = null;
+  let homepageMarkers = [];
+
+  function initHomepageTouristMap() {
+    const mapEl = document.getElementById("homepage-map");
+    if (!mapEl || typeof L === "undefined") return;
+
+    if (!homepageMapInstance) {
+      homepageMapInstance = L.map("homepage-map", {
+        center: [9.208, 124.715],
+        zoom: 11,
+        minZoom: 10,
+        maxZoom: 18,
+        scrollWheelZoom: false,
+      });
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+        maxZoom: 19,
+      }).addTo(homepageMapInstance);
+
+      CAMIGUIN_LANDMARKS.forEach((lm) => {
+        const marker = L.marker([lm.lat, lm.lng], {
+          title: lm.name,
+        }).addTo(homepageMapInstance);
+
+        const popupHtml = `
+          <div class="map-popup-card">
+            <div class="map-popup-title">${escapeHtml(lm.name)}</div>
+            <span class="map-popup-badge ${lm.badgeClass}">${escapeHtml(lm.typeLabel)}</span>
+            <p class="map-popup-desc">${escapeHtml(lm.desc)}</p>
+            <button type="button" class="map-popup-btn" data-book-delivery-spot="${lm.id}">
+              🛵 Book Motorbike Delivery Here &rarr;
+            </button>
+          </div>
+        `;
+        marker.bindPopup(popupHtml);
+        marker.__landmarkData = lm;
+        homepageMarkers.push(marker);
+      });
+
+      // Delegate click on popup buttons
+      document.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-book-delivery-spot]");
+        if (!btn) return;
+        const spotId = btn.getAttribute("data-book-delivery-spot");
+        const spot = CAMIGUIN_LANDMARKS.find((s) => s.id === spotId);
+        if (spot) {
+          prefillDeliveryForSpot(spot);
+        }
+      });
+
+      // Filter chips handler
+      const filterWrap = document.getElementById("tourist-filter-shortcuts");
+      if (filterWrap) {
+        filterWrap.addEventListener("click", (e) => {
+          const chip = e.target.closest("[data-map-filter]");
+          if (!chip) return;
+          filterWrap.querySelectorAll(".landmark-chip").forEach((c) => c.classList.remove("active"));
+          chip.classList.add("active");
+          const filterCat = chip.getAttribute("data-map-filter");
+
+          homepageMarkers.forEach((m) => {
+            const data = m.__landmarkData;
+            if (filterCat === "all" || data.category === filterCat) {
+              if (!homepageMapInstance.hasLayer(m)) {
+                homepageMapInstance.addLayer(m);
+              }
+            } else {
+              if (homepageMapInstance.hasLayer(m)) {
+                homepageMapInstance.removeLayer(m);
+              }
+            }
+          });
+        });
+      }
+
+      // Locate user on homepage map
+      const locateBtn = document.getElementById("tourist-map-locate-btn");
+      if (locateBtn) {
+        locateBtn.addEventListener("click", () => {
+          if (!navigator.geolocation) {
+            showToast("Geolocation is not supported by your browser.", "error");
+            return;
+          }
+          locateBtn.disabled = true;
+          locateBtn.textContent = "Locating...";
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              locateBtn.disabled = false;
+              locateBtn.textContent = "📍 Found You!";
+              const lat = pos.coords.latitude;
+              const lng = pos.coords.longitude;
+              homepageMapInstance.setView([lat, lng], 14);
+              const userMarker = L.marker([lat, lng]).addTo(homepageMapInstance);
+              userMarker.bindPopup(`
+                <div class="map-popup-card">
+                  <div class="map-popup-title">📍 Your GPS Location</div>
+                  <p class="map-popup-desc">${lat.toFixed(5)}, ${lng.toFixed(5)}</p>
+                  <button type="button" class="map-popup-btn" data-book-delivery-custom="1">
+                    🛵 Deliver Motorbike to My Location &rarr;
+                  </button>
+                </div>
+              `).openPopup();
+              userMarker.on("popupopen", () => {
+                const b = document.querySelector("[data-book-delivery-custom]");
+                if (b) {
+                  b.onclick = () => {
+                    prefillDeliveryForSpot({
+                      id: "gps-me",
+                      name: "My GPS Location",
+                      lat: lat,
+                      lng: lng,
+                      address: `GPS Location (${lat.toFixed(5)}, ${lng.toFixed(5)})`
+                    });
+                  };
+                }
+              });
+              showToast("Found your location on Camiguin island!", "success");
+            },
+            (err) => {
+              locateBtn.disabled = false;
+              locateBtn.textContent = "📍 Find My Location";
+              showToast("Could not get GPS location: " + err.message, "error");
+            },
+            { enableHighAccuracy: true, timeout: 8000 }
+          );
+        });
+      }
+    }
+
+    setTimeout(() => {
+      if (homepageMapInstance) {
+        homepageMapInstance.invalidateSize();
+      }
+    }, 300);
+  }
+
   if (bookingPickup) {
     bookingPickup.addEventListener("change", () => {
       const pVal = bookingPickup.value || toIsoLocal(new Date());
@@ -1635,6 +1996,7 @@
   bindDatePickerPlaceholder(searchReturnInput);
   bindDatePickerPlaceholder(bookingReturn);
   initDefaultDates();
+  initHomepageTouristMap();
   if (
     initialBootstrap &&
     Array.isArray(initialBootstrap.shops) &&
