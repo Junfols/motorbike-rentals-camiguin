@@ -2036,6 +2036,21 @@ class MotorbikeRentalPWATests(unittest.TestCase):
             200,
         )
 
+        # Admin can delete a non-main partner shop even if it has bikes and bookings/blocks
+        self.client.post(
+            "/api/admin/bikes/1/blocks",
+            json={"start_date": "2026-07-01", "end_date": "2026-07-03", "reason": "Walk-in test"},
+        )
+        del_shop = self.client.delete("/api/admin/shops/1")
+        self.assertEqual(del_shop.status_code, 200)
+        del_payload = del_shop.get_json()
+        self.assertTrue(del_payload["deleted"])
+        self.assertGreaterEqual(del_payload["deleted_bikes"], 2)
+        remaining_shop_ids = [s["id"] for s in self.client.get("/api/admin/shops").get_json()["shops"]]
+        self.assertNotIn(1, remaining_shop_ids)
+        remaining_bike_shop_ids = {b["shop_id"] for b in self.client.get("/api/admin/bikes").get_json()["bikes"]}
+        self.assertNotIn(1, remaining_bike_shop_ids)
+
 
 if __name__ == "__main__":
     unittest.main()
