@@ -89,6 +89,7 @@
 
   function syncPaymentChannelUi(resetDefault) {
     if (!paymentQrSection) return;
+    const wasHidden = paymentQrSection.classList.contains("hidden");
     const q = state.latestQuote;
     const active = Boolean(
       q &&
@@ -158,7 +159,7 @@
     if (channelShopWrap) channelShopWrap.classList.toggle("hidden", isReq);
 
     let current = getSelectedPaymentChannel();
-    if (resetDefault) {
+    if (resetDefault || wasHidden) {
       current = preferredOnline;
       selectPaymentChannel(current);
     } else if (isReq && current === "pay_at_shop") {
