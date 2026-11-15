@@ -947,10 +947,12 @@
     const delBtn = event.target.closest("[data-delete-shop]");
     if (delBtn) {
       const id = delBtn.getAttribute("data-delete-shop");
-      if (!window.confirm("Delete this partner shop account?")) return;
+      const shop = (adminState.allShops || []).find((s) => String(s.id) === String(id));
+      const shopLabel = shop ? `"${shop.shop_name}"` : "this partner shop account";
+      if (!window.confirm(`Delete ${shopLabel} and all of its motorbikes and bookings?`)) return;
       try {
         await apiJson(`/api/admin/shops/${id}`, { method: "DELETE" });
-        await Promise.all([loadDashboard(), loadPartners()]);
+        await Promise.all([loadDashboard(), loadPartners(), loadFleet(), loadBookings()]);
         showToast("Partner shop removed.", "success");
       } catch (err) {
         showToast(err.message, "error");
