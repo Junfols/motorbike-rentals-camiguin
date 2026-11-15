@@ -2978,3 +2978,122 @@ textarea:focus {
     padding-top: 8px;
   }
 }
+
+/* Homepage Tourist & Delivery Map */
+.tourist-map-section {
+  padding-top: 36px;
+  padding-bottom: 36px;
+}
+
+.tourist-map-header {
+  margin-bottom: 18px;
+}
+
+.tourist-map-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.tourist-filter-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.landmark-chip.active {
+  background: var(--primary);
+  color: #ffffff;
+  border-color: var(--primary);
+  font-weight: 700;
+}
+
+.tourist-map-wrapper {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border);
+  background: #ffffff;
+}
+
+.tourist-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding: 12px 18px;
+  background: #f8fafc;
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 5px;
+}
+
+.dot-port { background: #0284c7; }
+.dot-resort { background: #ea580c; }
+.dot-spot { background: #16a34a; }
+
+.map-popup-card {
+  padding: 4px;
+  font-family: inherit;
+  color: #0f172a;
+}
+
+.map-popup-title {
+  font-size: 0.96rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+  color: #0f172a;
+}
+
+.map-popup-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-bottom: 6px;
+}
+
+.map-popup-badge.badge-port { background: #e0f2fe; color: #0369a1; }
+.map-popup-badge.badge-resort { background: #ffedd5; color: #c2410c; }
+.map-popup-badge.badge-spot { background: #dcfce7; color: #15803d; }
+
+.map-popup-desc {
+  font-size: 0.84rem;
+  color: #475569;
+  line-height: 1.4;
+  margin-bottom: 10px;
+}
+
+.map-popup-btn {
+  display: block;
+  width: 100%;
+  text-align: center;
+  background: var(--primary);
+  color: #ffffff !important;
+  font-weight: 700;
+  font-size: 0.82rem;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  text-decoration: none !important;
+  transition: opacity 0.15s ease;
+}
+
+.map-popup-btn:hover {
+  opacity: 0.9;
+}
+
