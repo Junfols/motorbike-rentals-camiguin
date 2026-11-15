@@ -383,9 +383,8 @@
         const avatarHtml = s.logo_url
           ? `<img src="${escapeHtml(s.logo_url)}" alt="${escapeHtml(s.shop_name)}" class="shop-strip-avatar-img" loading="lazy">`
           : `<span class="shop-strip-avatar-fallback">${escapeHtml(getShopInitials(s.shop_name))}</span>`;
-        const coverStyle = s.cover_url
-          ? `style="background-image: linear-gradient(180deg, rgba(15,23,42,0.28), rgba(15,23,42,0.78)), url('${escapeHtml(s.cover_url)}');"`
-          : "";
+        const coverImgUrl = s.cover_url || "/static/images/hero-scooter.jpg";
+        const coverStyle = `style="background-image: linear-gradient(180deg, rgba(15,23,42,0.28), rgba(15,23,42,0.78)), url('${escapeHtml(coverImgUrl)}');"`;
         const unitCount = Number(s.bike_count || 0);
         return `
           <button
