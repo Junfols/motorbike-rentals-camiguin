@@ -271,6 +271,48 @@
         </div>
 
         <hr class="form-divider">
+        <h3>⚡ PayMongo Online Payment Gateway (QR Ph / GCash / Maya)</h3>
+        <p class="text-muted" style="margin-top:-6px;margin-bottom:12px;">Automatic instant reservation payment verification via PayMongo Links API. Tourist pays via QR Ph (GCash, Maya, ShopeePay, Banks) &rarr; booking confirms instantly without manual screenshot verification.</p>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="set-paymongo-secret-key">
+              PayMongo Secret Key
+              <span id="paymongo-secret-status" class="status-pill-inline muted">Not set</span>
+            </label>
+            <input type="password" id="set-paymongo-secret-key" autocomplete="off" placeholder="sk_test_... or sk_live_... (leave blank to keep)">
+            <label id="clear-paymongo-secret-wrap" class="checkbox-inline hidden">
+              <input type="checkbox" id="clear-paymongo-secret-key"> Clear saved Secret Key
+            </label>
+          </div>
+          <div class="form-group">
+            <label for="set-paymongo-public-key">PayMongo Public Key (Optional)</label>
+            <input type="text" id="set-paymongo-public-key" placeholder="pk_test_... or pk_live_...">
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="set-paymongo-webhook-secret">
+              PayMongo Webhook Signing Secret
+              <span id="paymongo-webhook-status" class="status-pill-inline muted">Not set</span>
+            </label>
+            <input type="password" id="set-paymongo-webhook-secret" autocomplete="off" placeholder="whsk_... (leave blank to keep)">
+            <label id="clear-paymongo-webhook-wrap" class="checkbox-inline hidden">
+              <input type="checkbox" id="clear-paymongo-webhook-secret"> Clear saved Webhook Secret
+            </label>
+          </div>
+          <div class="form-group">
+            <label>Webhook URL (Register in PayMongo Dashboard)</label>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <input type="text" id="paymongo-webhook-url-display" readonly value="https://motorbike-rentals-camiguin.onrender.com/api/webhooks/paymongo" style="background:#f4f5f7;font-family:monospace;font-size:0.85rem;">
+              <button type="button" id="copy-paymongo-webhook-url-btn" class="btn btn-sm btn-outline">Copy</button>
+            </div>
+            <small class="field-hint">In PayMongo Developers &rarr; Webhooks, create a webhook pointing to this URL and enable event: <code>link.payment.paid</code></small>
+          </div>
+        </div>
+
+        <hr class="form-divider">
         <h3>Change Main Admin Password (Optional)</h3>
         <div class="form-grid-2">
           <div class="form-group">
@@ -497,7 +539,9 @@
             <option value="hidden">Hidden</option>
           </select>
         </div>
-      </div>      <div class="form-grid-2">
+      </div>
+
+      <div class="form-grid-2">
         <div class="form-group">
           <label for="edit-bike-daily">Daily Rate *</label>
           <input type="number" id="edit-bike-daily" name="daily_rate" required min="1" step="1" value="500">
@@ -557,5 +601,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/admin.js?v=12"></script>
+<script src="/static/js/admin.js?v=14"></script>
 {% endblock %}

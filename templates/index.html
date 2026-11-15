@@ -525,18 +525,32 @@
           </div>
 
           <div id="payment-channel-options" class="payment-channel-options">
+            <label id="channel-paymongo-wrap" class="payment-channel-chip">
+              <input type="radio" name="payment_channel" value="paymongo" checked>
+              <span>⚡ QR Ph / GCash (Instant Auto-Confirm)</span>
+            </label>
             <label id="channel-gcash-wrap" class="payment-channel-chip">
               <input type="radio" name="payment_channel" value="gcash">
-              <span>GCash</span>
+              <span>GCash (Manual Upload)</span>
             </label>
             <label id="channel-maya-wrap" class="payment-channel-chip">
               <input type="radio" name="payment_channel" value="maya">
-              <span>Maya</span>
+              <span>Maya (Manual Upload)</span>
             </label>
             <label id="channel-shop-wrap" class="payment-channel-chip">
               <input type="radio" name="payment_channel" value="pay_at_shop">
               <span>Pay Full at Shop on Pickup</span>
             </label>
+          </div>
+
+          <div id="paymongo-info-box" class="info-box paymongo-info-box">
+            <div style="display:flex;gap:10px;align-items:flex-start;">
+              <span style="font-size:1.4rem;line-height:1;">⚡</span>
+              <div>
+                <strong>Instant Auto-Confirm Online Payment</strong>
+                <p class="field-hint" style="margin:4px 0 0;">Inig tap sa <em>Confirm Booking Request</em>, makakuha dayon ka og secure PayMongo link aron mobayad via <strong>QR Ph (GCash, Maya, Banks)</strong>. Automatic nga ma-verify ug ma-confirm ang booking sulod sa pipila ka segundo!</p>
+              </div>
+            </div>
           </div>
 
           <div id="payment-proof-fields">
@@ -578,6 +592,12 @@
         <span id="confirm-booking-code">MR-0000-0000</span>
         <button type="button" id="copy-code-btn" class="btn btn-sm btn-outline">Copy</button>
       </div>
+      <div id="confirm-online-pay-box" class="confirm-online-pay-box hidden" style="margin: 14px 0;">
+        <a id="confirm-paymongo-link" href="#" target="_blank" rel="noopener" class="btn btn-primary btn-block btn-lg" style="background:#008060;border-color:#008060;font-weight:700;">
+          ⚡ Pay Reservation via QR Ph / GCash &rarr;
+        </a>
+        <small class="field-hint" style="display:block;margin-top:6px;">Inig bayad nimo sa PayMongo checkout, automatic dayon nga ma-verified ug ma-confirmed ang imong booking!</small>
+      </div>
       <div id="confirm-summary" class="confirm-summary-card"></div>
       <div class="confirm-actions">
         <a id="confirm-track-link" href="/bookings" class="btn btn-primary">Track My Booking</a>
@@ -593,5 +613,5 @@
   window.INITIAL_FEATURED_SHOP = {{ (featured_shop or None) | tojson }};
   window.INITIAL_STOREFRONT_BOOTSTRAP = {{ (storefront_bootstrap or None) | tojson }};
 </script>
-<script src="/static/js/storefront.js?v=12"></script>
+<script src="/static/js/storefront.js?v=14"></script>
 {% endblock %}
