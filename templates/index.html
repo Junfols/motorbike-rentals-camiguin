@@ -87,15 +87,33 @@
 
 <section id="fleet" class="section container">
   <!-- Verified Partner Shops Strip -->
-  <div id="partner-shops-strip-wrap" class="partner-shops-strip-wrap hidden">
+  <div id="partner-shops-strip-wrap" class="partner-shops-strip-wrap {% if not (storefront_bootstrap and storefront_bootstrap.shops) %}hidden{% endif %}">
     <div class="partner-shops-strip-header">
       <div>
         <span class="eyebrow-tag">Verified Island Partners</span>
         <h3 class="partner-shops-strip-title">Browse by Partner Rental Shop</h3>
       </div>
-      <button type="button" id="partner-shops-reset-btn" class="btn btn-sm btn-outline hidden">Show All Island Shops</button>
+      <button type="button" id="partner-shops-reset-btn" class="btn btn-sm btn-outline {% if not featured_shop %}hidden{% endif %}">Show All Island Shops</button>
     </div>
-    <div id="partner-shops-strip" class="partner-shops-strip" role="list" aria-label="Verified Partner Rental Shops"></div>
+    <div id="partner-shops-strip" class="partner-shops-strip" role="list" aria-label="Verified Partner Rental Shops">
+      {% if storefront_bootstrap and storefront_bootstrap.shops %}
+        {% for s in storefront_bootstrap.shops %}
+        <button type="button" class="partner-shop-card {% if featured_shop and (featured_shop.id|string == s.id|string) %}active{% endif %}" data-shop-pill="{{ s.id }}" role="listitem" title="View {{ s.shop_name }} Profile &amp; Fleet">
+          <div class="partner-shop-card-avatar">
+            {% if s.logo_url %}
+              <img src="{{ s.logo_url }}" alt="{{ s.shop_name }}" class="partner-shop-avatar-img">
+            {% else %}
+              <span class="partner-shop-avatar-fallback">{{ (s.shop_name or 'P')[:2].upper() }}</span>
+            {% endif %}
+          </div>
+          <div class="partner-shop-card-info">
+            <strong class="partner-shop-card-name">{{ s.shop_name }}</strong>
+            <span class="partner-shop-card-loc">{{ s.municipality }}</span>
+          </div>
+        </button>
+        {% endfor %}
+      {% endif %}
+    </div>
   </div>
 
   <!-- Featured / Selected Partner Shop Profile Banner (Facebook Page Style) -->
@@ -104,11 +122,16 @@
   <div class="section-header-row">
     <div>
       <h2 class="section-title">Available Motorbikes Across Camiguin</h2>
-      <p id="fleet-date-summary" class="section-subtitle">Showing live availability</p>
+      <p id="fleet-date-summary" class="section-subtitle">{% if storefront_bootstrap and storefront_bootstrap.bikes %}{{ storefront_bootstrap.bikes|length }} model(s) available — select dates to check trip schedule{% else %}Showing live availability{% endif %}</p>
     </div>
     <div class="fleet-controls-right">
       <select id="filter-shop" class="select-compact" aria-label="Filter by rental shop">
-        <option value="">All Rental Shops</option>
+        <option value="">All Rental Shops{% if storefront_bootstrap and storefront_bootstrap.shops %} ({{ storefront_bootstrap.shops|length }}){% endif %}</option>
+        {% if storefront_bootstrap and storefront_bootstrap.shops %}
+          {% for s in storefront_bootstrap.shops %}
+            <option value="{{ s.id }}" {% if featured_shop and (featured_shop.id|string == s.id|string) %}selected{% endif %}>{{ s.shop_name }} ({{ s.municipality }})</option>
+          {% endfor %}
+        {% endif %}
       </select>
       <label class="toggle-chip">
         <input type="checkbox" id="filter-available-only">
@@ -137,7 +160,62 @@
   </div>
 
   <div id="fleet-grid" class="fleet-grid">
-    <div class="loading-state">Loading motorbikes...</div>
+    {% if storefront_bootstrap and storefront_bootstrap.bikes %}
+      {% for bike in storefront_bootstrap.bikes %}
+      <article class="bike-card" data-bike-id="{{ bike.id }}">
+        <div class="bike-card-media">
+          <img src="{{ bike.image_url }}" alt="{{ bike.name }}" loading="lazy">
+          <div class="bike-card-top-badges">
+            <span class="badge badge-dark">{{ bike.category }}</span>
+            {% if bike.status == 'maintenance' %}
+              <span class="badge badge-maintenance">Maintenance</span>
+            {% elif bike.is_available %}
+              <span class="badge badge-available">{% if bike.available_units > 1 %}{{ bike.available_units }} units left{% else %}Available{% endif %}</span>
+            {% else %}
+              <span class="badge badge-booked">Booked for Dates</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="bike-card-body">
+          <div class="shop-pill-line">
+            <button type="button" class="shop-pill-btn" data-select-shop="{{ bike.shop_id }}" title="View {{ bike.shop_name or 'Shop' }} Profile">
+              {% if bike.shop_logo_url %}
+                <img src="{{ bike.shop_logo_url }}" alt="" class="shop-pill-avatar">
+              {% else %}
+                <span class="shop-pill-avatar-fallback">{{ (bike.shop_name or 'S')[:2].upper() }}</span>
+              {% endif %}
+              <span>{{ bike.shop_name or 'Verified Shop' }} &bull; {{ bike.shop_municipality or 'Camiguin' }}</span>
+            </button>
+          </div>
+          <div class="bike-card-title-row">
+            <h3 class="bike-card-title">{{ bike.name }}</h3>
+          </div>
+          <div class="bike-specs-row">
+            <span class="spec-pill">{{ bike.engine_cc }}cc</span>
+            <span class="spec-pill">{{ bike.transmission }}</span>
+            <span class="spec-pill">{{ bike.fuel_type }}</span>
+          </div>
+          <p class="bike-card-inclusions">{{ bike.inclusions or bike.description }}</p>
+          <div class="bike-card-footer">
+            <div>
+              <div class="bike-price-main">
+                &#8369;{{ '{:,.0f}'.format(bike.daily_rate) }}<span class="bike-price-unit">/day</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              class="btn {% if bike.is_available %}btn-primary{% else %}btn-outline{% endif %}"
+              data-open-bike="{{ bike.id }}"
+            >
+              {% if bike.is_available %}Book Now{% else %}View Calendar{% endif %}
+            </button>
+          </div>
+        </div>
+      </article>
+      {% endfor %}
+    {% else %}
+      <div class="loading-state">Loading motorbikes...</div>
+    {% endif %}
   </div>
 </section>
 
@@ -429,5 +507,5 @@
   window.INITIAL_FEATURED_SHOP = {{ (featured_shop or None) | tojson }};
   window.INITIAL_STOREFRONT_BOOTSTRAP = {{ (storefront_bootstrap or None) | tojson }};
 </script>
-<script src="/static/js/storefront.js?v=9"></script>
+<script src="/static/js/storefront.js?v=10"></script>
 {% endblock %}
