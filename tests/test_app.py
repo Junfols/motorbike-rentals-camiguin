@@ -1636,13 +1636,13 @@ class MotorbikeRentalPWATests(unittest.TestCase):
     def test_qr_upload_accepts_jfif_and_highres_images_and_network_first_scripts(self):
         with self.client.get("/sw.js") as sw_resp:
             sw_text = sw_resp.get_data(as_text=True)
-        self.assertIn("motoride-pwa-v15", sw_text)
+        self.assertIn("motoride-pwa-v16", sw_text)
         self.assertIn('/static/js/', sw_text)
 
         login_resp = self.client.post("/api/admin/login", json={"password": "admin1234"})
         self.assertEqual(login_resp.status_code, 200)
         admin_html = self.client.get("/admin").get_data(as_text=True)
-        self.assertIn('/static/js/admin.js?v=15', admin_html)
+        self.assertIn('/static/js/admin.js?v=16', admin_html)
         self.assertIn('.jfif', admin_html)
 
         # Windows/Edge/Messenger saves often use .jfif -> served cleanly as image/jpeg
@@ -1681,8 +1681,8 @@ class MotorbikeRentalPWATests(unittest.TestCase):
 
     def test_return_date_defaults_to_select_date_prompt_without_prefill(self):
         index_html = self.client.get("/").get_data(as_text=True)
-        self.assertIn('/static/css/style.css?v=15', index_html)
-        self.assertIn('/static/js/storefront.js?v=15', index_html)
+        self.assertIn('/static/css/style.css?v=16', index_html)
+        self.assertIn('/static/js/storefront.js?v=16', index_html)
         self.assertIn('class="bike-card"', index_html)
         self.assertNotIn('<div class="loading-state">Loading motorbikes...</div>', index_html)
         self.assertIn('id="modal-availability-calendar"', index_html)
@@ -1953,7 +1953,7 @@ class MotorbikeRentalPWATests(unittest.TestCase):
 
         partner_html = self.client.get("/partner").get_data(as_text=True)
         self.assertIn('id="bike-schedule-modal"', partner_html)
-        self.assertIn('/static/js/partner.js?v=15', partner_html)
+        self.assertIn('/static/js/partner.js?v=16', partner_html)
         admin_html = self.client.get("/admin").get_data(as_text=True)
         self.assertIn('id="bike-schedule-modal"', admin_html)
 
@@ -2303,6 +2303,13 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertEqual(lookup_booking["delivery_lat"], 9.2553)
         self.assertEqual(lookup_booking["delivery_lng"], 124.6468)
         self.assertEqual(lookup_booking["google_maps_url"], booking["google_maps_url"])
+
+        # Check index html contains homepage tourist map section
+        index_html = self.client.get("/").get_data(as_text=True)
+        self.assertIn('id="tourist-map"', index_html)
+        self.assertIn('id="homepage-map"', index_html)
+        self.assertIn('Camiguin Tourist &amp; Delivery Map', index_html)
+        self.assertIn('Island Map 🗺️', index_html)
 
 
 if __name__ == "__main__":
