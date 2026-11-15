@@ -28,6 +28,15 @@
   const filterSearchQ = document.getElementById("filter-search-q");
   const filterSort = document.getElementById("filter-sort");
   const filterAvailableOnly = document.getElementById("filter-available-only");
+  const partnerShopsStripWrap = document.getElementById("partner-shops-strip-wrap");
+  const partnerShopsStrip = document.getElementById("partner-shops-strip");
+  const partnerShopsResetBtn = document.getElementById("partner-shops-reset-btn");
+  const shopProfileBanner = document.getElementById("shop-profile-banner");
+
+  const initialFeaturedShop =
+    typeof window.INITIAL_FEATURED_SHOP === "object" && window.INITIAL_FEATURED_SHOP
+      ? window.INITIAL_FEATURED_SHOP
+      : null;
 
   // Booking Modal Elements
   const bookingForm = document.getElementById("booking-form");
@@ -70,7 +79,8 @@
     category: "All",
     transmission: "All",
     municipality: "All",
-    shopId: "",
+    shopId: initialFeaturedShop && initialFeaturedShop.id ? String(initialFeaturedShop.id) : "",
+    featuredShop: initialFeaturedShop,
     q: "",
     sort: "featured",
     availableOnly: false,
@@ -326,6 +336,183 @@
     modalNextAvailableBtn.classList.remove("hidden");
   }
 
+  function getShopInitials(name) {
+    const words = String(name || "Shop")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!words.length) return "SH";
+    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+    return `${words[0][0]}${words[1][0]}`.toUpperCase();
+  }
+
+  function getActiveShopObject() {
+    if (!state.shopId) return null;
+    const match = state.shops.find((s) => String(s.id) === String(state.shopId));
+    if (match) return match;
+    if (state.featuredShop && String(state.featuredShop.id) === String(state.shopId)) {
+      return state.featuredShop;
+    }
+    return null;
+  }
+
+  function getShopShareUrl(shopObj) {
+    if (!shopObj) return window.location.origin;
+    const slug = shopObj.slug || shopObj.id;
+    return `${window.location.origin}/shop/${encodeURIComponent(slug)}`;
+  }
+
+  function renderPartnerShopsStrip() {
+    if (!partnerShopsStripWrap || !partnerShopsStrip) return;
+    if (!state.shops || !state.shops.length) {
+      partnerShopsStripWrap.classList.add("hidden");
+      return;
+    }
+    partnerShopsStripWrap.classList.remove("hidden");
+    if (partnerShopsResetBtn) {
+      partnerShopsResetBtn.classList.toggle("hidden", !state.shopId);
+    }
+
+    partnerShopsStrip.innerHTML = state.shops
+      .map((s) => {
+        const isActive = String(state.shopId) === String(s.id);
+        const avatarHtml = s.logo_url
+          ? `<img src="${escapeHtml(s.logo_url)}" alt="${escapeHtml(s.shop_name)}" class="shop-strip-avatar-img" loading="lazy">`
+          : `<span class="shop-strip-avatar-fallback">${escapeHtml(getShopInitials(s.shop_name))}</span>`;
+        const coverStyle = s.cover_url
+          ? `style="background-image: linear-gradient(180deg, rgba(15,23,42,0.28), rgba(15,23,42,0.78)), url('${escapeHtml(s.cover_url)}');"`
+          : "";
+        const unitCount = Number(s.bike_count || 0);
+        return `
+          <button
+            type="button"
+            role="listitem"
+            class="shop-strip-card ${isActive ? "active" : ""}"
+            data-select-shop="${s.id}"
+            aria-pressed="${isActive ? "true" : "false"}"
+          >
+            <div class="shop-strip-cover" ${coverStyle}>
+              ${s.is_main ? `<span class="shop-strip-hub-tag">Main Hub</span>` : `<span class="shop-strip-hub-tag verified">Verified</span>`}
+            </div>
+            <div class="shop-strip-body">
+              <div class="shop-strip-avatar">${avatarHtml}</div>
+              <div class="shop-strip-info">
+                <strong class="shop-strip-name">${escapeHtml(s.shop_name)}</strong>
+                <span class="shop-strip-meta">${escapeHtml(s.municipality || "Camiguin")} &bull; ${unitCount} model(s)</span>
+              </div>
+            </div>
+          </button>
+        `;
+      })
+      .join("");
+  }
+
+  function renderShopProfileBanner() {
+    if (!shopProfileBanner) return;
+    const activeShop = getActiveShopObject();
+    if (!activeShop) {
+      shopProfileBanner.classList.add("hidden");
+      shopProfileBanner.innerHTML = "";
+      return;
+    }
+
+    const shareUrl = getShopShareUrl(activeShop);
+    const fbShareHref = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
+    const coverImg = activeShop.cover_url || "/static/images/hero-scooter.jpg";
+    const avatarHtml = activeShop.logo_url
+      ? `<img src="${escapeHtml(activeShop.logo_url)}" alt="${escapeHtml(activeShop.shop_name)}" class="shop-banner-avatar-img">`
+      : `<div class="shop-banner-avatar-fallback">${escapeHtml(getShopInitials(activeShop.shop_name))}</div>`;
+
+    const waRaw = String(activeShop.whatsapp_number || activeShop.phone || "").replace(/\D+/g, "");
+    const waDigits = waRaw.startsWith("0") ? `63${waRaw.slice(1)}` : waRaw;
+    const waHref = waDigits
+      ? `https://wa.me/${waDigits}?text=${encodeURIComponent(`Hi ${activeShop.shop_name}! I saw your shop profile on ${shop.shop_name} (${shareUrl}) and would like to inquire about motorbike rental.`)}`
+      : "";
+
+    const locParts = [activeShop.address, activeShop.municipality, "Camiguin"].filter(Boolean).join(" • ");
+    const desc =
+      activeShop.description ||
+      `Verified local motorbike rental partner in ${activeShop.municipality || "Camiguin"}, Camiguin Island. Browse live availability and book directly online.`;
+
+    shopProfileBanner.classList.remove("hidden");
+    shopProfileBanner.innerHTML = `
+      <div class="shop-banner-cover">
+        <img src="${escapeHtml(coverImg)}" alt="${escapeHtml(activeShop.shop_name)} Cover Photo" class="shop-banner-cover-img">
+        <div class="shop-banner-cover-overlay"></div>
+        <div class="shop-banner-top-bar">
+          <span class="shop-banner-verified-pill">
+            ${activeShop.is_main ? "&#9733; Official Main Hub" : "&#10003; Verified Camiguin Partner Shop"}
+          </span>
+          <button type="button" class="btn btn-sm shop-banner-reset-btn" data-clear-shop-filter="1">
+            &larr; All Island Shops
+          </button>
+        </div>
+      </div>
+      <div class="shop-banner-content">
+        <div class="shop-banner-identity">
+          <div class="shop-banner-avatar-wrap">
+            ${avatarHtml}
+          </div>
+          <div class="shop-banner-title-block">
+            <h2 class="shop-banner-title">${escapeHtml(activeShop.shop_name)}</h2>
+            <p class="shop-banner-location">${escapeHtml(locParts)}</p>
+            <div class="shop-banner-chips">
+              ${activeShop.phone ? `<span class="shop-banner-chip">&#128222; ${escapeHtml(activeShop.phone)}</span>` : ""}
+              <span class="shop-banner-chip">&#128666; Delivery: ${escapeHtml(formatMoney(activeShop.delivery_fee || 0))}</span>
+              ${activeShop.bike_count !== undefined ? `<span class="shop-banner-chip">&#127949; ${Number(activeShop.bike_count)} Motorbike Model(s)</span>` : ""}
+            </div>
+          </div>
+        </div>
+        <p class="shop-banner-desc">${escapeHtml(desc)}</p>
+        <div class="shop-banner-share-bar">
+          <div class="shop-banner-link-box">
+            <span class="shop-banner-link-label">Shop Profile Link:</span>
+            <code class="shop-banner-link-code">${escapeHtml(shareUrl)}</code>
+          </div>
+          <div class="shop-banner-actions">
+            <button type="button" class="btn btn-sm btn-outline" data-copy-shop-link="${escapeHtml(shareUrl)}">
+              Copy Link for FB Page
+            </button>
+            <a href="${escapeHtml(fbShareHref)}" target="_blank" rel="noopener" class="btn btn-sm btn-fb-share">
+              Share on Facebook
+            </a>
+            ${
+              waHref
+                ? `<a href="${escapeHtml(waHref)}" target="_blank" rel="noopener" class="btn btn-sm btn-primary">WhatsApp Shop</a>`
+                : ""
+            }
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function selectShopFilter(shopId, options) {
+    const opts = options || {};
+    state.shopId = shopId ? String(shopId) : "";
+    if (filterShop) {
+      filterShop.value = state.shopId;
+    }
+    const activeShop = getActiveShopObject();
+    if (activeShop) {
+      state.featuredShop = activeShop;
+    }
+    if (opts.updateHistory !== false && window.history && typeof window.history.replaceState === "function") {
+      const nextUrl = activeShop && activeShop.slug ? `/shop/${encodeURIComponent(activeShop.slug)}` : "/";
+      try {
+        window.history.replaceState({ shopId: state.shopId }, "", nextUrl);
+      } catch (_) {
+        // Ignore history state errors
+      }
+    }
+    renderPartnerShopsStrip();
+    renderShopProfileBanner();
+    loadFleet();
+    if (opts.scrollToBanner && shopProfileBanner && !shopProfileBanner.classList.contains("hidden")) {
+      shopProfileBanner.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
   async function loadPublicShops() {
     if (!filterShop) return;
     try {
@@ -333,7 +520,13 @@
       const data = await res.json();
       if (!res.ok) return;
       state.shops = data.shops || [];
-      const currentVal = filterShop.value;
+      if (
+        state.featuredShop &&
+        !state.shops.some((s) => String(s.id) === String(state.featuredShop.id))
+      ) {
+        state.shops.unshift(state.featuredShop);
+      }
+      const targetVal = state.shopId || filterShop.value || "";
       filterShop.innerHTML =
         `<option value="">All Rental Shops (${state.shops.length})</option>` +
         state.shops
@@ -342,9 +535,12 @@
               `<option value="${s.id}">${escapeHtml(s.shop_name)} (${escapeHtml(s.municipality)})</option>`
           )
           .join("");
-      filterShop.value = currentVal;
+      filterShop.value = targetVal;
+      renderPartnerShopsStrip();
+      renderShopProfileBanner();
     } catch (_) {
       // Keep default option offline
+      renderShopProfileBanner();
     }
   }
 
@@ -451,7 +647,14 @@
             </div>
             <div class="bike-card-body">
               <div class="shop-pill-line">
-                <span>${escapeHtml(bike.shop_name || "Verified Shop")} &bull; ${escapeHtml(bike.shop_municipality || "Camiguin")}</span>
+                <button type="button" class="shop-pill-btn" data-select-shop="${bike.shop_id}" title="View ${escapeHtml(bike.shop_name || "Shop")} Profile">
+                  ${
+                    bike.shop_logo_url
+                      ? `<img src="${escapeHtml(bike.shop_logo_url)}" alt="" class="shop-pill-avatar">`
+                      : `<span class="shop-pill-avatar-fallback">${escapeHtml(getShopInitials(bike.shop_name))}</span>`
+                  }
+                  <span>${escapeHtml(bike.shop_name || "Verified Shop")} &bull; ${escapeHtml(bike.shop_municipality || "Camiguin")}</span>
+                </button>
               </div>
               <div class="bike-card-title-row">
                 <h3 class="bike-card-title">${escapeHtml(bike.name)}</h3>
@@ -767,8 +970,43 @@
 
   if (filterShop) {
     filterShop.addEventListener("change", () => {
-      state.shopId = filterShop.value;
-      loadFleet();
+      selectShopFilter(filterShop.value, { updateHistory: true });
+    });
+  }
+
+  if (partnerShopsStrip) {
+    partnerShopsStrip.addEventListener("click", (event) => {
+      const card = event.target.closest("[data-select-shop]");
+      if (!card) return;
+      const clickedShopId = card.getAttribute("data-select-shop");
+      const nextShopId = String(state.shopId) === String(clickedShopId) ? "" : clickedShopId;
+      selectShopFilter(nextShopId, { updateHistory: true, scrollToBanner: Boolean(nextShopId) });
+    });
+  }
+
+  if (partnerShopsResetBtn) {
+    partnerShopsResetBtn.addEventListener("click", () => {
+      selectShopFilter("", { updateHistory: true });
+    });
+  }
+
+  if (shopProfileBanner) {
+    shopProfileBanner.addEventListener("click", async (event) => {
+      const clearBtn = event.target.closest("[data-clear-shop-filter]");
+      if (clearBtn) {
+        selectShopFilter("", { updateHistory: true });
+        return;
+      }
+      const copyBtn = event.target.closest("[data-copy-shop-link]");
+      if (copyBtn) {
+        const url = copyBtn.getAttribute("data-copy-shop-link");
+        try {
+          await navigator.clipboard.writeText(url);
+          showToast("Shop profile link copied! Ready to paste on your Facebook Page.", "success");
+        } catch (_) {
+          showToast(`Shop Link: ${url}`, "success");
+        }
+      }
     });
   }
 
@@ -827,6 +1065,14 @@
           openBikeModal(bikeId);
           return;
         }
+      }
+      const shopBtn = event.target.closest("[data-select-shop]");
+      if (shopBtn) {
+        selectShopFilter(shopBtn.getAttribute("data-select-shop"), {
+          updateHistory: true,
+          scrollToBanner: true,
+        });
+        return;
       }
       const btn = event.target.closest("[data-open-bike]");
       if (!btn) return;
