@@ -414,14 +414,7 @@
           statusBadge = `<span class="badge badge-available">${escapeHtml(unitLabel)}</span>`;
         } else {
           statusBadge = `<span class="badge badge-booked">Booked for Dates</span>`;
-        }
-
-        const weeklyLine =
-          bike.weekly_rate > 0
-            ? `<div class="bike-price-weekly">Weekly: ${escapeHtml(formatMoney(bike.weekly_rate))}</div>`
-            : "";
-
-        const bookedSummary = formatBookedRangesLabel(bike.booked_ranges, 2);
+        }        const bookedSummary = formatBookedRangesLabel(bike.booked_ranges, 2);
         const bookedStrip = bookedSummary
           ? `<div class="bike-booked-strip">Booked: <strong>${escapeHtml(bookedSummary)}</strong></div>`
           : "";
@@ -476,7 +469,6 @@
                   <div class="bike-price-main">
                     ${escapeHtml(formatMoney(bike.daily_rate))}<span class="bike-price-unit">/day</span>
                   </div>
-                  ${weeklyLine}
                 </div>
                 <button
                   type="button"
@@ -540,10 +532,7 @@
       `;
       document.getElementById("modal-bike-desc").textContent = bike.description || "";
       document.getElementById("modal-bike-inclusions").textContent = bike.inclusions || "2 Helmets";
-      document.getElementById("modal-daily-rate").textContent = `${formatMoney(bike.daily_rate)} / day`;
-      document.getElementById("modal-weekly-rate").textContent =
-        bike.weekly_rate > 0 ? `${formatMoney(bike.weekly_rate)} / 7 days` : "Standard daily rate";
-      document.getElementById("modal-deposit-rate").textContent = formatMoney(bike.deposit);
+      document.getElementById("modal-daily-rate").textContent = `${formatMoney(bike.daily_rate)} / day`;      document.getElementById("modal-deposit-rate").textContent = formatMoney(bike.deposit);
 
       const rangesEl = document.getElementById("modal-booked-ranges");
       const ranges = bike.booked_ranges || [];
@@ -650,12 +639,7 @@
           <span>Rental (${q.rental_days} ${dayWord})</span>
           <span>${escapeHtml(formatMoney(q.base_subtotal))}</span>
         </div>
-      `;
-      if (q.discount_saved > 0) {
-        linesHtml += `
-          <div class="quote-line discount">
-            <span>Weekly Rate Savings</span>
-            <span>-${escapeHtml(formatMoney(q.discount_saved))}</span>
+      `;</span>
           </div>
         `;
       }
