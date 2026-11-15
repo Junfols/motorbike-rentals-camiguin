@@ -19,7 +19,7 @@
   <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg">
   <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="/static/css/style.css?v=16">
+  <link rel="stylesheet" href="/static/css/style.css?v=17">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   {% block head_extra %}{% endblock %}
@@ -42,6 +42,7 @@
       <nav class="desktop-nav" aria-label="Main Navigation">
         <a href="/" class="nav-link {% if active_nav == 'fleet' %}active{% endif %}">Motorbikes</a>
         <a href="/#tourist-map" class="nav-link">Island Map 🗺️</a>
+        <a href="/#island-guide" class="nav-link">Route Guide 🌋</a>
         <a href="/bookings" class="nav-link {% if active_nav == 'bookings' %}active{% endif %}">My Bookings</a>
         <a href="/partner" class="nav-link {% if active_nav == 'partner' %}active{% endif %}">Partner Login</a>
         {% if active_nav == 'admin' %}
@@ -110,6 +111,12 @@
         <line x1="16" y1="6" x2="16" y2="22"/>
       </svg>
       <span>Map 🗺️</span>
+    </a>
+    <a href="/#island-guide" class="bottom-nav-item">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="m8 3 4 8 5-5 5 15H2L8 3z"/>
+      </svg>
+      <span>Guide 🌋</span>
     </a>
     <a href="/bookings" class="bottom-nav-item {% if active_nav == 'bookings' %}active{% endif %}">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -257,7 +264,7 @@
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
   <script id="shop-config-data" type="application/json">{{ shop | tojson }}</script>
-  <script src="/static/js/pwa.js?v=16"></script>
+  <script src="/static/js/pwa.js?v=17"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

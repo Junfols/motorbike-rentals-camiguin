@@ -275,6 +275,11 @@
           </div>
           <div class="bike-card-title-row">
             <h3 class="bike-card-title">{{ bike.name }}</h3>
+            <div class="bike-rating-pill" title="Average tourist rating">
+              <span class="rating-star">&#9733;</span>
+              <strong>{{ '%.1f'|format(bike.rating_avg or 5.0) }}</strong>
+              <span class="rating-count">({{ bike.rating_count or 0 }})</span>
+            </div>
           </div>
           <div class="bike-specs-row">
             <span class="spec-pill">{{ bike.engine_cc }}cc</span>
@@ -341,6 +346,97 @@
   </div>
 </section>
 
+<!-- Camiguin Tourist Spots & Recommended Bike Route Guide -->
+<section id="island-guide" class="section container island-guide-section">
+  <div class="island-guide-header text-center">
+    <span class="badge badge-accent">Island Adventure Guide 🌋</span>
+    <h2 class="section-title">Where to Go in Camiguin &amp; Best Bike Match</h2>
+    <p class="section-subtitle">Discover curated island routes and the recommended motorbike type for the smoothest, safest ride.</p>
+  </div>
+
+  <div class="routes-grid">
+    <!-- Route 1: Circumferential Highway Loop -->
+    <div class="route-card">
+      <div class="route-card-header">
+        <span class="route-pill route-coastal">🌊 Coastal Loop (64 km)</span>
+        <h3>Circumferential Highway Scenic Tour</h3>
+      </div>
+      <p class="route-desc">Smooth, fully paved 2-lane coastal highway encircling the entire island. Pass through Mambajao, Catarman, Sagay, Guinsiliban, and Mahinog with open ocean vistas on one side and volcanic slopes on the other.</p>
+      <div class="route-highlights">
+        <strong>Key Highlights:</strong> Sunken Cemetery, Guiob Church Ruins, White Island Sandbar, Walkway to the Old Volcano, Soda Water Pool.
+      </div>
+      <div class="route-bike-match">
+        <div class="bike-match-label">Recommended Bike:</div>
+        <div class="bike-match-spec"><strong>110cc - 125cc Scooter</strong> (Click 125i, Mio, Beat)</div>
+        <p class="bike-match-note">Lightweight, ultra fuel-efficient (up to 50 km/L), and effortless twist-and-go automatic riding for relaxed coastal cruising.</p>
+        <button type="button" class="btn btn-sm btn-outline route-filter-btn" data-guide-category="Scooter">
+          Find Scooters for this Route &rarr;
+        </button>
+      </div>
+    </div>
+
+    <!-- Route 2: Waterfalls & Thermal Springs -->
+    <div class="route-card">
+      <div class="route-card-header">
+        <span class="route-pill route-falls">💧 Waterfalls &amp; Springs</span>
+        <h3>Katibawasan &amp; Tuasan Mountain Ascent</h3>
+      </div>
+      <p class="route-desc">Scenic mountain roads ascending towards Katibawasan Falls (76-meter drop) and Tuasan Falls. Paved roads with occasional steep climbs and refreshing mountain mist.</p>
+      <div class="route-highlights">
+        <strong>Key Highlights:</strong> Katibawasan Falls, Tuasan Falls, Ardent Hibok-Hibok Hot Spring, Sto. Niño Cold Spring.
+      </div>
+      <div class="route-bike-match">
+        <div class="bike-match-label">Recommended Bike:</div>
+        <div class="bike-match-spec"><strong>150cc - 160cc Maxi Scooter</strong> (NMAX 155, PCX 160, ADV 160)</div>
+        <p class="bike-match-note">Extra torque for steep uphill climbs with a pillion passenger, plush dual rear suspension, and large under-seat storage for swimwear &amp; towels.</p>
+        <button type="button" class="btn btn-sm btn-outline route-filter-btn" data-guide-category="Maxi Scooter">
+          Find Maxi Scooters for this Route &rarr;
+        </button>
+      </div>
+    </div>
+
+    <!-- Route 3: Cross-Island Trans-Island Highway -->
+    <div class="route-card">
+      <div class="route-card-header">
+        <span class="route-pill route-volcano">🌋 Volcano Pass</span>
+        <h3>Cross-Island Trans-Mountain Highway</h3>
+      </div>
+      <p class="route-desc">Dramatic trans-island mountain pass cutting through the heart of Camiguin between Mt. Hibok-Hibok and Mt. Timpoong. Features high elevation, sharp switchbacks, and cool mountain air.</p>
+      <div class="route-highlights">
+        <strong>Key Highlights:</strong> Camiguin Highlands 360° viewpoint, lush rainforest canopy, misty ridges, shortcut between Mambajao &amp; Sagay.
+      </div>
+      <div class="route-bike-match">
+        <div class="bike-match-label">Recommended Bike:</div>
+        <div class="bike-match-spec"><strong>Dual-Sport / Adventure Bike</strong> (CRF150L, WR155, ADV)</div>
+        <p class="bike-match-note">High ground clearance, aggressive suspension travel, and dual-purpose tires for maximum control on steep mountain switchbacks.</p>
+        <button type="button" class="btn btn-sm btn-outline route-filter-btn" data-guide-category="Adventure">
+          Find Adventure Bikes for this Route &rarr;
+        </button>
+      </div>
+    </div>
+
+    <!-- Route 4: East Coast & Marine Sanctuaries -->
+    <div class="route-card">
+      <div class="route-card-header">
+        <span class="route-pill route-island">🏝️ Marine Sanctuary</span>
+        <h3>Mantigue Island &amp; East Coast Trail</h3>
+      </div>
+      <p class="route-desc">Relaxed seaside route leading along Mahinog and San Roque heading to the Mantigue Island boat jump-off point and giant clam sanctuary.</p>
+      <div class="route-highlights">
+        <strong>Key Highlights:</strong> Mantigue Island Nature Reserve, Benoni Lagoon, Taguines Lagoon Zipline, J&amp;A Fishpen, Kibila Giant Clam Sanctuary.
+      </div>
+      <div class="route-bike-match">
+        <div class="bike-match-label">Recommended Bike:</div>
+        <div class="bike-match-spec"><strong>Any Scooter or Big Bike</strong> (All Categories)</div>
+        <p class="bike-match-note">Gentle coastal roads with easy parking at ports and boat terminals.</p>
+        <button type="button" class="btn btn-sm btn-outline route-filter-btn" data-guide-category="All">
+          Browse All Bikes &rarr;
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section class="section how-section">
   <div class="container">
     <h2 class="section-title text-center">Rent in 3 Easy Steps</h2>
@@ -372,6 +468,62 @@
         <a href="/partner" class="btn btn-primary">Partner Login / Register</a>
       </div>
     </div>
+  </div>
+</section>
+
+<!-- Verified Tourist Reviews Section -->
+<section id="reviews-section" class="section container reviews-section">
+  <div class="reviews-header text-center">
+    <span class="badge badge-accent">Rider Feedback ⭐</span>
+    <h2 class="section-title">Verified Tourist Reviews</h2>
+    <p class="section-subtitle">Real experiences and 5-star ratings from travelers exploring Camiguin on two wheels.</p>
+  </div>
+
+  <div class="reviews-grid">
+    {% if recent_reviews %}
+      {% for rev in recent_reviews %}
+      <div class="review-card">
+        <div class="review-card-top">
+          <div class="review-author-avatar">{{ (rev.customer_name or 'R')[:1].upper() }}</div>
+          <div class="review-meta">
+            <strong class="review-author-name">{{ rev.customer_name }}</strong>
+            <small class="text-muted">{{ rev.bike_name }} &bull; {{ rev.created_at[:10] if rev.created_at else 'Verified Trip' }}</small>
+          </div>
+          <div class="review-stars" aria-label="{{ rev.rating }} out of 5 stars">
+            {% for i in range(rev.rating) %}<span class="star-fill">&#9733;</span>{% endfor %}
+            {% for i in range(5 - rev.rating) %}<span class="star-empty">&#9733;</span>{% endfor %}
+          </div>
+        </div>
+        <p class="review-comment">&ldquo;{{ rev.comment }}&rdquo;</p>
+        {% if rev.shop_name %}
+          <div class="review-shop-tag">&#127949; Rented from: <strong>{{ rev.shop_name }}</strong></div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="review-card">
+        <div class="review-card-top">
+          <div class="review-author-avatar">J</div>
+          <div class="review-meta">
+            <strong class="review-author-name">Jerome M.</strong>
+            <small class="text-muted">Honda Click 125i &bull; Verified Renter</small>
+          </div>
+          <div class="review-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+        </div>
+        <p class="review-comment">&ldquo;Motorbike was delivered right on time to Benoni Port as soon as we got off the ferry! Super smooth ride doing the 64km circumferential road around Camiguin.&rdquo;</p>
+      </div>
+      <div class="review-card">
+        <div class="review-card-top">
+          <div class="review-author-avatar">A</div>
+          <div class="review-meta">
+            <strong class="review-author-name">Alyssa T.</strong>
+            <small class="text-muted">Yamaha NMAX 155 &bull; Verified Renter</small>
+          </div>
+          <div class="review-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+        </div>
+        <p class="review-comment">&ldquo;Renting the NMAX made climbing the steep road up Katibawasan Falls and Ardent Hot Springs effortless, even with two of us and backpacks. Highly recommended!&rdquo;</p>
+      </div>
+    {% endif %}
   </div>
 </section>
 
@@ -424,6 +576,18 @@
         <div class="info-box">
           <h4>Upcoming Booked Dates</h4>
           <div id="modal-booked-ranges" class="booked-ranges-list"></div>
+        </div>
+
+        <div class="info-box modal-reviews-box">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h4>Rider Reviews</h4>
+            <span id="modal-bike-rating-summary" class="bike-rating-pill" style="font-size:0.8rem;">
+              <span class="rating-star">&#9733;</span> <strong id="modal-rating-avg">5.0</strong> (<span id="modal-rating-count">0</span>)
+            </span>
+          </div>
+          <div id="modal-reviews-list" class="modal-reviews-list" style="margin-top:8px;">
+            <div class="text-muted" style="font-size:0.82rem;">No reviews yet for this motorbike.</div>
+          </div>
         </div>
       </div>
 
@@ -561,9 +725,49 @@
           <textarea id="booking-notes" name="notes" rows="2" placeholder="Helmet size (M/L), ferry arrival time, etc."></textarea>
         </div>
 
+        <div class="form-section-title">3. Digital Rental Agreement &amp; ID Upload 📝</div>
+        <div class="contract-box" style="padding:14px;background:#f8fafc;border:1px solid var(--border,#e2e8f0);border-radius:12px;margin-bottom:16px;">
+          <div class="contract-terms-box" style="background:#ffffff;padding:12px;border-radius:8px;border:1px solid #e2e8f0;font-size:0.83rem;">
+            <h5 style="margin:0 0 6px;font-size:0.88rem;color:var(--text,#1e293b);">📄 Camiguin Standard Motorbike Rental Terms:</h5>
+            <ul class="contract-terms-list" style="margin:0;padding-left:18px;line-height:1.45;color:var(--text-muted,#475569);">
+              <li><strong>Valid Driver's License:</strong> Renter certifies holding a valid Philippine or International Driver's License with motorcycle authority.</li>
+              <li><strong>Protective Helmets:</strong> Renter and backrider must wear DTI/DOT-certified safety helmets at all times across Camiguin roads.</li>
+              <li><strong>Island-Only Operation:</strong> The rented motorbike must remain on Camiguin Island; transport via ferry off-island is prohibited without written authorization.</li>
+              <li><strong>Care &amp; Return:</strong> Return motorbike on time and in same mechanical condition. Security deposit is refunded promptly upon key return.</li>
+            </ul>
+          </div>
+
+          <div class="form-group" style="margin-top:12px;">
+            <label for="booking-license-photo"><strong>Driver's License Photo *</strong> <small class="text-muted">(Camera shot or upload)</small></label>
+            <input type="file" id="booking-license-photo" name="license_photo" accept="image/*" capture="environment">
+            <div id="license-preview-container" class="license-preview-container hidden" style="margin-top:8px;display:flex;align-items:center;gap:10px;">
+              <img id="license-preview-img" src="" alt="Driver's License Preview" class="license-preview-thumb" style="width:100px;height:65px;object-fit:cover;border-radius:6px;border:1px solid #cbd5e1;">
+              <button type="button" id="remove-license-photo-btn" class="btn btn-sm btn-outline">Change Photo</button>
+            </div>
+            <small class="field-hint">Required so the shop can prepare your motorbike and key before you arrive.</small>
+          </div>
+
+          <div class="form-group" style="margin-top:12px;">
+            <label><strong>Renter Digital Signature (Pirma gamit ang tudlo) *</strong></label>
+            <div class="signature-canvas-wrap" style="position:relative;background:#ffffff;border:1px solid #cbd5e1;border-radius:8px;padding:4px;overflow:hidden;">
+              <canvas id="signature-pad" class="signature-pad-canvas" width="450" height="130" style="display:block;width:100%;height:130px;touch-action:none;cursor:crosshair;"></canvas>
+              <input type="hidden" id="booking-signature-data" name="signature_data">
+              <div class="signature-controls" style="display:flex;justify-content:space-between;align-items:center;padding:4px 6px;border-top:1px dashed #e2e8f0;font-size:0.78rem;">
+                <span id="signature-status" class="signature-status text-muted">✍️ Sign above using finger or stylus</span>
+                <button type="button" id="clear-signature-btn" class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.75rem;">Clear</button>
+              </div>
+            </div>
+          </div>
+
+          <label class="checkbox-card" style="margin-top:10px;">
+            <input type="checkbox" id="booking-contract-agree" name="contract_agreed" value="1" required>
+            <span><strong>I agree to the Digital Rental Agreement and certify my details are authentic.</strong></span>
+          </label>
+        </div>
+
         <div id="payment-qr-section" class="payment-qr-section hidden">
           <div class="payment-qr-header">
-            <h4>3. Reservation Fee Payment <span id="payment-mode-pill" class="status-pill-inline ready">Required</span></h4>
+            <h4>4. Reservation Fee Payment <span id="payment-mode-pill" class="status-pill-inline ready">Required</span></h4>
             <span id="payment-fee-badge" class="payment-fee-pill">Pay Now: {{ shop.currency }}0</span>
           </div>
 
@@ -679,5 +883,5 @@
   window.INITIAL_FEATURED_SHOP = {{ (featured_shop or None) | tojson }};
   window.INITIAL_STOREFRONT_BOOTSTRAP = {{ (storefront_bootstrap or None) | tojson }};
 </script>
-<script src="/static/js/storefront.js?v=16"></script>
+<script src="/static/js/storefront.js?v=17"></script>
 {% endblock %}

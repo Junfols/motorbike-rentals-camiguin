@@ -37,8 +37,68 @@
     <div id="saved-trips-list" class="saved-trips-list"></div>
   </section>
 </section>
+
+<!-- View Digital Rental Contract & ID Modal -->
+<div id="contract-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="contract-modal-title">
+  <div class="modal-card modal-lg">
+    <div class="modal-header">
+      <h3 id="contract-modal-title">Digital Rental Contract &amp; Driver's ID 📝</h3>
+      <button type="button" class="icon-btn" data-close-modal="contract-modal" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="contract-modal-body-content">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Leave Review Modal -->
+<div id="review-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="review-modal-title">
+  <div class="modal-card modal-md">
+    <div class="modal-header">
+      <h3 id="review-modal-title">Leave a 5-Star Review ⭐</h3>
+      <button type="button" class="icon-btn" data-close-modal="review-modal" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="review-form">
+        <input type="hidden" id="review-booking-code" name="booking_code">
+        <input type="hidden" id="review-bike-id" name="bike_id">
+        <input type="hidden" id="review-rating-val" name="rating" value="5">
+
+        <div style="text-align:center;margin-bottom:16px;">
+          <label style="display:block;margin-bottom:6px;font-weight:700;">Rate Your Rental Experience:</label>
+          <div class="star-rating-picker" id="star-picker" style="font-size:2rem;cursor:pointer;color:#f59e0b;">
+            <span class="star-pick" data-val="1">&#9733;</span>
+            <span class="star-pick" data-val="2">&#9733;</span>
+            <span class="star-pick" data-val="3">&#9733;</span>
+            <span class="star-pick" data-val="4">&#9733;</span>
+            <span class="star-pick" data-val="5">&#9733;</span>
+          </div>
+          <small id="star-rating-text" class="text-muted" style="font-weight:600;">5 out of 5 — Excellent!</small>
+        </div>
+
+        <div class="form-group">
+          <label for="review-customer-name">Your Name *</label>
+          <input type="text" id="review-customer-name" name="customer_name" required placeholder="e.g. Maria Santos">
+        </div>
+
+        <div class="form-group">
+          <label for="review-comment">Your Review / Tips for Other Tourists in Camiguin *</label>
+          <textarea id="review-comment" name="comment" rows="3" required placeholder="Tell other tourists how the motorbike performed, delivery experience, island spots visited..."></textarea>
+        </div>
+
+        <div id="review-form-error" class="alert-error hidden"></div>
+
+        <button type="submit" id="submit-review-btn" class="btn btn-primary btn-block btn-lg" style="margin-top:10px;">
+          Submit Review ⭐
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/bookings.js?v=16"></script>
+<script src="/static/js/bookings.js?v=17"></script>
 {% endblock %}
