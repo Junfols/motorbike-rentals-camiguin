@@ -125,7 +125,7 @@ self.addEventListener("fetch", (event) => {
         const networkFetch = fetch(request)
           .then((response) => {
             if (response.ok) {
-            const copy = response.clone();
+              const copy = response.clone();
               caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy));
             }
             return response;
