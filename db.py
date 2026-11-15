@@ -310,6 +310,8 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             description TEXT NOT NULL DEFAULT '',
             delivery_fee REAL NOT NULL DEFAULT 250,
             telegram_chat_id TEXT NOT NULL DEFAULT '',
+            logo_url TEXT NOT NULL DEFAULT '',
+            cover_url TEXT NOT NULL DEFAULT '',
             password_hash TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'pending',
             is_main INTEGER NOT NULL DEFAULT 0,
@@ -421,6 +423,8 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
             description TEXT NOT NULL DEFAULT '',
             delivery_fee DOUBLE PRECISION NOT NULL DEFAULT 250,
             telegram_chat_id TEXT NOT NULL DEFAULT '',
+            logo_url TEXT NOT NULL DEFAULT '',
+            cover_url TEXT NOT NULL DEFAULT '',
             password_hash TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'pending',
             is_main INTEGER NOT NULL DEFAULT 0,
@@ -653,6 +657,10 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
             shop_cols = _table_columns(conn, "shops")
             if "telegram_chat_id" not in shop_cols:
                 conn.execute("ALTER TABLE shops ADD COLUMN telegram_chat_id TEXT NOT NULL DEFAULT ''")
+            if "logo_url" not in shop_cols:
+                conn.execute("ALTER TABLE shops ADD COLUMN logo_url TEXT NOT NULL DEFAULT ''")
+            if "cover_url" not in shop_cols:
+                conn.execute("ALTER TABLE shops ADD COLUMN cover_url TEXT NOT NULL DEFAULT ''")
 
             bike_cols = _table_columns(conn, "bikes")
             if "shop_id" not in bike_cols:
@@ -1422,6 +1430,10 @@ def delete_unused_uploaded_media(conn: DatabaseConnection, image_url: str | None
         or conn.execute(
             "SELECT 1 FROM settings WHERE key = 'gcash_qr_url' AND value = ? LIMIT 1",
             (image_url,),
+        ).fetchone()
+        or conn.execute(
+            "SELECT 1 FROM shops WHERE logo_url = ? OR cover_url = ? LIMIT 1",
+            (image_url, image_url),
         ).fetchone()
     )
     if not still_used:
