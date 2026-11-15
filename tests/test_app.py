@@ -1983,6 +1983,59 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertEqual(del_bike.status_code, 200)
         self.assertEqual(self.client.get(f"/api/admin/bikes/{spare_id}/blocks").status_code, 404)
 
+    def test_set_rafols_as_main_hub_via_migration_and_admin_patch(self):
+        self.assertEqual(
+            self.client.post("/api/admin/login", json={"password": "admin1234"}).status_code,
+            200,
+        )
+        # Create RAFOLS MOTORBIKE RENTAL shop
+        create_rafols = self.client.post(
+            "/api/admin/shops",
+            json={
+                "shop_name": "RAFOLS MOTORBIKE RENTAL",
+                "owner_name": "Jun Rafols",
+                "email": "rafols@camiguin.ph",
+                "phone": "09564596949",
+                "municipality": "Mambajao",
+                "address": "Mambajao, Camiguin",
+                "delivery_fee": 200,
+                "status": "approved",
+            },
+        )
+        self.assertEqual(create_rafols.status_code, 201)
+        rafols_id = create_rafols.get_json()["shop"]["id"]
+        self.assertFalse(create_rafols.get_json()["shop"]["is_main"])
+
+        # Running init_db promotes RAFOLS MOTORBIKE RENTAL to Main Hub (is_main=1) and demotes Camiguin Central Hub
+        from db import init_db
+        init_db(self.db_path)
+
+        shops = self.client.get("/api/admin/shops?status=all").get_json()["shops"]
+        by_id = {s["id"]: s for s in shops}
+        self.assertTrue(by_id[rafols_id]["is_main"])
+        self.assertFalse(by_id[1]["is_main"])
+
+        # Camiguin Central Hub (id=1) can now be suspended since it is no longer Main Hub
+        susp_old = self.client.patch("/api/admin/shops/1", json={"status": "suspended"})
+        self.assertEqual(susp_old.status_code, 200)
+        self.assertEqual(susp_old.get_json()["shop"]["status"], "suspended")
+
+        # Main Hub (RAFOLS) cannot be suspended or deleted
+        self.assertEqual(
+            self.client.patch(f"/api/admin/shops/{rafols_id}", json={"status": "suspended"}).status_code,
+            400,
+        )
+        self.assertEqual(self.client.delete(f"/api/admin/shops/{rafols_id}").status_code, 400)
+
+        # Admin can also switch Main Hub explicitly via PATCH {is_main: True}
+        switch_back = self.client.patch("/api/admin/shops/2", json={"is_main": True})
+        self.assertEqual(switch_back.status_code, 200)
+        self.assertTrue(switch_back.get_json()["shop"]["is_main"])
+        self.assertEqual(
+            self.client.patch(f"/api/admin/shops/{rafols_id}", json={"is_main": True}).status_code,
+            200,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
