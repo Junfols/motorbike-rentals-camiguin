@@ -53,6 +53,7 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         sw_resp = self.client.get("/sw.js")
         self.assertEqual(sw_resp.status_code, 200)
         self.assertEqual(sw_resp.headers.get("Service-Worker-Allowed"), "/")
+
         admin_manifest_resp = self.client.get("/admin.webmanifest")
         self.assertEqual(admin_manifest_resp.status_code, 200)
         admin_manifest = admin_manifest_resp.get_json()
@@ -398,7 +399,6 @@ class MotorbikeRentalPWATests(unittest.TestCase):
             json={"status": "confirmed"},
         )
         self.assertEqual(restore_resp.status_code, 200)
-
         p_dash = self.client.get("/api/partner/dashboard").get_json()
         self.assertEqual(p_dash["kpis"]["gross_revenue"], 1100.0)
         self.assertEqual(p_dash["kpis"]["platform_fee_total"], 165.0)
@@ -634,31 +634,54 @@ class MotorbikeRentalPWATests(unittest.TestCase):
                 return self
 
         class _FakePgTx:
-            def __init__(self, raw):
-                self._raw = raw
+            def __init__(self, wrapper):
+                self._wrapper = wrapper
+                self._is_outer = False
 
             def __enter__(self):
+                if not self._wrapper.autocommit and self._wrapper._in_implicit_tx:
+                    # Simulate psycopg 3 SAVEPOINT behavior when connection already entered an implicit tx
+                    self._is_outer = False
+                elif self._wrapper._in_explicit_tx:
+                    self._is_outer = False
+                else:
+                    self._is_outer = True
+                    self._wrapper._in_explicit_tx = True
                 return self
 
             def __exit__(self, exc_type, exc, tb):
-                if exc_type:
-                    self._raw.rollback()
-                else:
-                    self._raw.commit()
+                if self._is_outer:
+                    self._wrapper._in_explicit_tx = False
+                    if exc_type:
+                        self._wrapper._raw.rollback()
+                    else:
+                        self._wrapper._raw.commit()
                 return False
 
         class _FakePgConn:
-            def __init__(self, path):
+            def __init__(self, path, autocommit=False):
+                self.autocommit = bool(autocommit)
+                self._in_implicit_tx = False
+                self._in_explicit_tx = False
                 self._raw = sqlite3.connect(path, timeout=15, check_same_thread=False)
+
+            def _after_exec(self):
+                if self.autocommit and not self._in_explicit_tx:
+                    self._raw.commit()
+                elif not self.autocommit and not self._in_explicit_tx:
+                    self._in_implicit_tx = True
 
             def execute(self, sql, params=None):
                 norm = sql.strip()
                 if norm.startswith("SELECT pg_advisory_"):
-                    return _FakePgCursor(self._raw.execute("SELECT 1"))
+                    res = _FakePgCursor(self._raw.execute("SELECT 1"))
+                    self._after_exec()
+                    return res
                 if "information_schema.columns" in norm and params:
                     tbl = params[0]
                     cols = [(r[1],) for r in self._raw.execute(f"PRAGMA table_info({tbl})").fetchall()]
-                    cur = self._raw.execute("SELECT 1")
+                    self._raw.execute("SELECT 1")
+                    self._after_exec()
                     return type("ColsCur", (), {
                         "description": [_ColDesc("column_name")],
                         "fetchone": lambda self_: cols[0] if cols else None,
@@ -667,6 +690,7 @@ class MotorbikeRentalPWATests(unittest.TestCase):
                 has_returning = bool(re.search(r"\bRETURNING\s+id\b", norm, re.IGNORECASE))
                 sq_sql = _pg_sql_to_sqlite(sql)
                 cur = self._raw.execute(sq_sql, tuple(params) if params is not None else ())
+                self._after_exec()
                 if has_returning:
                     inserted_id = cur.lastrowid
                     return type("RetCur", (), {
@@ -680,19 +704,24 @@ class MotorbikeRentalPWATests(unittest.TestCase):
                 return _FakePgCursor(self._raw.cursor())
 
             def transaction(self):
-                return _FakePgTx(self._raw)
+                return _FakePgTx(self)
 
             def commit(self):
+                self._in_implicit_tx = False
                 self._raw.commit()
 
             def rollback(self):
+                self._in_implicit_tx = False
                 self._raw.rollback()
 
             def close(self):
+                self._raw.rollback()
                 self._raw.close()
 
         fake_psycopg = types.ModuleType("psycopg")
-        fake_psycopg.connect = lambda url, connect_timeout=15: _FakePgConn(pg_sim_db)
+        fake_psycopg.connect = lambda url, connect_timeout=15, autocommit=False: _FakePgConn(
+            pg_sim_db, autocommit=autocommit
+        )
 
         with patch.dict(sys.modules, {"psycopg": fake_psycopg}):
             pg_app = create_app(
@@ -762,7 +791,50 @@ class MotorbikeRentalPWATests(unittest.TestCase):
                 },
             )
             self.assertEqual(book.status_code, 201)
-            self.assertEqual(book.get_json()["booking"]["total_amount"], 800.0)
+            created_booking = book.get_json()["booking"]
+            self.assertEqual(created_booking["total_amount"], 800.0)
+
+            # Verify shop approval persisted on fresh GET /api/shops across PG connections
+            approved_shops = client.get("/api/shops").get_json()["shops"]
+            self.assertEqual(len(approved_shops), 4)
+            self.assertTrue(any(s["id"] == shop_id and s["status"] == "approved" for s in approved_shops))
+
+            # Verify overlapping booking rollback works cleanly on PG with autocommit + manual tx
+            overlap_pg = client.post(
+                "/api/bookings",
+                json={
+                    "bike_id": bike["id"],
+                    "customer_name": "Lito Cruz",
+                    "customer_phone": "09182224444",
+                    "license_number": "G01-22-001133",
+                    "pickup_date": self._future_str(2),
+                    "return_date": self._future_str(3),
+                },
+            )
+            self.assertEqual(overlap_pg.status_code, 409)
+
+            # Admin approves booking & saves alert setting; fresh requests must see committed values
+            confirm_resp = client.patch(
+                f"/api/admin/bookings/{created_booking['id']}",
+                json={"status": "confirmed"},
+            )
+            self.assertEqual(confirm_resp.status_code, 200)
+            self.assertEqual(confirm_resp.get_json()["booking"]["status"], "confirmed")
+
+            lookup_after = client.get(
+                f"/api/bookings/lookup?code={created_booking['booking_code']}&phone=3333"
+            )
+            self.assertEqual(lookup_after.status_code, 200)
+            self.assertEqual(lookup_after.get_json()["booking"]["status"], "confirmed")
+
+            save_cfg = client.put(
+                "/api/admin/settings",
+                json={"admin_telegram_chat_id": "555666"},
+            )
+            self.assertEqual(save_cfg.status_code, 200)
+            read_cfg = client.get("/api/admin/settings")
+            self.assertEqual(read_cfg.status_code, 200)
+            self.assertEqual(read_cfg.get_json()["settings"]["admin_telegram_chat_id"], "555666")
 
     def test_alert_settings_masking_and_secret_isolation(self):
         from db import SECRET_SETTING_KEYS
@@ -1087,7 +1159,6 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         cols = [r[1] for r in check_conn.execute("PRAGMA table_info(shops)").fetchall()]
         check_conn.close()
         self.assertIn("telegram_chat_id", cols)
-
 
     def test_reservation_payment_settings_qr_and_modes(self):
         from db import SECRET_SETTING_KEYS, get_connection
@@ -1561,14 +1632,15 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertEqual(row[3], "unpaid")
 
     def test_qr_upload_accepts_jfif_and_highres_images_and_network_first_scripts(self):
-        sw_text = self.client.get("/sw.js").get_data(as_text=True)
-        self.assertIn("motoride-pwa-v8", sw_text)
+        with self.client.get("/sw.js") as sw_resp:
+            sw_text = sw_resp.get_data(as_text=True)
+        self.assertIn("motoride-pwa-v9", sw_text)
         self.assertIn('/static/js/', sw_text)
 
         login_resp = self.client.post("/api/admin/login", json={"password": "admin1234"})
         self.assertEqual(login_resp.status_code, 200)
         admin_html = self.client.get("/admin").get_data(as_text=True)
-        self.assertIn('/static/js/admin.js?v=8', admin_html)
+        self.assertIn('/static/js/admin.js?v=9', admin_html)
         self.assertIn('.jfif', admin_html)
 
         # Windows/Edge/Messenger saves often use .jfif -> served cleanly as image/jpeg
@@ -1596,8 +1668,7 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertEqual(up_large.status_code, 200)
 
         # Above 8 MB limit fails cleanly with 400 JSON error
-        too_big = b"\x89PNG\r
-\x1a\n" + (b"0" * (8 * 1024 * 1024 + 100))
+        too_big = b"\x89PNG\r\n\x1a\n" + (b"0" * (8 * 1024 * 1024 + 100))
         up_too_big = self.client.post(
             "/api/admin/settings/qr",
             data={"qr_image": (io.BytesIO(too_big), "huge-qr.png")},
@@ -1608,22 +1679,310 @@ class MotorbikeRentalPWATests(unittest.TestCase):
 
     def test_return_date_defaults_to_select_date_prompt_without_prefill(self):
         index_html = self.client.get("/").get_data(as_text=True)
-        self.assertIn('/static/css/style.css?v=8', index_html)
-        self.assertIn('/static/js/storefront.js?v=8', index_html)
+        self.assertIn('/static/css/style.css?v=9', index_html)
+        self.assertIn('/static/js/storefront.js?v=9', index_html)
+        self.assertIn('id="modal-availability-calendar"', index_html)
+        self.assertIn('id="modal-next-available-btn"', index_html)
         self.assertEqual(index_html.count('<span class="date-placeholder" aria-hidden="true">Select date</span>'), 2)
         self.assertIn('id="search-return-date"', index_html)
         self.assertIn('id="booking-return-date"', index_html)
 
-        storefront_js = self.client.get("/static/js/storefront.js").get_data(as_text=True)
+        with self.client.get("/static/js/storefront.js") as sf_resp:
+            storefront_js = sf_resp.get_data(as_text=True)
         self.assertIn('state.returnDate = "";', storefront_js)
         self.assertIn("bindDatePickerPlaceholder(searchReturnInput);", storefront_js)
         self.assertIn("bindDatePickerPlaceholder(bookingReturn);", storefront_js)
         self.assertIn("Select a return date above to check availability & total price.", storefront_js)
+        self.assertIn("renderAvailabilityCalendarHtml", storefront_js)
         self.assertNotIn("today.getDate() + 2", storefront_js)
 
-        style_css = self.client.get("/static/css/style.css").get_data(as_text=True)
+        with self.client.get("/static/css/style.css") as css_resp:
+            style_css = css_resp.get_data(as_text=True)
         self.assertIn(".date-input-wrap.is-empty .date-placeholder", style_css)
         self.assertIn(".quote-availability.muted", style_css)
+        self.assertIn(".avail-cal-grid", style_css)
+
+    def test_availability_calendar_booked_dates_and_sweep_line_concurrency(self):
+        self.assertEqual(
+            self.client.post("/api/admin/login", json={"password": "admin1234"}).status_code,
+            200,
+        )
+        # Create a 2-unit bike so we can verify limited vs booked & non-overlapping concurrency
+        create_bike = self.client.post(
+            "/api/admin/bikes",
+            json={
+                "shop_id": 1,
+                "name": "Honda PCX 160 Multi",
+                "category": "Scooter",
+                "engine_cc": 160,
+                "transmission": "Automatic",
+                "daily_rate": 700,
+                "weekly_rate": 4200,
+                "deposit": 1500,
+                "units_count": 2,
+                "status": "available",
+            },
+        )
+        self.assertEqual(create_bike.status_code, 201)
+        bike_id = create_bike.get_json()["bike"]["id"]
+
+        d2 = self._future_str(2)
+        d3 = self._future_str(3)
+        d4 = self._future_str(4)
+        d5 = self._future_str(5)
+        d6 = self._future_str(6)
+
+        # Two DISJOINT 1-unit bookings across [d2, d6] have peak concurrency 1 (< 2 units)
+        for p_dt, r_dt, cname in ((d2, d3, "Rider One"), (d5, d6, "Rider Two")):
+            res = self.client.post(
+                "/api/bookings",
+                json={
+                    "bike_id": bike_id,
+                    "customer_name": cname,
+                    "customer_phone": "09171112200",
+                    "license_number": "L01-11-111111",
+                    "pickup_date": p_dt,
+                    "return_date": r_dt,
+                },
+            )
+            self.assertEqual(res.status_code, 201)
+
+        # Another unit is STILL open across the full [d2, d6] window because peak is 1 of 2
+        res_full = self.client.post(
+            "/api/bookings",
+            json={
+                "bike_id": bike_id,
+                "customer_name": "Rider Three",
+                "customer_phone": "09171112201",
+                "license_number": "L01-11-222222",
+                "pickup_date": d2,
+                "return_date": d6,
+            },
+        )
+        self.assertEqual(res_full.status_code, 201)
+
+        # Now d2..d3 and d5..d6 have 2/2 units booked, while d4 has only 1/2 unit booked (limited/open)
+        blocked_d2_d3 = self.client.post(
+            "/api/bookings",
+            json={
+                "bike_id": bike_id,
+                "customer_name": "Rider Four",
+                "customer_phone": "09171112202",
+                "license_number": "L01-11-333333",
+                "pickup_date": d2,
+                "return_date": d3,
+            },
+        )
+        self.assertEqual(blocked_d2_d3.status_code, 409)
+
+        # Searching without explicit return_date succeeds (uses pickup_date)
+        list_no_ret = self.client.get(f"/api/bikes?pickup_date={d2}")
+        self.assertEqual(list_no_ret.status_code, 200)
+        target_no_ret = next(b for b in list_no_ret.get_json()["bikes"] if b["id"] == bike_id)
+        self.assertFalse(target_no_ret["is_available"])
+        self.assertEqual(target_no_ret["next_available_date"], d4)
+        self.assertIsNone(target_no_ret["next_available_return_date"])
+
+        # Searching d2..d3 jumps to next 2-day window starting after booked spans (d7..d8)
+        list_with_ret = self.client.get(f"/api/bikes?pickup_date={d2}&return_date={d3}")
+        self.assertEqual(list_with_ret.status_code, 200)
+        target_with_ret = next(b for b in list_with_ret.get_json()["bikes"] if b["id"] == bike_id)
+        self.assertFalse(target_with_ret["is_available"])
+        self.assertEqual(
+            target_with_ret["booked_ranges"],
+            [
+                {"pickup_date": d2, "return_date": d3},
+                {"pickup_date": d5, "return_date": d6},
+            ],
+        )
+        self.assertEqual(target_with_ret["next_available_date"], self._future_str(7))
+        self.assertEqual(target_with_ret["next_available_return_date"], self._future_str(8))
+
+        # Bike detail endpoint returns 35-day availability_calendar with open/limited/booked states
+        detail = self.client.get(f"/api/bikes/{bike_id}?pickup_date={d2}&return_date={d3}").get_json()["bike"]
+        cal = detail["availability_calendar"]
+        self.assertEqual(len(cal), 35)
+        cal_by_date = {c["date"]: c for c in cal}
+        self.assertEqual(cal_by_date[d2]["status"], "booked")
+        self.assertEqual(cal_by_date[d2]["available_units"], 0)
+        self.assertEqual(cal_by_date[d4]["status"], "limited")
+        self.assertEqual(cal_by_date[d4]["available_units"], 1)
+        self.assertEqual(cal_by_date[self._future_str(7)]["status"], "available")
+        self.assertEqual(cal_by_date[self._future_str(7)]["available_units"], 2)
+
+    def test_partner_and_admin_quick_status_and_manual_date_blocks(self):
+        # Register & approve a new partner shop with a 2-unit bike
+        reg = self.client.post(
+            "/api/partner/register",
+            json={
+                "shop_name": "Mambajao Moto Hub",
+                "owner_name": "Carlos Reyes",
+                "email": "carlos@mambajaomoto.ph",
+                "phone": "09178889900",
+                "municipality": "Mambajao",
+                "address": "Rizal St, Mambajao",
+                "delivery_fee": 150,
+                "password": "partnerpass123",
+            },
+        )
+        self.assertEqual(reg.status_code, 201)
+        shop_id = reg.get_json()["shop"]["id"]
+        bike_resp = self.client.post(
+            "/api/partner/bikes",
+            json={
+                "name": "Yamaha Mio Aerox",
+                "category": "Scooter",
+                "engine_cc": 155,
+                "transmission": "Automatic",
+                "daily_rate": 600,
+                "weekly_rate": 3600,
+                "deposit": 1500,
+                "units_count": 2,
+                "status": "available",
+            },
+        )
+        self.assertEqual(bike_resp.status_code, 201)
+        bike_id = bike_resp.get_json()["bike"]["id"]
+
+        # Admin approves shop
+        self.assertEqual(
+            self.client.post("/api/admin/login", json={"password": "admin1234"}).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.patch(f"/api/admin/shops/{shop_id}", json={"status": "approved"}).status_code,
+            200,
+        )
+
+        # Partner logs back in
+        self.assertEqual(
+            self.client.post(
+                "/api/partner/login",
+                json={"email": "carlos@mambajaomoto.ph", "password": "partnerpass123"},
+            ).status_code,
+            200,
+        )
+
+        d1 = self._future_str(1)
+        d2 = self._future_str(2)
+        d4 = self._future_str(4)
+        d5 = self._future_str(5)
+
+        # 1) Partner toggles bike status quickly -> maintenance -> back to available
+        st_maint = self.client.patch(f"/api/partner/bikes/{bike_id}/status", json={"status": "maintenance"})
+        self.assertEqual(st_maint.status_code, 200)
+        self.assertEqual(st_maint.get_json()["bike"]["status"], "maintenance")
+        quote_maint = self.client.get(f"/api/quote?bike_id={bike_id}&pickup_date={d1}&return_date={d2}").get_json()["quote"]
+        self.assertFalse(quote_maint["is_available"])
+
+        st_open = self.client.patch(f"/api/partner/bikes/{bike_id}/status", json={"status": "available"})
+        self.assertEqual(st_open.status_code, 200)
+        self.assertEqual(st_open.get_json()["bike"]["status"], "available")
+
+        # 2) Partner blocks all 2 units for a walk-in customer on [d1, d2]
+        blk_resp = self.client.post(
+            f"/api/partner/bikes/{bike_id}/blocks",
+            json={
+                "start_date": d1,
+                "end_date": d2,
+                "units_blocked": 2,
+                "reason": "Walk-in Tourist",
+            },
+        )
+        self.assertEqual(blk_resp.status_code, 201)
+        blk_data = blk_resp.get_json()["bike"]
+        blk_id = blk_data["blocks"][0]["id"]
+        self.assertEqual(blk_data["booked_ranges"], [{"pickup_date": d1, "return_date": d2}])
+
+        # Attempting to double-block the same dates must fail with 409
+        dup_blk = self.client.post(
+            f"/api/partner/bikes/{bike_id}/blocks",
+            json={"start_date": d1, "end_date": d2, "units_blocked": 1, "reason": "Overflow"},
+        )
+        self.assertEqual(dup_blk.status_code, 409)
+
+        # Online customer trying to book [d1, d2] is blocked (409), and KPI revenue remains 0
+        online_blocked = self.client.post(
+            "/api/bookings",
+            json={
+                "bike_id": bike_id,
+                "customer_name": "Web Tourist",
+                "customer_phone": "09172223344",
+                "license_number": "A01-22-334455",
+                "pickup_date": d1,
+                "return_date": d2,
+            },
+        )
+        self.assertEqual(online_blocked.status_code, 409)
+        dash = self.client.get("/api/partner/dashboard").get_json()
+        self.assertEqual(dash["kpis"]["pending_count"], 0)
+        self.assertEqual(dash["kpis"]["gross_revenue"], 0.0)
+
+        # Schedule endpoint lists block + 35-day calendar
+        sched = self.client.get(f"/api/partner/bikes/{bike_id}/blocks").get_json()["bike"]
+        self.assertEqual(len(sched["blocks"]), 1)
+        self.assertEqual(len(sched["availability_calendar"]), 35)
+
+        # 3) Partner unblocks walk-in dates -> dates become bookable again
+        unblk = self.client.delete(f"/api/partner/bikes/{bike_id}/blocks/{blk_id}")
+        self.assertEqual(unblk.status_code, 200)
+        self.assertEqual(unblk.get_json()["bike"]["blocks"], [])
+        online_ok = self.client.post(
+            "/api/bookings",
+            json={
+                "bike_id": bike_id,
+                "customer_name": "Web Tourist",
+                "customer_phone": "09172223344",
+                "license_number": "A01-22-334455",
+                "pickup_date": d1,
+                "return_date": d2,
+            },
+        )
+        self.assertEqual(online_ok.status_code, 201)
+
+        # 4) Admin blocks [d4, d5], verifies templates expose controls, then deletes bike & cleans blocks
+        admin_blk = self.client.post(
+            f"/api/admin/bikes/{bike_id}/blocks",
+            json={"start_date": d4, "end_date": d5, "units_blocked": 1, "reason": "Admin Hold"},
+        )
+        self.assertEqual(admin_blk.status_code, 201)
+
+        partner_html = self.client.get("/partner").get_data(as_text=True)
+        self.assertIn('id="bike-schedule-modal"', partner_html)
+        self.assertIn('/static/js/partner.js?v=9', partner_html)
+        admin_html = self.client.get("/admin").get_data(as_text=True)
+        self.assertIn('id="bike-schedule-modal"', admin_html)
+
+        # Bike with booking history cannot be deleted (existing safeguard)
+        blocked_delete = self.client.delete(f"/api/admin/bikes/{bike_id}")
+        self.assertEqual(blocked_delete.status_code, 409)
+
+        # A bike without bookings but with a manual block can be deleted; blocks are cleaned up
+        spare = self.client.post(
+            "/api/admin/bikes",
+            json={
+                "shop_id": shop_id,
+                "name": "Spare Scooter",
+                "category": "Scooter",
+                "engine_cc": 110,
+                "transmission": "Automatic",
+                "daily_rate": 400,
+                "deposit": 1500,
+                "units_count": 1,
+                "status": "available",
+            },
+        )
+        self.assertEqual(spare.status_code, 201)
+        spare_id = spare.get_json()["bike"]["id"]
+        spare_blk = self.client.post(
+            f"/api/admin/bikes/{spare_id}/blocks",
+            json={"start_date": d4, "end_date": d5, "units_blocked": 1},
+        )
+        self.assertEqual(spare_blk.status_code, 201)
+        del_bike = self.client.delete(f"/api/admin/bikes/{spare_id}")
+        self.assertEqual(del_bike.status_code, 200)
+        self.assertEqual(self.client.get(f"/api/admin/bikes/{spare_id}/blocks").status_code, 404)
+
 
 if __name__ == "__main__":
     unittest.main()
