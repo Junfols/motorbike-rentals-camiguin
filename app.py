@@ -562,6 +562,11 @@ def create_app(test_config: dict | None = None) -> Flask:
         return render_template("index.html", active_nav="fleet", featured_shop=featured_shop)
 
     @app.get("/shop/<slug>")
+    def public_shop_profile_page(slug: str):
+        featured_shop = _find_featured_shop(get_db(), slug)
+        return render_template("index.html", active_nav="fleet", featured_shop=featured_shop)
+
+    @app.get("/shop/<slug>")
     def shop_profile_page(slug: str):
         featured_shop = _find_featured_shop(get_db(), slug)
         return render_template("index.html", active_nav="fleet", featured_shop=featured_shop)
