@@ -448,7 +448,37 @@
 
         <div id="delivery-address-group" class="form-group hidden">
           <label for="booking-delivery-address">Delivery Address (Resort / Port / Airport) *</label>
-          <input type="text" id="booking-delivery-address" name="delivery_address" placeholder="e.g., Mambajao Resort / Benoni Port / Camiguin Airport">
+          <input type="text" id="booking-delivery-address" name="delivery_address" placeholder="e.g., Paras Beach Resort / Benoni Port / Balbagon Port">
+          <input type="hidden" id="booking-delivery-lat" name="delivery_lat">
+          <input type="hidden" id="booking-delivery-lng" name="delivery_lng">
+
+          <!-- Delivery Map Pinning & Camiguin Landmarks -->
+          <div class="delivery-map-card" style="margin-top:10px;padding:12px;background:#f8fafc;border:1px solid var(--border,#e2e8f0);border-radius:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+              <div>
+                <strong style="font-size:0.92rem;">🗺️ Camiguin Tourist Map &amp; Delivery Pin</strong>
+                <small class="field-hint" style="display:block;margin:2px 0 0;">Tap a shortcut or drag the pin to your resort/port:</small>
+              </div>
+              <button type="button" id="locate-me-btn" class="btn btn-sm btn-outline">📍 My GPS Location</button>
+            </div>
+
+            <div id="landmark-chips" class="landmark-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+              <button type="button" class="btn btn-sm btn-outline landmark-chip" data-name="Benoni Port (Mahinog)" data-lat="9.1306" data-lng="124.7937">🚢 Benoni Port</button>
+              <button type="button" class="btn btn-sm btn-outline landmark-chip" data-name="Balbagon Port (Mambajao)" data-lat="9.2561" data-lng="124.7175">⛴️ Balbagon Port</button>
+              <button type="button" class="btn btn-sm btn-outline landmark-chip" data-name="Camiguin Airport (Mambajao)" data-lat="9.2530" data-lng="124.7061">✈️ Camiguin Airport</button>
+              <button type="button" class="btn btn-sm btn-outline landmark-chip" data-name="Paras Beach Resort (Yumbing)" data-lat="9.2553" data-lng="124.6468">🏖️ Paras Beach</button>
+              <button type="button" class="btn btn-sm btn-outline landmark-chip" data-name="Balyali Camiguin Resort" data-lat="9.2588" data-lng="124.6432">🏖️ Balyali</button>
+              <button type="button" class="btn btn-sm btn-outline landmark-chip" data-name="Tongatok Cliff Resort" data-lat="9.2505" data-lng="124.6341">🌅 Tongatok Cliff</button>
+              <button type="button" class="btn btn-sm btn-outline landmark-chip" data-name="Lanzones Resort (Mambajao)" data-lat="9.2390" data-lng="124.6970">🌴 Lanzones Resort</button>
+              <button type="button" class="btn btn-sm btn-outline landmark-chip" data-name="Nouveau Resort Camiguin" data-lat="9.1552" data-lng="124.7891">✨ Nouveau Resort</button>
+              <button type="button" class="btn btn-sm btn-outline landmark-chip" data-name="White Island Jump-off" data-lat="9.2538" data-lng="124.6532">🏝️ White Island</button>
+            </div>
+
+            <div id="delivery-map" class="delivery-map-container" style="height: 220px; width: 100%; border-radius: 10px; border: 1px solid #cbd5e1; z-index: 1;"></div>
+            <div id="delivery-pin-coords" class="delivery-pin-coords text-muted" style="font-size: 0.78rem; margin-top: 6px;">
+              <span>Pinned: <span id="delivery-coords-text">Tap anywhere on map or choose shortcut to pin</span></span>
+            </div>
+          </div>
         </div>
 
         <div class="addons-row">
@@ -613,5 +643,5 @@
   window.INITIAL_FEATURED_SHOP = {{ (featured_shop or None) | tojson }};
   window.INITIAL_STOREFRONT_BOOTSTRAP = {{ (storefront_bootstrap or None) | tojson }};
 </script>
-<script src="/static/js/storefront.js?v=14"></script>
+<script src="/static/js/storefront.js?v=15"></script>
 {% endblock %}
