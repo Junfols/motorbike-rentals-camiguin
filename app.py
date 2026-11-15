@@ -146,6 +146,9 @@ def _serialize_shop(row, include_private: bool = False) -> dict:
         "delivery_fee": float(row["delivery_fee"] or 0),
         "phone": row["phone"],
         "whatsapp_number": row["whatsapp_number"],
+        "logo_url": (row["logo_url"] if "logo_url" in keys else "") or "",
+        "cover_url": (row["cover_url"] if "cover_url" in keys else "") or "",
+        "share_url": f"/shop/{row['slug']}",
         "status": row["status"],
         "is_main": bool(row["is_main"]),
     }
@@ -175,6 +178,9 @@ def _serialize_bike(row, booked_units: int = 0, schedule: dict | None = None) ->
         "id": row["id"],
         "shop_id": int(row["shop_id"]),
         "shop_name": row["shop_name"] if "shop_name" in keys else None,
+        "shop_slug": row["shop_slug"] if "shop_slug" in keys else None,
+        "shop_logo_url": (row["shop_logo_url"] if "shop_logo_url" in keys else "") or "",
+        "shop_cover_url": (row["shop_cover_url"] if "shop_cover_url" in keys else "") or "",
         "shop_municipality": row["shop_municipality"] if "shop_municipality" in keys else None,
         "shop_address": row["shop_address"] if "shop_address" in keys else None,
         "shop_phone": row["shop_phone"] if "shop_phone" in keys else None,
@@ -211,7 +217,8 @@ def _serialize_bike(row, booked_units: int = 0, schedule: dict | None = None) ->
 
 def _fetch_bike_with_shop(conn, bike_id: int):
     return conn.execute(
-        "SELECT b.*, s.shop_name AS shop_name, s.municipality AS shop_municipality, s.status AS shop_status "
+        "SELECT b.*, s.shop_name AS shop_name, s.slug AS shop_slug, s.logo_url AS shop_logo_url, "
+        "s.cover_url AS shop_cover_url, s.municipality AS shop_municipality, s.status AS shop_status "
         "FROM bikes b JOIN shops s ON s.id = b.shop_id WHERE b.id = ?",
         (bike_id,),
     ).fetchone()
@@ -344,6 +351,9 @@ def _serialize_booking(row) -> dict:
         "bike_id": row["bike_id"],
         "shop_id": int(row["shop_id"]),
         "shop_name": row["shop_name"] if "shop_name" in keys else None,
+        "shop_slug": row["shop_slug"] if "shop_slug" in keys else None,
+        "shop_logo_url": (row["shop_logo_url"] if "shop_logo_url" in keys else "") or "",
+        "shop_cover_url": (row["shop_cover_url"] if "shop_cover_url" in keys else "") or "",
         "shop_municipality": row["shop_municipality"] if "shop_municipality" in keys else None,
         "shop_address": row["shop_address"] if "shop_address" in keys else None,
         "shop_phone": row["shop_phone"] if "shop_phone" in keys else None,
@@ -521,12 +531,40 @@ def create_app(test_config: dict | None = None) -> Flask:
 
         return wrapper
 
+    def _find_featured_shop(conn, shop_ref: str | None) -> dict | None:
+        ref = (shop_ref or "").strip()
+        if not ref:
+            return None
+        partner_id = int(session.get("partner_shop_id") or 0)
+        is_admin = bool(session.get("is_admin"))
+        row = conn.execute(
+            """
+            SELECT s.*,
+                   COUNT(CASE WHEN b.status != 'hidden' THEN 1 END) AS bike_count
+            FROM shops s
+            LEFT JOIN bikes b ON b.shop_id = s.id
+            WHERE (LOWER(s.slug) = LOWER(?) OR CAST(s.id AS TEXT) = ?)
+              AND (s.status = 'approved' OR s.id = ? OR ? = 1)
+            GROUP BY s.id
+            LIMIT 1
+            """,
+            (ref, ref, partner_id, 1 if is_admin else 0),
+        ).fetchone()
+        return _serialize_shop(row) if row else None
+
     # ------------------------------------------------------------------
     # Page & PWA Routes
     # ------------------------------------------------------------------
     @app.get("/")
     def home():
-        return render_template("index.html", active_nav="fleet")
+        shop_ref = (request.args.get("shop") or "").strip()
+        featured_shop = _find_featured_shop(get_db(), shop_ref) if shop_ref else None
+        return render_template("index.html", active_nav="fleet", featured_shop=featured_shop)
+
+    @app.get("/shop/<slug>")
+    def shop_profile_page(slug: str):
+        featured_shop = _find_featured_shop(get_db(), slug)
+        return render_template("index.html", active_nav="fleet", featured_shop=featured_shop)
 
     @app.get("/bookings")
     def bookings_page():
@@ -686,6 +724,13 @@ def create_app(test_config: dict | None = None) -> Flask:
             }
         )
 
+    @app.get("/api/shops/<slug>")
+    def get_public_shop(slug: str):
+        shop_data = _find_featured_shop(get_db(), slug)
+        if not shop_data:
+            return jsonify({"error": "Partner shop not found."}), 404
+        return jsonify({"shop": shop_data})
+
     @app.get("/api/bikes")
     def list_bikes():
         conn = get_db()
@@ -721,6 +766,9 @@ def create_app(test_config: dict | None = None) -> Flask:
         sql = """
             SELECT b.*,
                    s.shop_name AS shop_name,
+                   s.slug AS shop_slug,
+                   s.logo_url AS shop_logo_url,
+                   s.cover_url AS shop_cover_url,
                    s.municipality AS shop_municipality,
                    s.address AS shop_address,
                    s.phone AS shop_phone,
@@ -801,6 +849,9 @@ def create_app(test_config: dict | None = None) -> Flask:
             """
             SELECT b.*,
                    s.shop_name AS shop_name,
+                   s.slug AS shop_slug,
+                   s.logo_url AS shop_logo_url,
+                   s.cover_url AS shop_cover_url,
                    s.municipality AS shop_municipality,
                    s.address AS shop_address,
                    s.phone AS shop_phone,
@@ -1875,10 +1926,11 @@ def create_app(test_config: dict | None = None) -> Flask:
             return jsonify({"error": err}), code
         return jsonify(res), code
 
-    @app.put("/api/partner/profile")
+    @app.route("/api/partner/profile", methods=["PUT", "POST"])
     @partner_required
     def partner_update_profile():
-        payload = request.get_json(silent=True) or {}
+        json_payload = request.get_json(silent=True)
+        payload = json_payload if isinstance(json_payload, dict) else request.form.to_dict()
         conn = get_db()
         shop = g.partner_shop
 
@@ -1923,14 +1975,39 @@ def create_app(test_config: dict | None = None) -> Flask:
                 return jsonify({"error": "New password must be at least 6 characters."}), 400
             password_hash = generate_password_hash(new_password)
 
+        existing_logo = (shop["logo_url"] if "logo_url" in shop.keys() else "") or ""
+        existing_cover = (shop["cover_url"] if "cover_url" in shop.keys() else "") or ""
+        logo_url = existing_logo
+        cover_url = existing_cover
+
+        if _as_bool(payload.get("clear_logo")):
+            logo_url = ""
+        elif "logo_url" in payload and payload.get("logo_url") is not None:
+            logo_url = str(payload.get("logo_url") or "").strip()
+
+        if _as_bool(payload.get("clear_cover")):
+            cover_url = ""
+        elif "cover_url" in payload and payload.get("cover_url") is not None:
+            cover_url = str(payload.get("cover_url") or "").strip()
+
+        try:
+            validated_logo = _validate_image_upload(request.files.get("logo_image"), prefix="shop_logo")
+            validated_cover = _validate_image_upload(request.files.get("cover_image"), prefix="shop_cover")
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
         slug = slugify_shop_name(shop_name, conn, exclude_id=shop["id"])
         with conn:
+            if validated_logo:
+                logo_url = _save_validated_image(conn, validated_logo, use_tx=False)
+            if validated_cover:
+                cover_url = _save_validated_image(conn, validated_cover, use_tx=False)
             conn.execute(
                 """
                 UPDATE shops SET
                     shop_name = ?, slug = ?, owner_name = ?, phone = ?, whatsapp_number = ?,
                     telegram_chat_id = ?, municipality = ?, address = ?, description = ?, delivery_fee = ?,
-                    password_hash = ?
+                    logo_url = ?, cover_url = ?, password_hash = ?
                 WHERE id = ?
                 """,
                 (
@@ -1944,12 +2021,67 @@ def create_app(test_config: dict | None = None) -> Flask:
                     address,
                     description,
                     delivery_fee,
+                    logo_url,
+                    cover_url,
                     password_hash,
                     shop["id"],
                 ),
             )
+        if existing_logo and existing_logo != logo_url:
+            delete_unused_uploaded_media(conn, existing_logo)
+        if existing_cover and existing_cover != cover_url:
+            delete_unused_uploaded_media(conn, existing_cover)
         updated = conn.execute("SELECT * FROM shops WHERE id = ?", (shop["id"],)).fetchone()
         return jsonify({"shop": _serialize_shop(updated, include_private=True), **_platform_alert_flags(conn)})
+
+    @app.post("/api/partner/profile/media")
+    @partner_required
+    def partner_upload_profile_media():
+        conn = get_db()
+        shop = g.partner_shop
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            payload = request.form.to_dict()
+
+        existing_logo = (shop["logo_url"] if "logo_url" in shop.keys() else "") or ""
+        existing_cover = (shop["cover_url"] if "cover_url" in shop.keys() else "") or ""
+        logo_url = existing_logo
+        cover_url = existing_cover
+
+        if _as_bool(payload.get("clear_logo")):
+            logo_url = ""
+        if _as_bool(payload.get("clear_cover")):
+            cover_url = ""
+
+        try:
+            validated_logo = _validate_image_upload(request.files.get("logo_image"), prefix="shop_logo")
+            validated_cover = _validate_image_upload(request.files.get("cover_image"), prefix="shop_cover")
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+        if (
+            not validated_logo
+            and not validated_cover
+            and not _as_bool(payload.get("clear_logo"))
+            and not _as_bool(payload.get("clear_cover"))
+        ):
+            return jsonify({"error": "Please select a profile picture or cover photo to upload."}), 400
+
+        with conn:
+            if validated_logo:
+                logo_url = _save_validated_image(conn, validated_logo, use_tx=False)
+            if validated_cover:
+                cover_url = _save_validated_image(conn, validated_cover, use_tx=False)
+            conn.execute(
+                "UPDATE shops SET logo_url = ?, cover_url = ? WHERE id = ?",
+                (logo_url, cover_url, shop["id"]),
+            )
+        if existing_logo and existing_logo != logo_url:
+            delete_unused_uploaded_media(conn, existing_logo)
+        if existing_cover and existing_cover != cover_url:
+            delete_unused_uploaded_media(conn, existing_cover)
+        updated = conn.execute("SELECT * FROM shops WHERE id = ?", (shop["id"],)).fetchone()
+        return jsonify({"shop": _serialize_shop(updated, include_private=True)})
 
     @app.post("/api/partner/profile/test-alert")
     @partner_required
@@ -2257,6 +2389,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         if existing["is_main"]:
             return jsonify({"error": "Cannot delete the main platform shop."}), 400
 
+        old_logo = (existing["logo_url"] if "logo_url" in existing.keys() else "") or ""
+        old_cover = (existing["cover_url"] if "cover_url" in existing.keys() else "") or ""
         bike_cnt = conn.execute("SELECT COUNT(*) FROM bikes WHERE shop_id = ?", (shop_id,)).fetchone()[0]
         booking_cnt = conn.execute("SELECT COUNT(*) FROM bookings WHERE shop_id = ?", (shop_id,)).fetchone()[0]
         with conn:
@@ -2270,6 +2404,10 @@ def create_app(test_config: dict | None = None) -> Flask:
             )
             conn.execute("DELETE FROM bikes WHERE shop_id = ?", (shop_id,))
             conn.execute("DELETE FROM shops WHERE id = ?", (shop_id,))
+        if old_logo:
+            delete_unused_uploaded_media(conn, old_logo)
+        if old_cover:
+            delete_unused_uploaded_media(conn, old_cover)
         return jsonify(
             {
                 "deleted": True,
