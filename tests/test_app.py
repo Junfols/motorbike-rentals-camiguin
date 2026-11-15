@@ -2050,6 +2050,8 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertNotIn(1, remaining_shop_ids)
         remaining_bike_shop_ids = {b["shop_id"] for b in self.client.get("/api/admin/bikes").get_json()["bikes"]}
         self.assertNotIn(1, remaining_bike_shop_ids)
+        pub_settings = self.client.get("/api/settings").get_json()["settings"]
+        self.assertEqual(pub_settings["reservation_mode"], "required")
 
 
 if __name__ == "__main__":
