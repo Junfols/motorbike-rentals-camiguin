@@ -195,6 +195,34 @@
       clearLogoBtn.classList.toggle("hidden", !shop.logo_url);
     }
 
+    // Overview Tab Showcase Card Live Sync
+    const ovCoverImg = document.getElementById("overview-cover-img");
+    if (ovCoverImg) {
+      ovCoverImg.src = shop.cover_url || "/static/images/hero-scooter.jpg";
+    }
+    const ovLogoImg = document.getElementById("overview-logo-img");
+    const ovLogoFallback = document.getElementById("overview-logo-fallback");
+    if (ovLogoImg && ovLogoFallback) {
+      if (shop.logo_url) {
+        ovLogoImg.src = shop.logo_url;
+        ovLogoImg.classList.remove("hidden");
+        ovLogoFallback.classList.add("hidden");
+      } else {
+        ovLogoImg.src = "";
+        ovLogoImg.classList.add("hidden");
+        ovLogoFallback.textContent = initials;
+        ovLogoFallback.classList.remove("hidden");
+      }
+    }
+    const ovShopName = document.getElementById("overview-shop-name");
+    if (ovShopName) ovShopName.textContent = shop.shop_name || "Partner Shop";
+    const ovShopMeta = document.getElementById("overview-shop-meta");
+    if (ovShopMeta) {
+      ovShopMeta.textContent = [shop.address, `${shop.municipality || "Mambajao"}, Camiguin`].filter(Boolean).join(" • ");
+    }
+    const ovPreviewLink = document.getElementById("overview-preview-shop-link");
+    if (ovPreviewLink) ovPreviewLink.href = publicPath;
+
     if (shop.status === "pending") {
       statusBanner.className = "status-notice pending";
       statusBanner.textContent =
@@ -805,10 +833,23 @@
     quickCopyLinkBtn.addEventListener("click", copyShopShareLink);
   }
 
+  const overviewCopyLinkBtn = document.getElementById("overview-copy-link-btn");
+  if (overviewCopyLinkBtn) {
+    overviewCopyLinkBtn.addEventListener("click", copyShopShareLink);
+  }
+
   const profCopyLinkBtn = document.getElementById("prof-copy-link-btn");
   if (profCopyLinkBtn) {
     profCopyLinkBtn.addEventListener("click", copyShopShareLink);
   }
+
+  document.addEventListener("click", (e) => {
+    const jumpBtn = e.target.closest("[data-jump-tab]");
+    if (jumpBtn) {
+      const tabName = jumpBtn.getAttribute("data-jump-tab");
+      if (tabName) switchTab(tabName);
+    }
+  });
 
   profileForm.addEventListener("submit", async (event) => {
     event.preventDefault();
