@@ -133,6 +133,42 @@
 
     <!-- Tab 1: Overview -->
     <div id="ptab-overview" class="partner-tab-panel">
+      <!-- Partner Live Profile & Cover Photo Showcase -->
+      <div class="card partner-branding-showcase-card" style="margin-bottom:20px;overflow:hidden;padding:0;border:1px solid var(--border-color);border-radius:14px;background:var(--card-bg);">
+        <div id="overview-cover-preview" class="partner-cover-preview" style="height:150px;position:relative;background:#1e293b;overflow:hidden;">
+          <img id="overview-cover-img" src="/static/images/hero-scooter.jpg" alt="Shop Cover Photo" class="partner-cover-preview-img" style="width:100%;height:100%;object-fit:cover;display:block;">
+          <div class="partner-cover-preview-overlay" style="position:absolute;inset:0;background:linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.65) 100%);"></div>
+          <div style="position:absolute;top:12px;right:12px;display:flex;gap:8px;">
+            <button type="button" class="btn btn-sm partner-upload-pill" data-jump-tab="profile" style="background:rgba(15,23,42,0.85);color:#fff;backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.25);">
+              &#128247; Edit Profile &amp; Cover Photos
+            </button>
+          </div>
+        </div>
+        <div style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;position:relative;">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div id="overview-logo-preview" style="width:68px;height:68px;border-radius:50%;border:3px solid var(--card-bg);overflow:hidden;background:var(--primary-color);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;box-shadow:0 4px 12px rgba(0,0,0,0.15);margin-top:-38px;position:relative;z-index:2;">
+              <span id="overview-logo-fallback">SH</span>
+              <img id="overview-logo-img" src="" alt="Shop Logo" class="hidden" style="width:100%;height:100%;object-fit:cover;">
+            </div>
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <h3 id="overview-shop-name" style="margin:0;font-size:18px;">Partner Shop</h3>
+                <span class="badge badge-success">&#10003; Active Partner</span>
+              </div>
+              <p id="overview-shop-meta" class="text-muted" style="margin:2px 0 0;font-size:13px;">Camiguin Island</p>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <button type="button" id="overview-copy-link-btn" class="btn btn-primary btn-sm">
+              &#128279; Copy Link for FB Page
+            </button>
+            <a id="overview-preview-shop-link" href="/" target="_blank" rel="noopener" class="btn btn-outline btn-sm">
+              View Public Shop &rarr;
+            </a>
+          </div>
+        </div>
+      </div>
+
       <div id="partner-kpi-grid" class="kpi-grid"></div>
       <div class="card">
         <div class="card-header-row">
@@ -431,5 +467,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/partner.js?v=10"></script>
+<script src="/static/js/partner.js?v=11"></script>
 {% endblock %}
