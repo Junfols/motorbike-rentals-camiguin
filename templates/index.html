@@ -305,6 +305,42 @@
   </div>
 </section>
 
+<!-- Interactive Camiguin Tourist & Delivery Map -->
+<section id="tourist-map" class="section container tourist-map-section">
+  <div class="tourist-map-header">
+    <div class="tourist-map-title-row">
+      <div>
+        <span class="badge badge-accent">Interactive Island Guide &amp; Delivery Pinning</span>
+        <h2 class="section-title">Camiguin Tourist &amp; Delivery Map 🗺️</h2>
+        <p class="section-subtitle">Explore ports, resorts, and tourist spots across Camiguin. Click any marker to view details or book motorbike delivery right to your location!</p>
+      </div>
+      <div class="tourist-map-quick-actions">
+        <button type="button" id="tourist-map-locate-btn" class="btn btn-outline btn-sm">
+          📍 Find My Location
+        </button>
+      </div>
+    </div>
+    <div class="landmark-shortcuts tourist-filter-shortcuts" id="tourist-filter-shortcuts">
+      <button type="button" class="landmark-chip active" data-map-filter="all">🌟 All Spots</button>
+      <button type="button" class="landmark-chip" data-map-filter="port">🚢 Ports &amp; Airport</button>
+      <button type="button" class="landmark-chip" data-map-filter="beach">🏖️ Beaches &amp; Islands</button>
+      <button type="button" class="landmark-chip" data-map-filter="nature">💧 Waterfalls &amp; Springs</button>
+      <button type="button" class="landmark-chip" data-map-filter="resort">🌴 Top Resorts</button>
+      <button type="button" class="landmark-chip" data-map-filter="history">⛪ Heritage</button>
+    </div>
+  </div>
+
+  <div class="tourist-map-wrapper">
+    <div id="homepage-map" class="homepage-map-canvas" style="width: 100%; height: 460px; min-height: 400px; z-index: 1;"></div>
+    <div class="tourist-map-legend">
+      <span><span class="legend-dot dot-port"></span> Ports &amp; Airport</span>
+      <span><span class="legend-dot dot-resort"></span> Resorts</span>
+      <span><span class="legend-dot dot-spot"></span> Tourist Attractions</span>
+      <span class="text-muted" style="margin-left: auto;">💡 Tip: Tap any spot to book delivery</span>
+    </div>
+  </div>
+</section>
+
 <section class="section how-section">
   <div class="container">
     <h2 class="section-title text-center">Rent in 3 Easy Steps</h2>
@@ -643,5 +679,5 @@
   window.INITIAL_FEATURED_SHOP = {{ (featured_shop or None) | tojson }};
   window.INITIAL_STOREFRONT_BOOTSTRAP = {{ (storefront_bootstrap or None) | tojson }};
 </script>
-<script src="/static/js/storefront.js?v=15"></script>
+<script src="/static/js/storefront.js?v=16"></script>
 {% endblock %}
