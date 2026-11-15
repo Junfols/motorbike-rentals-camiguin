@@ -569,7 +569,7 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
                 "smtp_from_email": os.environ.get("SMTP_FROM_EMAIL", ""),
                 "notify_partner_email": "1",
                 "notify_customer_email": "1",
-                "reservation_mode": "optional",
+                "reservation_mode": "required",
                 "reservation_percent": "10",
                 "gcash_account_name": "",
                 "gcash_number": "",
@@ -724,6 +724,19 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
                     conn.execute(
                         "INSERT INTO settings (key, value) VALUES ('main_hub_rafols_migrated', '1') ON CONFLICT (key) DO NOTHING"
                     )
+
+            req_mode_flag = conn.execute(
+                "SELECT value FROM settings WHERE key = 'reservation_mode_required_v1'"
+            ).fetchone()
+            if not req_mode_flag:
+                conn.execute(
+                    "INSERT INTO settings (key, value) VALUES ('reservation_mode', 'required') "
+                    "ON CONFLICT (key) DO UPDATE SET value = 'required'"
+                )
+                conn.execute(
+                    "INSERT INTO settings (key, value) VALUES ('reservation_mode_required_v1', '1') "
+                    "ON CONFLICT (key) DO NOTHING"
+                )
 
             existing_bikes = conn.execute("SELECT COUNT(*) FROM bikes").fetchone()[0]
             if existing_bikes == 0:
