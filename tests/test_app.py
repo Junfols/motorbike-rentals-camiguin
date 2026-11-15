@@ -1,9 +1,11 @@
 import io
+import json
 import os
 import sqlite3
 import tempfile
 import unittest
 from datetime import date, timedelta
+from unittest.mock import patch
 
 from app import create_app
 
@@ -1634,13 +1636,13 @@ class MotorbikeRentalPWATests(unittest.TestCase):
     def test_qr_upload_accepts_jfif_and_highres_images_and_network_first_scripts(self):
         with self.client.get("/sw.js") as sw_resp:
             sw_text = sw_resp.get_data(as_text=True)
-        self.assertIn("motoride-pwa-v12", sw_text)
+        self.assertIn("motoride-pwa-v14", sw_text)
         self.assertIn('/static/js/', sw_text)
 
         login_resp = self.client.post("/api/admin/login", json={"password": "admin1234"})
         self.assertEqual(login_resp.status_code, 200)
         admin_html = self.client.get("/admin").get_data(as_text=True)
-        self.assertIn('/static/js/admin.js?v=12', admin_html)
+        self.assertIn('/static/js/admin.js?v=14', admin_html)
         self.assertIn('.jfif', admin_html)
 
         # Windows/Edge/Messenger saves often use .jfif -> served cleanly as image/jpeg
@@ -1679,8 +1681,10 @@ class MotorbikeRentalPWATests(unittest.TestCase):
 
     def test_return_date_defaults_to_select_date_prompt_without_prefill(self):
         index_html = self.client.get("/").get_data(as_text=True)
-        self.assertIn('/static/css/style.css?v=12', index_html)
-        self.assertIn('/static/js/storefront.js?v=12', index_html)
+        self.assertIn('/static/css/style.css?v=14', index_html)
+        self.assertIn('/static/js/storefront.js?v=14', index_html)
+        self.assertIn('class="bike-card"', index_html)
+        self.assertNotIn('<div class="loading-state">Loading motorbikes...</div>', index_html)
         self.assertIn('id="modal-availability-calendar"', index_html)
         self.assertIn('id="modal-next-available-btn"', index_html)
         self.assertEqual(index_html.count('<span class="date-placeholder" aria-hidden="true">Select date</span>'), 2)
@@ -1949,7 +1953,7 @@ class MotorbikeRentalPWATests(unittest.TestCase):
 
         partner_html = self.client.get("/partner").get_data(as_text=True)
         self.assertIn('id="bike-schedule-modal"', partner_html)
-        self.assertIn('/static/js/partner.js?v=12', partner_html)
+        self.assertIn('/static/js/partner.js?v=14', partner_html)
         admin_html = self.client.get("/admin").get_data(as_text=True)
         self.assertIn('id="bike-schedule-modal"', admin_html)
 
@@ -2052,6 +2056,214 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertNotIn(1, remaining_bike_shop_ids)
         pub_settings = self.client.get("/api/settings").get_json()["settings"]
         self.assertEqual(pub_settings["reservation_mode"], "required")
+
+    def test_partner_profile_picture_cover_photo_and_facebook_share_link(self):
+        # Register & approve a partner shop, then add a bike
+        reg = self.client.post(
+            "/api/partner/register",
+            json={
+                "shop_name": "White Island Moto Rentals",
+                "owner_name": "Marco Dizon",
+                "email": "marco@whiteislandmoto.ph",
+                "phone": "09178889900",
+                "municipality": "Mambajao",
+                "address": "Yumbing Port Road, Mambajao",
+                "description": "Best scooters right across White Island ferry terminal.",
+                "delivery_fee": 150,
+                "password": "partner1234",
+            },
+        )
+        self.assertEqual(reg.status_code, 201)
+        shop_initial = reg.get_json()["shop"]
+        self.assertEqual(shop_initial["logo_url"], "")
+        self.assertEqual(shop_initial["cover_url"], "")
+        self.assertEqual(shop_initial["share_url"], f"/shop/{shop_initial['slug']}")
+
+        self.client.post("/api/admin/login", json={"password": "admin1234"})
+        self.client.patch(f"/api/admin/shops/{shop_initial['id']}", json={"status": "approved"})
+        self.client.post(
+            "/api/partner/bikes",
+            json={
+                "name": "Honda ADV 160 White Island",
+                "category": "Adventure",
+                "engine_cc": 160,
+                "transmission": "Automatic",
+                "daily_rate": 650,
+                "deposit": 1500,
+                "units_count": 2,
+                "status": "available",
+            },
+        )
+
+        # Upload profile picture and cover photo via /api/partner/profile/media
+        fake_logo = io.BytesIO(b"\x89PNG\r\n\x1a\nlogo-image-bytes")
+        fake_cover = io.BytesIO(b"\x89PNG\r\n\x1a\ncover-image-bytes")
+        media_resp = self.client.post(
+            "/api/partner/profile/media",
+            data={
+                "logo_image": (fake_logo, "partner_logo.png"),
+                "cover_image": (fake_cover, "partner_cover.png"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(media_resp.status_code, 200)
+        shop_after = media_resp.get_json()["shop"]
+        self.assertTrue(shop_after["logo_url"].startswith("/uploads/shop_logo_"))
+        self.assertTrue(shop_after["cover_url"].startswith("/uploads/shop_cover_"))
+
+        # Uploaded logo & cover are served from DB-backed /uploads/<filename>
+        logo_get = self.client.get(shop_after["logo_url"])
+        self.assertEqual(logo_get.status_code, 200)
+        self.assertEqual(logo_get.data, b"\x89PNG\r\n\x1a\nlogo-image-bytes")
+        cover_get = self.client.get(shop_after["cover_url"])
+        self.assertEqual(cover_get.status_code, 200)
+        self.assertEqual(cover_get.data, b"\x89PNG\r\n\x1a\ncover-image-bytes")
+
+        # Public shareable link /shop/<slug> renders Open Graph tags with the shop's cover photo & name
+        slug = shop_after["slug"]
+        shop_page = self.client.get(f"/shop/{slug}")
+        self.assertEqual(shop_page.status_code, 200)
+        html = shop_page.get_data(as_text=True)
+        self.assertIn(f'<meta property="og:title" content="{shop_after["shop_name"]}', html)
+        self.assertIn(shop_after["cover_url"], html)
+        self.assertIn(f'/shop/{slug}', html)
+        self.assertIn("window.INITIAL_FEATURED_SHOP", html)
+
+        # Public API /api/shops/<slug> and /api/bikes include shop_logo_url and shop_cover_url
+        pub_shop_api = self.client.get(f"/api/shops/{slug}")
+        self.assertEqual(pub_shop_api.status_code, 200)
+        self.assertEqual(pub_shop_api.get_json()["shop"]["logo_url"], shop_after["logo_url"])
+        self.assertEqual(pub_shop_api.get_json()["shop"]["cover_url"], shop_after["cover_url"])
+
+        bikes_api = self.client.get(f"/api/bikes?shop_id={shop_after['id']}").get_json()["bikes"]
+        self.assertTrue(len(bikes_api) >= 1)
+        self.assertEqual(bikes_api[0]["shop_logo_url"], shop_after["logo_url"])
+        self.assertEqual(bikes_api[0]["shop_cover_url"], shop_after["cover_url"])
+
+        # Clear logo & cover and verify old uploaded_media rows are cleaned up
+        old_logo_url = shop_after["logo_url"]
+        old_cover_url = shop_after["cover_url"]
+        clear_resp = self.client.post(
+            "/api/partner/profile/media",
+            data={"clear_logo": "1", "clear_cover": "1"},
+        )
+        self.assertEqual(clear_resp.status_code, 200)
+        cleared_shop = clear_resp.get_json()["shop"]
+        self.assertEqual(cleared_shop["logo_url"], "")
+        self.assertEqual(cleared_shop["cover_url"], "")
+        self.assertEqual(self.client.get(old_logo_url).status_code, 404)
+        self.assertEqual(self.client.get(old_cover_url).status_code, 404)
+
+    def test_paymongo_settings_and_booking_link_and_webhook_auto_confirm(self):
+        # 1. Admin login and save PayMongo credentials
+        login_resp = self.client.post("/api/admin/login", json={"password": "admin1234"})
+        self.assertEqual(login_resp.status_code, 200)
+
+        put_resp = self.client.put(
+            "/api/admin/settings",
+            json={
+                "paymongo_secret_key": "sk_test_mocksecretkey123456",
+                "paymongo_public_key": "pk_test_mockpublickey123456",
+                "paymongo_webhook_secret": "whsk_mockwebhooksecret123",
+            },
+        )
+        self.assertEqual(put_resp.status_code, 200)
+        settings = put_resp.get_json()["settings"]
+        self.assertTrue(settings["has_paymongo_secret_key"])
+        self.assertTrue(settings["has_paymongo_webhook_secret"])
+        self.assertEqual(settings["paymongo_public_key"], "pk_test_mockpublickey123456")
+
+        # 2. Customer creates booking with payment_channel="paymongo"
+        bike_row = self.client.get("/api/bikes").get_json()["bikes"][0]
+        bike_id = bike_row["id"]
+        p_date = self._future_str(5)
+        r_date = self._future_str(7)
+
+        mock_link = {
+            "link_id": "link_test_abc123",
+            "checkout_url": "https://pm.link/pay/testabc123",
+            "status": "unpaid",
+            "amount": 10000,
+        }
+
+        with patch("app.create_payment_link", return_value=(True, mock_link)):
+            booking_resp = self.client.post(
+                "/api/bookings",
+                json={
+                    "bike_id": bike_id,
+                    "pickup_date": p_date,
+                    "return_date": r_date,
+                    "customer_name": "Maria Santos",
+                    "customer_phone": "09179876543",
+                    "license_number": "N01-99-888888",
+                    "payment_channel": "paymongo",
+                },
+            )
+        self.assertEqual(booking_resp.status_code, 201)
+        booking_data = booking_resp.get_json()["booking"]
+        self.assertEqual(booking_data["payment_channel"], "paymongo")
+        self.assertEqual(booking_data["payment_status"], "unpaid")
+        self.assertEqual(booking_data["payment_link_id"], "link_test_abc123")
+        self.assertEqual(booking_data["payment_checkout_url"], "https://pm.link/pay/testabc123")
+        self.assertEqual(booking_resp.get_json()["checkout_url"], "https://pm.link/pay/testabc123")
+
+        booking_id = booking_data["id"]
+        booking_code = booking_data["booking_code"]
+
+        # 3. Simulate PayMongo Webhook call (link.payment.paid)
+        raw_event = {
+            "data": {
+                "id": "evt_test_123",
+                "type": "event",
+                "attributes": {
+                    "type": "link.payment.paid",
+                    "data": {
+                        "id": "link_test_abc123",
+                        "type": "link",
+                        "attributes": {
+                            "amount": 10000,
+                            "remarks": booking_code,
+                            "payments": [
+                                {
+                                    "id": "pay_test_999888",
+                                    "attributes": {
+                                        "status": "paid",
+                                        "amount": 10000,
+                                        "fee": 250,
+                                        "net_amount": 9750,
+                                    },
+                                }
+                            ],
+                        },
+                    },
+                },
+            }
+        }
+        raw_payload = json.dumps(raw_event).encode("utf-8")
+
+        with patch("app.verify_webhook_signature", return_value=True):
+            wh_resp = self.client.post(
+                "/api/webhooks/paymongo",
+                data=raw_payload,
+                headers={"Paymongo-Signature": "t=12345,te=sig,li=sig"},
+                content_type="application/json",
+            )
+        self.assertEqual(wh_resp.status_code, 200)
+        self.assertTrue(wh_resp.get_json().get("verified"))
+
+        # Verify booking in database is confirmed and verified
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        saved = conn.execute("SELECT * FROM bookings WHERE id = ?", (booking_id,)).fetchone()
+        self.assertEqual(saved["status"], "confirmed")
+        self.assertEqual(saved["payment_status"], "verified")
+        self.assertEqual(saved["payment_reference"], "pay_test_999888")
+        conn.close()
+
+        # 4. Test PayMongo Sync endpoint
+        sync_resp = self.client.get(f"/api/bookings/{booking_id}/paymongo-sync")
+        self.assertEqual(sync_resp.status_code, 200)
+        self.assertEqual(sync_resp.get_json()["status"], "already_verified")
 
 
 if __name__ == "__main__":
