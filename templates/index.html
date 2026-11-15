@@ -98,17 +98,35 @@
     <div id="partner-shops-strip" class="partner-shops-strip" role="list" aria-label="Verified Partner Rental Shops">
       {% if storefront_bootstrap and storefront_bootstrap.shops %}
         {% for s in storefront_bootstrap.shops %}
-        <button type="button" class="partner-shop-card {% if featured_shop and (featured_shop.id|string == s.id|string) %}active{% endif %}" data-shop-pill="{{ s.id }}" role="listitem" title="View {{ s.shop_name }} Profile &amp; Fleet">
-          <div class="partner-shop-card-avatar">
-            {% if s.logo_url %}
-              <img src="{{ s.logo_url }}" alt="{{ s.shop_name }}" class="partner-shop-avatar-img">
+        {% set is_active = featured_shop and (featured_shop.id|string == s.id|string) %}
+        {% set cover_bg = s.cover_url or '/static/images/hero-scooter.jpg' %}
+        <button
+          type="button"
+          role="listitem"
+          class="shop-strip-card {% if is_active %}active{% endif %}"
+          data-select-shop="{{ s.id }}"
+          aria-pressed="{% if is_active %}true{% else %}false{% endif %}"
+          title="View {{ s.shop_name }} Profile &amp; Fleet"
+        >
+          <div class="shop-strip-cover" style="background-image: linear-gradient(180deg, rgba(15,23,42,0.28), rgba(15,23,42,0.78)), url('{{ cover_bg }}');">
+            {% if s.is_main %}
+              <span class="shop-strip-hub-tag">Main Hub</span>
             {% else %}
-              <span class="partner-shop-avatar-fallback">{{ (s.shop_name or 'P')[:2].upper() }}</span>
+              <span class="shop-strip-hub-tag verified">Verified</span>
             {% endif %}
           </div>
-          <div class="partner-shop-card-info">
-            <strong class="partner-shop-card-name">{{ s.shop_name }}</strong>
-            <span class="partner-shop-card-loc">{{ s.municipality }}</span>
+          <div class="shop-strip-body">
+            <div class="shop-strip-avatar">
+              {% if s.logo_url %}
+                <img src="{{ s.logo_url }}" alt="{{ s.shop_name }}" class="shop-strip-avatar-img" loading="lazy">
+              {% else %}
+                <span class="shop-strip-avatar-fallback">{{ (s.shop_name or 'SH')[:2].upper() }}</span>
+              {% endif %}
+            </div>
+            <div class="shop-strip-info">
+              <strong class="shop-strip-name">{{ s.shop_name }}</strong>
+              <span class="shop-strip-meta">{{ s.municipality or 'Camiguin' }} &bull; {{ s.bike_count or 0 }} model(s)</span>
+            </div>
           </div>
         </button>
         {% endfor %}
@@ -117,7 +135,75 @@
   </div>
 
   <!-- Featured / Selected Partner Shop Profile Banner (Facebook Page Style) -->
-  <div id="shop-profile-banner" class="shop-profile-banner hidden" aria-live="polite"></div>
+  <div id="shop-profile-banner" class="shop-profile-banner {% if not featured_shop %}hidden{% endif %}" aria-live="polite">
+    {% if featured_shop %}
+      {% set s_cover = featured_shop.cover_url or '/static/images/hero-scooter.jpg' %}
+      {% set s_share_url = request.url_root.rstrip('/') ~ '/shop/' ~ featured_shop.slug %}
+      {% set fb_share = 'https://www.facebook.com/sharer/sharer.php?u=' ~ s_share_url|urlencode %}
+      {% set wa_clean = (featured_shop.whatsapp_number or featured_shop.phone or '')|replace('-', '')|replace(' ', '')|replace('+', '') %}
+      {% if wa_clean.startswith('0') %}{% set wa_clean = '63' ~ wa_clean[1:] %}{% endif %}
+      <div class="shop-banner-cover">
+        <img src="{{ s_cover }}" alt="{{ featured_shop.shop_name }} Cover Photo" class="shop-banner-cover-img">
+        <div class="shop-banner-cover-overlay"></div>
+        <div class="shop-banner-top-bar">
+          <span class="shop-banner-verified-pill">
+            {% if featured_shop.is_main %}&#9733; Official Main Hub{% else %}&#10003; Verified Camiguin Partner Shop{% endif %}
+          </span>
+          <button type="button" class="btn btn-sm shop-banner-reset-btn" data-clear-shop-filter="1">
+            &larr; All Island Shops
+          </button>
+        </div>
+      </div>
+      <div class="shop-banner-content">
+        <div class="shop-banner-identity">
+          <div class="shop-banner-avatar-wrap">
+            {% if featured_shop.logo_url %}
+              <img src="{{ featured_shop.logo_url }}" alt="{{ featured_shop.shop_name }}" class="shop-banner-avatar-img">
+            {% else %}
+              <div class="shop-banner-avatar-fallback">{{ (featured_shop.shop_name or 'SH')[:2].upper() }}</div>
+            {% endif %}
+          </div>
+          <div class="shop-banner-title-block">
+            <h2 class="shop-banner-title">{{ featured_shop.shop_name }}</h2>
+            <p class="shop-banner-location">
+              {{ [featured_shop.address, featured_shop.municipality, 'Camiguin']|select|join(' &bull; ') }}
+            </p>
+            <div class="shop-banner-chips">
+              {% if featured_shop.phone %}
+                <span class="shop-banner-chip">&#128222; {{ featured_shop.phone }}</span>
+              {% endif %}
+              <span class="shop-banner-chip">&#128666; Delivery: &#8369;{{ '{:,.0f}'.format(featured_shop.delivery_fee or 0) }}</span>
+              {% if featured_shop.bike_count is defined %}
+                <span class="shop-banner-chip">&#127949; {{ featured_shop.bike_count }} Motorbike Model(s)</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        <p class="shop-banner-desc">
+          {{ featured_shop.description or 'Verified local motorbike rental partner in ' ~ (featured_shop.municipality or 'Camiguin') ~ ', Camiguin Island. Browse live availability and book directly online.' }}
+        </p>
+        <div class="shop-banner-share-bar">
+          <div class="shop-banner-link-box">
+            <span class="shop-banner-link-label">Shop Profile Link:</span>
+            <code class="shop-banner-link-code">{{ s_share_url }}</code>
+          </div>
+          <div class="shop-banner-actions">
+            <button type="button" class="btn btn-sm btn-outline" data-copy-shop-link="{{ s_share_url }}">
+              Copy Link for FB Page
+            </button>
+            <a href="{{ fb_share }}" target="_blank" rel="noopener" class="btn btn-sm btn-fb-share">
+              Share on Facebook
+            </a>
+            {% if wa_clean %}
+              <a href="https://wa.me/{{ wa_clean }}?text=Hi%20{{ featured_shop.shop_name|urlencode }}!%20I%20saw%20your%20shop%20profile%20and%20would%20like%20to%20inquire%20about%20motorbike%20rental." target="_blank" rel="noopener" class="btn btn-sm btn-primary">
+                WhatsApp Shop
+              </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    {% endif %}
+  </div>
 
   <div class="section-header-row">
     <div>
@@ -507,5 +593,5 @@
   window.INITIAL_FEATURED_SHOP = {{ (featured_shop or None) | tojson }};
   window.INITIAL_STOREFRONT_BOOTSTRAP = {{ (storefront_bootstrap or None) | tojson }};
 </script>
-<script src="/static/js/storefront.js?v=10"></script>
+<script src="/static/js/storefront.js?v=11"></script>
 {% endblock %}
