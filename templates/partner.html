@@ -104,14 +104,19 @@
     <div id="partner-status-banner" class="status-notice hidden"></div>
 
     <div class="admin-top-bar">
-      <div>
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <h1 id="partner-shop-title" style="margin:0;">Partner Shop</h1>
-          <span id="partner-status-badge" class="badge"></span>
+      <div class="partner-top-identity">
+        <div id="partner-top-avatar" class="partner-top-avatar">SH</div>
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <h1 id="partner-shop-title" style="margin:0;">Partner Shop</h1>
+            <span id="partner-status-badge" class="badge"></span>
+          </div>
+          <p class="text-muted" id="partner-shop-subtitle"></p>
         </div>
-        <p class="text-muted" id="partner-shop-subtitle"></p>
       </div>
       <div class="admin-top-actions">
+        <button type="button" id="partner-quick-copy-link-btn" class="btn btn-primary btn-sm">Copy FB Shop Link</button>
+        <a id="partner-preview-shop-link" href="/" target="_blank" rel="noopener" class="btn btn-outline btn-sm">View Public Shop</a>
         <button type="button" id="partner-refresh-btn" class="btn btn-outline btn-sm">Refresh</button>
         <button type="button" id="partner-logout-btn" class="btn btn-outline btn-sm">Sign Out</button>
       </div>
@@ -170,7 +175,67 @@
 
     <!-- Tab 4: Shop Profile -->
     <div id="ptab-profile" class="partner-tab-panel hidden">
-      <form id="partner-profile-form" class="card settings-form">
+      <div class="card partner-branding-card">
+        <div id="prof-cover-preview" class="partner-cover-preview">
+          <img id="prof-cover-preview-img" src="/static/images/hero-scooter.jpg" alt="Shop Cover Photo" class="partner-cover-preview-img">
+          <div class="partner-cover-preview-overlay"></div>
+          <div class="partner-cover-actions">
+            <label for="prof-cover-file" class="btn btn-sm partner-upload-pill">
+              &#128247; Upload Cover Photo
+            </label>
+            <button type="button" id="prof-clear-cover-btn" class="btn btn-sm partner-remove-pill hidden">
+              Remove Cover
+            </button>
+          </div>
+        </div>
+
+        <div class="partner-branding-body">
+          <div class="partner-logo-block">
+            <div id="prof-logo-preview" class="partner-logo-preview">
+              <span id="prof-logo-fallback" class="partner-logo-fallback">SH</span>
+              <img id="prof-logo-preview-img" src="" alt="Shop Profile Picture" class="partner-logo-preview-img hidden">
+            </div>
+            <div class="partner-logo-Buttons">
+              <label for="prof-logo-file" class="btn btn-outline btn-sm">
+                &#128247; Upload Profile Picture
+              </label>
+              <button type="button" id="prof-clear-logo-btn" class="btn btn-outline btn-sm hidden">
+                Remove Pic
+              </button>
+            </div>
+          </div>
+
+          <div class="partner-branding-summary">
+            <span class="eyebrow-tag">Public Storefront &amp; Facebook Page Preview</span>
+            <h3 id="prof-preview-shop-name" style="margin:4px 0;">Partner Shop</h3>
+            <p id="prof-preview-shop-meta" class="text-muted" style="margin:0;">Camiguin Island</p>
+            <p class="field-hint" style="margin-top:6px;">
+              Upload your <strong>Profile Picture (Logo)</strong> and <strong>Cover Photo</strong> so customers recognize your shop and your link displays a rich banner when shared on your Facebook Page.
+            </p>
+          </div>
+        </div>
+
+        <div class="partner-fb-share-box">
+          <div class="partner-fb-share-header">
+            <div>
+              <strong>&#128279; Share Your Shop Profile Link (For Your Facebook Page &amp; Messenger)</strong>
+              <p class="field-hint" style="margin:2px 0 0;">Post this link on your Facebook Page bio, pinned post, or auto-reply so customers can view your cover photo and book your motorbikes directly.</p>
+            </div>
+          </div>
+          <div class="partner-fb-share-controls">
+            <input type="text" id="prof-share-url-input" class="partner-share-url-input" readonly aria-label="Public Shop Link">
+            <div class="partner-fb-share-buttons">
+              <button type="button" id="prof-copy-link-btn" class="btn btn-primary btn-sm">Copy Link</button>
+              <a id="prof-fb-share-btn" href="#" target="_blank" rel="noopener" class="btn btn-sm btn-fb-share">Share on Facebook</a>
+              <a id="prof-open-public-btn" href="/" target="_blank" rel="noopener" class="btn btn-outline btn-sm">Preview Shop</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <form id="partner-profile-form" class="card settings-form" enctype="multipart/form-data">
+        <input type="file" id="prof-logo-file" name="logo_image" accept="image/png,image/jpeg,image/webp" class="sr-only-file">
+        <input type="file" id="prof-cover-file" name="cover_image" accept="image/png,image/jpeg,image/webp" class="sr-only-file">
         <h3>Shop Information</h3>
         <div class="form-grid-2">
           <div class="form-group">
