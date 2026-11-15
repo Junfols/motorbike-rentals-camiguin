@@ -3097,3 +3097,256 @@ textarea:focus {
   opacity: 0.9;
 }
 
+
+
+/* ==========================================================================
+   Features 4, 5, 6: E-Sign Contract, Route Guide, Tourist Reviews
+   ========================================================================== */
+
+/* Bike Card Rating Pill */
+.bike-card-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.bike-rating-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.bike-rating-pill .rating-star {
+  color: #f59e0b;
+  font-size: 0.88rem;
+}
+
+.bike-rating-pill .rating-count {
+  font-weight: 500;
+  color: #b45309;
+  font-size: 0.75rem;
+}
+
+/* Island Route Guide */
+.island-guide-section {
+  padding-top: 2rem;
+  padding-bottom: 2.5rem;
+}
+
+.routes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.route-card {
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 14px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.route-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+}
+
+.route-card-header {
+  margin-bottom: 0.75rem;
+}
+
+.route-card-header h3 {
+  font-size: 1.12rem;
+  margin: 0.4rem 0 0;
+  color: var(--text, #0f172a);
+  font-weight: 700;
+}
+
+.route-pill {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  letter-spacing: 0.03em;
+}
+
+.route-coastal { background: #e0f2fe; color: #0369a1; }
+.route-falls { background: #e0e7ff; color: #4338ca; }
+.route-volcano { background: #fee2e2; color: #b91c1c; }
+.route-island { background: #fef3c7; color: #b45309; }
+
+.route-desc {
+  font-size: 0.86rem;
+  color: var(--text-muted, #475569);
+  line-height: 1.5;
+  margin-bottom: 0.75rem;
+  flex: 1;
+}
+
+.route-highlights {
+  font-size: 0.82rem;
+  background: #f8fafc;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 0.85rem;
+  color: #334155;
+  line-height: 1.4;
+}
+
+.route-bike-match {
+  border-top: 1px dashed var(--border, #e2e8f0);
+  padding-top: 0.75rem;
+  margin-top: auto;
+}
+
+.bike-match-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--primary, #008060);
+  letter-spacing: 0.04em;
+}
+
+.bike-match-spec {
+  font-size: 0.92rem;
+  color: #0f172a;
+  margin: 2px 0 4px;
+}
+
+.bike-match-note {
+  font-size: 0.8rem;
+  color: #64748b;
+  line-height: 1.4;
+  margin-bottom: 0.75rem;
+}
+
+.route-filter-btn {
+  width: 100%;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* Tourist Reviews Section */
+.reviews-section {
+  padding-top: 2rem;
+  padding-bottom: 2.5rem;
+}
+
+.reviews-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.review-card {
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 12px;
+  padding: 1.2rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+}
+
+.review-card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0.75rem;
+}
+
+.review-author-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--primary, #008060);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.review-meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  font-size: 0.84rem;
+}
+
+.review-author-name {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.review-stars {
+  color: #f59e0b;
+  font-size: 1rem;
+  letter-spacing: 1px;
+}
+
+.review-stars .star-empty {
+  color: #cbd5e1;
+}
+
+.review-comment {
+  font-size: 0.88rem;
+  color: #334155;
+  line-height: 1.5;
+  font-style: italic;
+  margin-bottom: 0.75rem;
+  flex: 1;
+}
+
+.review-shop-tag {
+  font-size: 0.78rem;
+  color: #64748b;
+  background: #f8fafc;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  align-self: flex-start;
+}
+
+/* Star Rating Picker */
+.star-rating-picker {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  font-size: 2.2rem;
+  user-select: none;
+}
+
+.star-pick {
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.star-pick:hover {
+  transform: scale(1.2);
+}
+
+/* Digital Signature Canvas */
+.signature-pad-canvas {
+  background: #ffffff;
+  touch-action: none;
+}
