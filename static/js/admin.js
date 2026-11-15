@@ -491,9 +491,7 @@
               <div class="text-muted" style="margin:4px 0 8px;">
                 ${escapeHtml(bike.category)} &bull; ${bike.engine_cc}cc &bull; ${escapeHtml(bike.transmission)}
               </div>
-              <div style="font-size:0.88rem;margin-bottom:6px;">
-                <strong>${escapeHtml(formatMoney(bike.daily_rate))}/day</strong>
-                ${bike.weekly_rate > 0 ? `&bull; ${escapeHtml(formatMoney(bike.weekly_rate))}/wk` : ""}
+              <div style="font-size:0.88rem;margin-bottom:6px;">                <strong>${escapeHtml(formatMoney(bike.daily_rate))}/day</strong>
               </div>
               <div class="text-muted">
                 Units: ${bike.units_count} (Booked today: ${bike.booked_units}) ${bike.plate_number ? `&bull; ${escapeHtml(bike.plate_number)}` : ""}
