@@ -1253,6 +1253,7 @@ def build_bike_schedules(
                     break
 
         entry: dict = {
+            "ref_booked_units": ref_peak,
             "booked_ranges": booked_ranges,
             "next_available_date": next_available_date,
             "next_available_return_date": next_available_return_date,
