@@ -226,7 +226,6 @@ def _fetch_bike_with_shop(conn, bike_id: int):
 
 def _serialize_bike_with_schedule(conn, bike_row, include_calendar: bool = False, include_admin_details: bool = True) -> dict:
     today_str = date.today().isoformat()
-    booked = count_overlapping_bookings(conn, bike_row["id"], today_str, today_str)
     sched = build_bike_schedules(
         conn,
         [bike_row],
@@ -235,6 +234,7 @@ def _serialize_bike_with_schedule(conn, bike_row, include_calendar: bool = False
         include_calendar=include_calendar,
         include_admin_details=include_admin_details,
     ).get(int(bike_row["id"]))
+    booked = int((sched or {}).get("ref_booked_units", 0))
     return _serialize_bike(bike_row, booked_units=booked, schedule=sched)
 
 
@@ -552,24 +552,89 @@ def create_app(test_config: dict | None = None) -> Flask:
         ).fetchone()
         return _serialize_shop(row) if row else None
 
+    def _build_storefront_bootstrap(conn, featured_shop: dict | None = None) -> dict:
+        today_str = date.today().isoformat()
+        shop_rows = conn.execute(
+            """
+            SELECT s.*,
+                   COUNT(CASE WHEN b.status != 'hidden' THEN 1 END) AS bike_count
+            FROM shops s
+            LEFT JOIN bikes b ON b.shop_id = s.id
+            WHERE s.status = 'approved'
+            GROUP BY s.id
+            ORDER BY s.is_main DESC, s.shop_name ASC
+            """
+        ).fetchall()
+        shops_list = [_serialize_shop(r) for r in shop_rows]
+
+        bike_sql = """
+            SELECT b.*,
+                   s.shop_name AS shop_name,
+                   s.slug AS shop_slug,
+                   s.logo_url AS shop_logo_url,
+                   s.cover_url AS shop_cover_url,
+                   s.municipality AS shop_municipality,
+                   s.address AS shop_address,
+                   s.phone AS shop_phone,
+                   s.whatsapp_number AS shop_whatsapp,
+                   s.delivery_fee AS shop_delivery_fee,
+                   s.status AS shop_status
+            FROM bikes b
+            JOIN shops s ON s.id = b.shop_id
+            WHERE b.status != 'hidden'
+              AND s.status = 'approved'
+        """
+        bike_params: list = []
+        if featured_shop and featured_shop.get("id"):
+            bike_sql += " AND b.shop_id = ?"
+            bike_params.append(int(featured_shop["id"]))
+        bike_sql += " ORDER BY b.featured DESC, b.daily_rate ASC"
+        bike_rows = conn.execute(bike_sql, bike_params).fetchall()
+        schedules = build_bike_schedules(
+            conn,
+            bike_rows,
+            ref_pickup_date=today_str,
+            ref_return_date=None,
+            include_calendar=False,
+            include_admin_details=False,
+        )
+        bikes_list = []
+        for row in bike_rows:
+            sched = schedules.get(int(row["id"]))
+            booked = int((sched or {}).get("ref_booked_units", 0))
+            bikes_list.append(_serialize_bike(row, booked_units=booked, schedule=sched))
+        return {
+            "shops": shops_list,
+            "bikes": bikes_list,
+            "pickup_date": today_str,
+            "shop_id": str(featured_shop["id"]) if featured_shop and featured_shop.get("id") else "",
+        }
+
     # ------------------------------------------------------------------
     # Page & PWA Routes
     # ------------------------------------------------------------------
     @app.get("/")
     def home():
+        conn = get_db()
         shop_ref = (request.args.get("shop") or "").strip()
-        featured_shop = _find_featured_shop(get_db(), shop_ref) if shop_ref else None
-        return render_template("index.html", active_nav="fleet", featured_shop=featured_shop)
+        featured_shop = _find_featured_shop(conn, shop_ref) if shop_ref else None
+        return render_template(
+            "index.html",
+            active_nav="fleet",
+            featured_shop=featured_shop,
+            storefront_bootstrap=_build_storefront_bootstrap(conn, featured_shop),
+        )
 
     @app.get("/shop/<slug>")
     def public_shop_profile_page(slug: str):
-        featured_shop = _find_featured_shop(get_db(), slug)
-        return render_template("index.html", active_nav="fleet", featured_shop=featured_shop)
-
-    @app.get("/shop/<slug>")
-    def shop_profile_page(slug: str):
-        featured_shop = _find_featured_shop(get_db(), slug)
-        return render_template("index.html", active_nav="fleet", featured_shop=featured_shop)
+        conn = get_db()
+        featured_shop = _find_featured_shop(conn, slug)
+        return render_template(
+            "index.html",
+            active_nav="fleet",
+            featured_shop=featured_shop,
+            storefront_bootstrap=_build_storefront_bootstrap(conn, featured_shop),
+        )
 
     @app.get("/bookings")
     def bookings_page():
@@ -830,10 +895,15 @@ def create_app(test_config: dict | None = None) -> Flask:
             include_calendar=False,
             include_admin_details=False,
         )
+        today_iso = date.today().isoformat()
         bikes = []
         for row in rows:
-            booked = count_overlapping_bookings(conn, row["id"], pickup_date, return_date)
-            item = _serialize_bike(row, booked_units=booked, schedule=schedules.get(int(row["id"])))
+            sched = schedules.get(int(row["id"]))
+            if pickup_date >= today_iso and sched is not None and "ref_booked_units" in sched:
+                booked = int(sched["ref_booked_units"])
+            else:
+                booked = count_overlapping_bookings(conn, row["id"], pickup_date, return_date)
+            item = _serialize_bike(row, booked_units=booked, schedule=sched)
             if available_only and not item["is_available"]:
                 continue
             bikes.append(item)
@@ -1719,8 +1789,9 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
         items = []
         for row in rows:
-            booked = count_overlapping_bookings(conn, row["id"], today_str, today_str)
-            items.append(_serialize_bike(row, booked_units=booked, schedule=schedules.get(int(row["id"]))))
+            sched = schedules.get(int(row["id"]))
+            booked = int((sched or {}).get("ref_booked_units", 0))
+            items.append(_serialize_bike(row, booked_units=booked, schedule=sched))
         return jsonify({"bikes": items})
 
     @app.post("/api/partner/bikes")
@@ -2583,8 +2654,9 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
         items = []
         for row in rows:
-            booked = count_overlapping_bookings(conn, row["id"], today_str, today_str)
-            items.append(_serialize_bike(row, booked_units=booked, schedule=schedules.get(int(row["id"]))))
+            sched = schedules.get(int(row["id"]))
+            booked = int((sched or {}).get("ref_booked_units", 0))
+            items.append(_serialize_bike(row, booked_units=booked, schedule=sched))
         return jsonify({"bikes": items})
 
     @app.post("/api/admin/bikes")
