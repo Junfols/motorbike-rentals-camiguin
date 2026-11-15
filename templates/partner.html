@@ -311,16 +311,11 @@
             <option value="hidden">Hidden</option>
           </select>
         </div>
-      </div>
-
-      <div class="form-grid-3">
+      </div>      <div class="form-grid-2">
         <div class="form-group">
           <label for="p-bike-daily">Daily Rate *</label>
           <input type="number" id="p-bike-daily" name="daily_rate" required min="1" step="1" value="450">
-        </div>
-        <div class="form-group">
-          <label for="p-bike-weekly">Weekly Rate (7 days)</label>
-          <input type="number" id="p-bike-weekly" name="weekly_rate" min="0" step="1" value="2700">
+          <input type="hidden" id="p-bike-weekly" name="weekly_rate" value="0">
         </div>
         <div class="form-group">
           <label for="p-bike-deposit">Security Deposit</label>
