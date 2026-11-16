@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Partner Rental Portal — {{ shop.shop_name }}{% endblock %}
+{% block title %}Rider & Partner Portal — {{ shop.shop_name }}{% endblock %}
 
 {% block content %}
 <section class="section container">
@@ -10,14 +10,14 @@
       <div class="admin-login-head">
         <img src="/static/icons/icon.svg" alt="" width="44" height="44">
         <div>
-          <h1>Partner Rental Portal</h1>
-          <p class="text-muted">Log in or register your motorbike rental shop on {{ shop.shop_name }}.</p>
+          <h1>🏍️ Rider & Partner Portal</h1>
+          <p class="text-muted">Log in or register as a Rider / Motorbike Rental Partner on {{ shop.shop_name }}.</p>
         </div>
       </div>
 
       <div class="auth-switch-tabs" role="tablist">
         <button type="button" class="pill active" data-partner-auth-tab="login">Sign In</button>
-        <button type="button" class="pill" data-partner-auth-tab="register">Register Your Shop</button>
+        <button type="button" class="pill" data-partner-auth-tab="register">Register as Rider / Shop</button>
       </div>
 
       <!-- Login Form -->
@@ -31,7 +31,7 @@
           <input type="password" id="partner-login-password" required autocomplete="current-password" placeholder="Enter your password">
         </div>
         <div id="partner-login-error" class="alert-error hidden"></div>
-        <button type="submit" class="btn btn-primary btn-block">Sign In to Partner Portal</button>
+        <button type="submit" class="btn btn-primary btn-block">Sign In to Rider & Partner Portal</button>
       </form>
 
       <!-- Register Form -->
