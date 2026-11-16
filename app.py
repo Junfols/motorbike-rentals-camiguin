@@ -688,13 +688,15 @@ def create_app(test_config: dict | None = None) -> Flask:
             recent_reviews=get_recent_reviews(conn, limit=6),
         )
 
+    @app.get("/customer")
     @app.get("/bookings")
     def bookings_page():
-        return render_template("bookings.html", active_nav="bookings")
+        return render_template("bookings.html", active_nav="customer")
 
+    @app.get("/rider")
     @app.get("/partner")
     def partner_page():
-        return render_template("partner.html", active_nav="partner")
+        return render_template("partner.html", active_nav="rider")
 
     @app.get("/admin")
     def admin_page():
