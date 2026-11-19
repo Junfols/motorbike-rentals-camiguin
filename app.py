@@ -2870,6 +2870,10 @@ def create_app(test_config: dict | None = None) -> Flask:
         if not existing:
             return jsonify({"error": "Partner shop not found."}), 404
 
+        new_password = (payload.get("password") or "").strip()
+        if "password" in payload and len(new_password) < 6:
+            return jsonify({"error": "New shop password must be at least 6 characters."}), 400
+
         set_main = payload.get("is_main") in (True, 1, "1", "true", "yes")
         if set_main:
             new_status = "approved"
@@ -2889,6 +2893,11 @@ def create_app(test_config: dict | None = None) -> Flask:
                 )
             else:
                 conn.execute("UPDATE shops SET status = ? WHERE id = ?", (new_status, shop_id))
+            if new_password:
+                conn.execute(
+                    "UPDATE shops SET password_hash = ? WHERE id = ?",
+                    (generate_password_hash(new_password), shop_id),
+                )
         updated = conn.execute("SELECT * FROM shops WHERE id = ?", (shop_id,)).fetchone()
         if new_status != existing["status"] and new_status in ("approved", "suspended"):
             secret_settings = get_settings(conn, include_secrets=True)
