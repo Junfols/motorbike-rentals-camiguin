@@ -10,6 +10,7 @@ const PRECACHE_URLS = [
   "/manifest.webmanifest",
   "/static/css/style.css?v=18",
   "/static/js/pwa.js?v=18",
+  "/static/js/calls.js?v=18",
   "/static/js/storefront.js?v=18",
   "/static/js/bookings.js?v=18",
   "/static/js/partner.js?v=18",

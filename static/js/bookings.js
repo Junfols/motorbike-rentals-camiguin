@@ -197,6 +197,11 @@
               : ""
           }
           ${
+            b.status !== "cancelled"
+              ? `<button type="button" class="btn btn-primary btn-sm" id="call-shop-btn" data-call-booking="${escapeHtml(b.booking_code)}" data-call-phone="${escapeHtml(b.customer_phone)}" data-call-name="${escapeHtml(b.shop_name || "Shop")}" data-call-tel="${escapeHtml(b.shop_phone || "")}">📞 Call Shop (in app)</button>`
+              : ""
+          }
+          ${
             waLink
               ? `<a href="${escapeHtml(waLink)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">Message Shop on WhatsApp</a>`
               : ""

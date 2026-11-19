@@ -2463,6 +2463,123 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertIn("reviews", bike_data)
         self.assertTrue(len(bike_data["reviews"]) >= 1)
 
+    def test_in_app_voice_call_signaling(self):
+        bike = self.client.get("/api/bikes").get_json()["bikes"][0]
+        booking = self.client.post(
+            "/api/bookings",
+            json={
+                "bike_id": bike["id"],
+                "customer_name": "Maria Santos",
+                "customer_phone": "+63 917 555 7788",
+                "customer_email": "maria@example.com",
+                "license_number": "G01-55-123456",
+                "pickup_date": self._future_str(10),
+                "return_date": self._future_str(11),
+                "pickup_time": "09:00",
+                "pickup_method": "shop",
+            },
+        ).get_json()["booking"]
+        code = booking["booking_code"]
+        phone = "09175557788"
+
+        customer = self.app.test_client()
+        admin = self.app.test_client()
+        self.assertEqual(
+            admin.post("/api/admin/login", json={"password": "admin1234"}).status_code, 200
+        )
+
+        self.assertEqual(customer.get("/api/calls/ice-config").status_code, 200)
+
+        # Wrong phone / anonymous cannot start a call
+        bad = customer.post(
+            "/api/calls/start", json={"booking_code": code, "phone": "0000", "offer": "v=0 offer"}
+        )
+        self.assertEqual(bad.status_code, 403)
+
+        started = customer.post(
+            "/api/calls/start", json={"booking_code": code, "phone": phone, "offer": "v=0 offer"}
+        )
+        self.assertEqual(started.status_code, 201)
+        call = started.get_json()["call"]
+        self.assertEqual(call["status"], "ringing")
+        call_id = call["id"]
+
+        # Anonymous watcher without booking context is rejected; admin sees the call
+        self.assertEqual(self.app.test_client().get("/api/calls/incoming").status_code, 401)
+        incoming = admin.get("/api/calls/incoming").get_json()["call"]
+        self.assertEqual(incoming["id"], call_id)
+        self.assertEqual(incoming["offer_sdp"], "v=0 offer")
+
+        # The caller does not receive their own call as incoming
+        self.assertIsNone(
+            customer.get(f"/api/calls/incoming?code={code}&phone={phone}").get_json()["call"]
+        )
+
+        # Customer cannot answer their own call; admin can
+        self.assertEqual(
+            customer.post(
+                f"/api/calls/{call_id}/answer", json={"answer": "v=0 answer", "phone": phone}
+            ).status_code,
+            403,
+        )
+        answered = admin.post(f"/api/calls/{call_id}/answer", json={"answer": "v=0 answer"})
+        self.assertEqual(answered.status_code, 200)
+        self.assertEqual(answered.get_json()["call"]["status"], "active")
+
+        # ICE candidates are exchanged in both directions
+        cand_c = {"candidate": "candidate:1 1 udp 1 1.1.1.1 1000 typ host", "sdpMid": "0", "sdpMLineIndex": 0}
+        cand_s = {"candidate": "candidate:2 1 udp 1 2.2.2.2 2000 typ host", "sdpMid": "0", "sdpMLineIndex": 0}
+        self.assertEqual(
+            customer.post(
+                f"/api/calls/{call_id}/candidate", json={"candidate": cand_c, "phone": phone}
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            admin.post(f"/api/calls/{call_id}/candidate", json={"candidate": cand_s}).status_code, 200
+        )
+        caller_view = customer.get(f"/api/calls/{call_id}?phone={phone}").get_json()["call"]
+        self.assertEqual(caller_view["answer_sdp"], "v=0 answer")
+        self.assertEqual(len(caller_view["remote_candidates"]), 1)
+        self.assertEqual(caller_view["remote_candidates"][0]["candidate"], cand_s["candidate"])
+        callee_view = admin.get(f"/api/calls/{call_id}").get_json()["call"]
+        self.assertEqual(len(callee_view["remote_candidates"]), 1)
+        self.assertEqual(callee_view["remote_candidates"][0]["candidate"], cand_c["candidate"])
+
+        # Wrong phone cannot read the call; ending works for either side
+        self.assertEqual(customer.get(f"/api/calls/{call_id}?phone=0000").status_code, 403)
+        ended = admin.post(f"/api/calls/{call_id}/end")
+        self.assertEqual(ended.status_code, 200)
+        self.assertEqual(ended.get_json()["call"]["status"], "ended")
+
+        # Shop-initiated call to the customer, declined by the customer
+        shop_call = admin.post(
+            "/api/calls/start", json={"booking_code": code, "offer": "v=0 shop-offer"}
+        )
+        self.assertEqual(shop_call.status_code, 201)
+        shop_call_id = shop_call.get_json()["call"]["id"]
+        seen = customer.get(f"/api/calls/incoming?code={code}&phone={phone}").get_json()["call"]
+        self.assertEqual(seen["id"], shop_call_id)
+        declined = customer.post(f"/api/calls/{shop_call_id}/end", json={"phone": phone})
+        self.assertEqual(declined.get_json()["call"]["status"], "declined")
+
+        # Cancelled bookings cannot be called
+        self.assertEqual(
+            customer.post(
+                "/api/bookings/cancel", json={"booking_code": code, "customer_phone": "7788"}
+            ).status_code,
+            200,
+        )
+        blocked = customer.post(
+            "/api/calls/start", json={"booking_code": code, "phone": phone, "offer": "v=0 offer"}
+        )
+        self.assertEqual(blocked.status_code, 409)
+
+        # Script is wired into every page
+        html = self.client.get("/customer").get_data(as_text=True)
+        self.assertIn("/static/js/calls.js", html)
+        self.assertIn('data-nav="customer"', html)
+
 
 if __name__ == "__main__":
     unittest.main()
