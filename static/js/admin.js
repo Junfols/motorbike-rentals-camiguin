@@ -192,9 +192,8 @@
         <div class="kpi-sub">Month: ${escapeHtml(formatMoney(k.month_revenue))} &bull; Today: ${escapeHtml(formatMoney(k.today_revenue))}</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Platform Commission (${k.commission_rate}%)</div>
-        <div class="kpi-value">${escapeHtml(formatMoney(k.platform_fee_total))}</div>
-        <div class="kpi-sub">Partner payouts: ${escapeHtml(formatMoney(k.partner_payout_total))}</div>
+        <div class="kpi-label">Partner Payouts</div>
+        <div class="kpi-value">${escapeHtml(formatMoney(k.partner_payout_total))}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Verified Down Payments</div>
@@ -215,7 +214,7 @@
             <div class="revenue-bar-row">
               <div class="revenue-bar-labels">
                 <span>${escapeHtml(s.shop_name)} (${s.booking_count})</span>
-                <span>${escapeHtml(formatMoney(s.gross_revenue))} <small class="text-muted">(Fee: ${escapeHtml(formatMoney(s.platform_fee_total))})</small></span>
+                <span>${escapeHtml(formatMoney(s.gross_revenue))}</span>
               </div>
               <div class="revenue-bar-track">
                 <div class="revenue-bar-fill" style="width:${pct}%"></div>
@@ -305,9 +304,8 @@
                 <div class="text-muted">${s.booking_count || 0} booking(s)</div>
               </div>
               <div>
-                <span class="trip-detail-label">Gross / Platform Fee</span>
+                <span class="trip-detail-label">Gross Bookings</span>
                 <strong>${escapeHtml(formatMoney(s.gross_revenue || 0))}</strong>
-                <div class="text-muted">Fee: ${escapeHtml(formatMoney(s.platform_fee_total || 0))} &bull; Payout: ${escapeHtml(formatMoney(s.shop_payout_total || 0))}</div>
               </div>
             </div>
 
@@ -416,9 +414,8 @@
                 <div class="text-muted">${b.rental_days}d &bull; ${escapeHtml(b.pickup_time)}</div>
               </div>
               <div>
-                <span class="trip-detail-label">Total / Fee (${b.commission_rate}%)</span>
+                <span class="trip-detail-label">Total</span>
                 <strong>${escapeHtml(formatMoney(b.total_amount))}</strong>
-                <div class="text-muted">Fee: ${escapeHtml(formatMoney(b.platform_fee))} &bull; Payout: ${escapeHtml(formatMoney(b.shop_payout))}</div>
               </div>
               <div>
                 <span class="trip-detail-label">Down Payment / Balance Due</span>
@@ -778,7 +775,6 @@
     document.getElementById("set-email").value = s.email || "";
     document.getElementById("set-whatsapp").value = s.whatsapp_number || "";
     document.getElementById("set-messenger").value = s.messenger_url || "";
-    document.getElementById("set-commission-rate").value = s.commission_rate ?? "10";
     document.getElementById("set-currency").value = s.currency || "₱";
     document.getElementById("set-delivery-fee").value = s.delivery_fee || "0";
     document.getElementById("set-helmet-fee").value = s.extra_helmet_fee || "0";
@@ -1211,7 +1207,6 @@
       email: document.getElementById("set-email").value.trim(),
       whatsapp_number: document.getElementById("set-whatsapp").value.trim(),
       messenger_url: document.getElementById("set-messenger").value.trim(),
-      commission_rate: document.getElementById("set-commission-rate").value,
       currency: document.getElementById("set-currency").value.trim(),
       delivery_fee: document.getElementById("set-delivery-fee").value,
       extra_helmet_fee: document.getElementById("set-helmet-fee").value,

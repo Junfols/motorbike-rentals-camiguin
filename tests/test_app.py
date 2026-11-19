@@ -102,9 +102,9 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertEqual(q["addons_total"], 1200.0)  # (50 + 100) * 8
         self.assertEqual(q["delivery_total"], 150.0)   # Benoni Port Moto Express delivery rate
         self.assertEqual(q["total_amount"], 14150.0)
-        self.assertEqual(q["commission_rate"], 10.0)
-        self.assertEqual(q["platform_fee"], 1415.0)
-        self.assertEqual(q["shop_payout"], 12735.0)
+        self.assertEqual(q["commission_rate"], 0.0)
+        self.assertEqual(q["platform_fee"], 0.0)
+        self.assertEqual(q["shop_payout"], 14150.0)
         self.assertTrue(q["is_available"])
 
     def test_booking_conflict_and_lookup_and_cancel(self):
@@ -333,7 +333,7 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         )
         self.assertEqual(self.client.delete("/api/partner/bikes/1").status_code, 404)
 
-        # Main Admin updates platform commission to 15% and approves Guinsiliban Ride Hub
+        # Main Admin tries to set a commission (ignored: platform fee removed) and approves Guinsiliban Ride Hub
         self.assertEqual(
             self.client.post("/api/admin/login", json={"password": "admin1234"}).status_code,
             200,
@@ -364,11 +364,11 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         )
         self.assertEqual(ok_book.status_code, 201)
         booked = ok_book.get_json()["booking"]
-        # 2 days * 500 = 1000 + 100 shop delivery = 1100 total; 15% fee = 165; payout = 935
+        # 2 days * 500 = 1000 + 100 shop delivery = 1100 total; no platform fee; payout = 1100
         self.assertEqual(booked["total_amount"], 1100.0)
-        self.assertEqual(booked["commission_rate"], 15.0)
-        self.assertEqual(booked["platform_fee"], 165.0)
-        self.assertEqual(booked["shop_payout"], 935.0)
+        self.assertEqual(booked["commission_rate"], 0.0)
+        self.assertEqual(booked["platform_fee"], 0.0)
+        self.assertEqual(booked["shop_payout"], 1100.0)
 
         # Partner logs in cleanly, confirms booking, and checks KPIs + Admin dashboard totals
         self.client.post("/api/partner/logout")
@@ -432,12 +432,12 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertEqual(restore_resp.status_code, 200)
         p_dash = self.client.get("/api/partner/dashboard").get_json()
         self.assertEqual(p_dash["kpis"]["gross_revenue"], 1100.0)
-        self.assertEqual(p_dash["kpis"]["platform_fee_total"], 165.0)
-        self.assertEqual(p_dash["kpis"]["net_payout"], 935.0)
+        self.assertEqual(p_dash["kpis"]["platform_fee_total"], 0.0)
+        self.assertEqual(p_dash["kpis"]["net_payout"], 1100.0)
 
         a_dash = self.client.get("/api/admin/dashboard").get_json()
-        self.assertEqual(a_dash["kpis"]["platform_fee_total"], 165.0)
-        self.assertEqual(a_dash["kpis"]["partner_payout_total"], 935.0)
+        self.assertEqual(a_dash["kpis"]["platform_fee_total"], 0.0)
+        self.assertEqual(a_dash["kpis"]["partner_payout_total"], 1100.0)
 
         # Suspending partner hides fleet and blocks partner mutations & new bookings
         susp = self.client.patch(f"/api/admin/shops/{partner_id}", json={"status": "suspended"})

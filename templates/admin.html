@@ -11,7 +11,7 @@
         <img src="/static/icons/icon.svg" alt="" width="44" height="44">
         <div>
           <h1>👑 Platform Super Admin</h1>
-          <p class="text-muted">Verify partner shops, oversee all bookings, and configure platform commission.</p>
+          <p class="text-muted">Verify partner shops, oversee all bookings, and manage settings.</p>
         </div>
       </div>
       <div class="form-group">
@@ -56,7 +56,7 @@
       <div class="admin-overview-grid">
         <div class="card">
           <div class="card-header-row">
-            <h3>Revenue &amp; Commission by Partner Shop</h3>
+            <h3>Revenue by Partner Shop</h3>
             <button type="button" class="link-btn" id="jump-partners-btn">Manage Shops &rarr;</button>
           </div>
           <div id="revenue-bars" class="revenue-bars"></div>
@@ -183,12 +183,8 @@
         </div>
 
         <hr class="form-divider">
-        <h3>Commission &amp; Fee Defaults</h3>
+        <h3>Fee Defaults</h3>
         <div class="form-grid-4">
-          <div class="form-group">
-            <label for="set-commission-rate">Platform Commission (%)</label>
-            <input type="number" id="set-commission-rate" name="commission_rate" min="0" max="100" step="0.5">
-          </div>
           <div class="form-group">
             <label for="set-currency">Currency Symbol</label>
             <input type="text" id="set-currency" name="currency" maxlength="6" required>

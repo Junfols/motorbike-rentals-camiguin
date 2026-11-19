@@ -3354,7 +3354,6 @@ def create_app(test_config: dict | None = None) -> Flask:
             "messenger_url",
             "whatsapp_number",
             "currency",
-            "commission_rate",
             "reservation_mode",
             "reservation_percent",
             "gcash_account_name",
@@ -3378,7 +3377,6 @@ def create_app(test_config: dict | None = None) -> Flask:
             "delivery_fee",
             "extra_helmet_fee",
             "top_box_fee",
-            "commission_rate",
             "reservation_percent",
         }
 
@@ -3391,9 +3389,8 @@ def create_app(test_config: dict | None = None) -> Flask:
                         num = float(val or 0)
                         if num < 0:
                             return jsonify({"error": f"{key} cannot be negative."}), 400
-                        if key in ("commission_rate", "reservation_percent") and num > 100:
-                            label = "Commission rate" if key == "commission_rate" else "Reservation percent"
-                            return jsonify({"error": f"{label} cannot exceed 100%."}), 400
+                        if key == "reservation_percent" and num > 100:
+                            return jsonify({"error": "Reservation percent cannot exceed 100%."}), 400
                         val = str(int(num) if num.is_integer() else round(num, 2))
                     except ValueError:
                         return jsonify({"error": f"{key} must be a valid number."}), 400
