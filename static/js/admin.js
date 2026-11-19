@@ -197,7 +197,7 @@
         <div class="kpi-sub">Partner payouts: ${escapeHtml(formatMoney(k.partner_payout_total))}</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Verified GCash Reservation Fees</div>
+        <div class="kpi-label">Verified Down Payments</div>
         <div class="kpi-value">${escapeHtml(formatMoney(k.collected_reservation_total || 0))}</div>
         <div class="kpi-sub">${k.pending_payment_verifications || 0} receipt(s) to verify (${escapeHtml(formatMoney(k.pending_verification_total || 0))})</div>
       </div>
@@ -420,7 +420,7 @@
                 <div class="text-muted">Fee: ${escapeHtml(formatMoney(b.platform_fee))} &bull; Payout: ${escapeHtml(formatMoney(b.shop_payout))}</div>
               </div>
               <div>
-                <span class="trip-detail-label">Reservation / Balance Due</span>
+                <span class="trip-detail-label">Down Payment / Balance Due</span>
                 <strong>${escapeHtml(formatMoney(b.balance_due !== undefined && b.balance_due !== null ? b.balance_due : b.total_amount))}</strong> ${balanceBadge}
                 <div class="text-muted">${hasOnlineFee ? `${escapeHtml(payChannelLabel)}: ${escapeHtml(formatMoney(b.reservation_fee))}` : "Pay 100% at shop"} &bull; Dep: ${escapeHtml(formatMoney(b.deposit_amount))}</div>
               </div>
@@ -627,7 +627,7 @@
 
     const mode = (s.reservation_mode || "optional").toLowerCase();
     if (modeEl) modeEl.value = mode;
-    if (pctEl) pctEl.value = s.reservation_percent ?? "10";
+    if (pctEl) pctEl.value = s.reservation_percent ?? "30";
     if (nameEl) nameEl.value = s.gcash_account_name || "";
     if (gcashEl) gcashEl.value = s.gcash_number || "";
     if (mayaEl) mayaEl.value = s.maya_number || "";

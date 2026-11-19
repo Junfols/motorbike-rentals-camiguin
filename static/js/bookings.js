@@ -156,7 +156,7 @@
           <div>
             <span class="trip-detail-label">Balance Due on Pickup</span>
             <strong>${escapeHtml(formatMoney(b.balance_due !== undefined && b.balance_due !== null ? b.balance_due : b.total_amount))}</strong>
-            ${Number(b.reservation_fee || 0) > 0 ? `<div class="text-muted">Reservation fee: ${escapeHtml(formatMoney(b.reservation_fee))}</div>` : ""}
+            ${Number(b.reservation_fee || 0) > 0 ? `<div class="text-muted">Down payment: ${escapeHtml(formatMoney(b.reservation_fee))}</div>` : ""}
           </div>
           <div>
             <span class="trip-detail-label">Security Deposit</span>

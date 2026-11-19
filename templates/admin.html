@@ -217,15 +217,15 @@
         <hr class="form-divider">
         <div class="alert-config-header">
           <div>
-            <h3>GCash / Maya Reservation Fee (Direct to You)</h3>
-            <p class="field-hint">Collect a reservation downpayment directly to your GCash or Maya account before pickup. Remaining balance is collected by the partner shop on pickup.</p>
+            <h3>GCash / Maya Down Payment (Direct to You)</h3>
+            <p class="field-hint">Collect a down payment directly to your GCash or Maya account before pickup (1–2 days = 30%, 3+ days = ₱500). Remaining balance is collected by the partner shop on pickup.</p>
           </div>
           <span id="admin-payment-status-pill" class="status-pill-inline muted">Optional</span>
         </div>
 
         <div class="form-grid-4">
           <div class="form-group">
-            <label for="set-reservation-mode">Reservation Mode</label>
+            <label for="set-reservation-mode">Down Payment Mode</label>
             <select id="set-reservation-mode" name="reservation_mode">
               <option value="optional">Optional (Pay now or at shop)</option>
               <option value="required">Required (Must pay online)</option>
@@ -233,8 +233,8 @@
             </select>
           </div>
           <div class="form-group">
-            <label for="set-reservation-percent">Reservation Fee (%)</label>
-            <input type="number" id="set-reservation-percent" name="reservation_percent" min="0" max="100" step="0.5" placeholder="10">
+            <label for="set-reservation-percent">1–2 Days Down Payment (%) &bull; 3+ Days = ₱500</label>
+            <input type="number" id="set-reservation-percent" name="reservation_percent" min="0" max="100" step="0.5" placeholder="30">
           </div>
           <div class="form-group">
             <label for="set-gcash-account-name">GCash / Maya Account Name</label>

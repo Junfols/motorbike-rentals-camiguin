@@ -153,7 +153,7 @@ def format_new_booking_message(settings: dict, shop: dict, booking: dict) -> tup
         + (f"Notes: {booking.get('notes')}\n" if booking.get("notes") else "")
         + f"\nTotal: {cur}{float(booking.get('total_amount') or 0):,.2f}\n"
         + (
-            f"Reservation Payment ({(booking.get('payment_channel') or 'gcash').upper()} - "
+            f"Down Payment ({(booking.get('payment_channel') or 'gcash').upper()} - "
             f"{booking.get('payment_status') or 'submitted'}): "
             f"{cur}{float(booking.get('reservation_fee') or 0):,.2f}"
             + (f" (Ref: {booking.get('payment_reference')})" if booking.get("payment_reference") else "")

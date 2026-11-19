@@ -2778,7 +2778,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                     "today_revenue": float(revenue_row["today_revenue"]),
                     "commission_rate": float(settings.get("commission_rate", "10") or 0),
                     "reservation_mode": settings.get("reservation_mode", "off"),
-                    "reservation_percent": float(settings.get("reservation_percent", "10") or 0),
+                    "reservation_percent": float(settings.get("reservation_percent", "30") or 0),
                     "reservation_configured": is_reservation_payment_configured(settings),
                 },
                 "revenue_by_shop": [

@@ -1256,17 +1256,32 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         for key in SECRET_SETTING_KEYS:
             self.assertNotIn(key, pub_settings)
 
-        # Quote now calculates 15% reservation_fee & balance_due
+        # Quote now calculates 15% reservation_fee & balance_due for 1-2 days, and flat ₱500 for 3+ days
         q_after = self.client.get(
             f"/api/quote?bike_id={bike['id']}&pickup_date={p1}&return_date={r1}"
         ).get_json()["quote"]
         self.assertTrue(q_after["reservation_configured"])
         self.assertEqual(q_after["reservation_mode"], "optional")
         self.assertEqual(q_after["reservation_percent"], 15.0)
+        self.assertEqual(q_after["down_payment_rule"], "percent")
         self.assertEqual(q_after["reservation_fee"], round(q_after["total_amount"] * 0.15, 2))
+        self.assertEqual(q_after["down_payment"], q_after["reservation_fee"])
         self.assertEqual(
             q_after["balance_due"],
             round(q_after["total_amount"] - q_after["reservation_fee"], 2),
+        )
+
+        p3, r3 = self._future_str(40), self._future_str(43)
+        q_3days = self.client.get(
+            f"/api/quote?bike_id={bike['id']}&pickup_date={p3}&return_date={r3}"
+        ).get_json()["quote"]
+        self.assertEqual(q_3days["rental_days"], 3)
+        self.assertEqual(q_3days["down_payment_rule"], "flat_500")
+        self.assertEqual(q_3days["reservation_fee"], 500.0)
+        self.assertEqual(q_3days["down_payment"], 500.0)
+        self.assertEqual(
+            q_3days["balance_due"],
+            round(q_3days["total_amount"] - 500.0, 2),
         )
 
         # Replacing QR removes old unused QR from uploaded_media

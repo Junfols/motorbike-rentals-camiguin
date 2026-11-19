@@ -650,12 +650,12 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                 "notify_partner_email": "1",
                 "notify_customer_email": "1",
                 "reservation_mode": "required",
-                "reservation_percent": "10",
+                "reservation_percent": "30",
                 "gcash_account_name": "",
                 "gcash_number": "",
                 "gcash_qr_url": "",
                 "maya_number": "",
-                "payment_instructions": "Scan the GCash QR or send the reservation fee, then enter your 13-digit Reference No. before submitting. Pay the remaining balance at the shop on pickup.",
+                "payment_instructions": "Scan the GCash QR or send the down payment, then enter your 13-digit Reference No. before submitting. Pay the remaining balance at the shop on pickup.",
                 "admin_password_hash": generate_password_hash(initial_admin_pw),
                 "secret_key": initial_secret,
             }
@@ -911,6 +911,19 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                 )
                 conn.execute(
                     "INSERT INTO settings (key, value) VALUES ('reservation_mode_required_v1', '1') "
+                    "ON CONFLICT (key) DO NOTHING"
+                )
+
+            dp_pct_flag = conn.execute(
+                "SELECT value FROM settings WHERE key = 'down_payment_30pct_v1'"
+            ).fetchone()
+            if not dp_pct_flag:
+                conn.execute(
+                    "INSERT INTO settings (key, value) VALUES ('reservation_percent', '30') "
+                    "ON CONFLICT (key) DO UPDATE SET value = '30'"
+                )
+                conn.execute(
+                    "INSERT INTO settings (key, value) VALUES ('down_payment_30pct_v1', '1') "
                     "ON CONFLICT (key) DO NOTHING"
                 )
 
@@ -1207,12 +1220,18 @@ def calculate_quote(
     if reservation_mode not in VALID_RESERVATION_MODES:
         reservation_mode = "off"
     reservation_configured = is_reservation_payment_configured(settings)
-    reservation_percent = float(settings.get("reservation_percent", "10") or 0)
+    reservation_percent = float(settings.get("reservation_percent", "30") or 0)
     reservation_percent = max(0.0, min(100.0, reservation_percent))
     if reservation_mode != "off" and reservation_configured and reservation_percent > 0:
-        reservation_fee = round(total_amount * (reservation_percent / 100.0), 2)
+        if rental_days >= 3:
+            reservation_fee = round(min(500.0, total_amount), 2)
+            down_payment_rule = "flat_500"
+        else:
+            reservation_fee = round(total_amount * (reservation_percent / 100.0), 2)
+            down_payment_rule = "percent"
     else:
         reservation_fee = 0.0
+        down_payment_rule = "none"
     balance_due = round(max(0.0, total_amount - reservation_fee), 2)
 
     return {
@@ -1232,6 +1251,8 @@ def calculate_quote(
         "reservation_configured": reservation_configured,
         "reservation_percent": round(reservation_percent, 2),
         "reservation_fee": reservation_fee,
+        "down_payment": reservation_fee,
+        "down_payment_rule": down_payment_rule,
         "balance_due": balance_due,
         "deposit_amount": round(deposit, 2),
     }
