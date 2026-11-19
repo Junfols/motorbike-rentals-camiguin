@@ -1126,8 +1126,9 @@ def create_app(test_config: dict | None = None) -> Flask:
 
         if not bike_id or not pickup_date or not return_date:
             return jsonify({"error": "bike_id, pickup_date, and return_date are required."}), 400
-        if pickup_method not in ("shop", "delivery"):
-            return jsonify({"error": "pickup_method must be 'shop' or 'delivery'."}), 400
+        valid_pickup_methods = ("shop", "delivery", "benoni_port", "airport", "around_mambajao", "mambajao")
+        if pickup_method not in valid_pickup_methods:
+            return jsonify({"error": "pickup_method must be one of: " + ", ".join(valid_pickup_methods)}), 400
 
         bike = conn.execute(
             """
@@ -1224,10 +1225,23 @@ def create_app(test_config: dict | None = None) -> Flask:
             return jsonify({"error": "Please provide a valid mobile or WhatsApp number."}), 400
         if not license_number:
             return jsonify({"error": "Driver's license number is required."}), 400
-        if pickup_method not in ("shop", "delivery"):
+        valid_pickup_methods = ("shop", "delivery", "benoni_port", "airport", "around_mambajao", "mambajao")
+        if pickup_method not in valid_pickup_methods:
             return jsonify({"error": "Invalid pickup method."}), 400
-        if pickup_method == "delivery" and not delivery_address:
-            return jsonify({"error": "Please enter your resort, port, or delivery address."}), 400
+        if pickup_method in ("delivery", "around_mambajao", "mambajao") and not delivery_address:
+            return jsonify({"error": "Please enter your resort, hotel, or delivery address."}), 400
+        if pickup_method == "benoni_port":
+            if not delivery_address:
+                delivery_address = "Benoni Port, Mahinog"
+            if not delivery_lat or not delivery_lng:
+                delivery_lat = 9.1306
+                delivery_lng = 124.7937
+        elif pickup_method == "airport":
+            if not delivery_address:
+                delivery_address = "Camiguin Airport, Mambajao"
+            if not delivery_lat or not delivery_lng:
+                delivery_lat = 9.2530
+                delivery_lng = 124.7061
         if payment_channel not in ("pay_at_shop", "gcash", "maya", "paymongo"):
             return jsonify({"error": "Invalid payment method selected."}), 400
         try:

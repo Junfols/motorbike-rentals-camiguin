@@ -149,7 +149,17 @@
           </div>
           <div>
             <span class="trip-detail-label">Pickup</span>
-            <strong>${escapeHtml(b.pickup_time)} &bull; ${b.pickup_method === "delivery" ? `Delivery` : "Shop Pickup"}</strong>
+            <strong>${escapeHtml(b.pickup_time)} &bull; ${
+              b.pickup_method === "benoni_port"
+                ? "Benoni Port (+₱200)"
+                : b.pickup_method === "airport"
+                ? "Airport (Free)"
+                : (b.pickup_method === "around_mambajao" || b.pickup_method === "mambajao")
+                ? "Around Mambajao (Free)"
+                : b.pickup_method === "delivery"
+                ? "Delivery"
+                : "Shop Pickup"
+            }</strong>
           </div>
           <div>
             <span class="trip-detail-label">Total Rental</span>

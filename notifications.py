@@ -124,7 +124,20 @@ def format_new_booking_message(settings: dict, shop: dict, booking: dict) -> tup
     cur = _currency(settings)
     platform = settings.get("shop_name") or "Motorbike Rentals Camiguin"
     maps_link = booking.get("google_maps_url") or ""
-    if booking.get("pickup_method") == "delivery":
+    pm = (booking.get("pickup_method") or "shop").strip().lower()
+    if pm == "benoni_port":
+        method_label = f"Benoni Port Delivery (+₱200) — {booking.get('delivery_address') or 'Benoni Port, Mahinog'}"
+        if maps_link:
+            method_label += f"\n   Map/GPS: {maps_link}"
+    elif pm == "airport":
+        method_label = f"Camiguin Airport Delivery (Free) — {booking.get('delivery_address') or 'Camiguin Airport, Mambajao'}"
+        if maps_link:
+            method_label += f"\n   Map/GPS: {maps_link}"
+    elif pm in ("around_mambajao", "mambajao"):
+        method_label = f"Around Mambajao Delivery (Free) — {booking.get('delivery_address')}"
+        if maps_link:
+            method_label += f"\n   Map/GPS: {maps_link}"
+    elif pm == "delivery":
         method_label = f"Delivery ({booking.get('delivery_address')})"
         if maps_link:
             method_label += f"\n   Map/GPS: {maps_link}"

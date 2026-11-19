@@ -886,12 +886,7 @@
       if (pendingDeliverySpot) {
         applyPendingDeliverySpot();
       } else {
-        const isDelivery = bookingPickupMethod.value === "delivery";
-        if (deliveryAddressGroup) deliveryAddressGroup.classList.toggle("hidden", !isDelivery);
-        if (deliveryAddressInput) deliveryAddressInput.required = isDelivery;
-        if (isDelivery) {
-          initOrUpdateDeliveryMap();
-        }
+        syncPickupMethodUi();
       }
     }
     if (bookingPaymentRef) bookingPaymentRef.value = "";
@@ -1096,10 +1091,27 @@
         `;
       }
       if (q.delivery_total > 0) {
+        const dLabel = q.pickup_method === "benoni_port"
+          ? "Benoni Port Delivery (+₱200)"
+          : "Resort / Port Delivery";
         linesHtml += `
           <div class="quote-line">
-            <span>Resort / Port Delivery</span>
+            <span>${escapeHtml(dLabel)}</span>
             <span>${escapeHtml(formatMoney(q.delivery_total))}</span>
+          </div>
+        `;
+      } else if (q.pickup_method === "airport") {
+        linesHtml += `
+          <div class="quote-line">
+            <span>Camiguin Airport Delivery</span>
+            <span style="color:var(--success,#059669);font-weight:700;">FREE</span>
+          </div>
+        `;
+      } else if (q.pickup_method === "around_mambajao" || q.pickup_method === "mambajao") {
+        linesHtml += `
+          <div class="quote-line">
+            <span>Around Mambajao Delivery</span>
+            <span style="color:var(--success,#059669);font-weight:700;">FREE</span>
           </div>
         `;
       }
@@ -1436,14 +1448,59 @@
     }
   }
 
+  function syncPickupMethodUi() {
+    if (!bookingPickupMethod) return;
+    const method = bookingPickupMethod.value;
+    const isDelivery = method !== "shop";
+    if (deliveryAddressGroup) deliveryAddressGroup.classList.toggle("hidden", !isDelivery);
+    const labelEl = document.getElementById("delivery-address-label");
+
+    if (method === "benoni_port") {
+      if (labelEl) labelEl.textContent = "Arrival Details / Pier (Benoni Port, Mahinog) *";
+      if (deliveryAddressInput) {
+        deliveryAddressInput.required = true;
+        deliveryAddressInput.placeholder = "e.g., Benoni Port — Ferry name / Arrival time";
+        if (!deliveryAddressInput.value || deliveryAddressInput.value.includes("Airport") || deliveryAddressInput.value === "Shop Pickup") {
+          deliveryAddressInput.value = "Benoni Port, Mahinog";
+        }
+      }
+      initOrUpdateDeliveryMap(9.1306, 124.7937);
+      setDeliveryCoordinates(9.1306, 124.7937, "Benoni Port, Mahinog");
+    } else if (method === "airport") {
+      if (labelEl) labelEl.textContent = "Flight / Arrival Details (Camiguin Airport, Mambajao) *";
+      if (deliveryAddressInput) {
+        deliveryAddressInput.required = true;
+        deliveryAddressInput.placeholder = "e.g., Camiguin Airport — Flight number / ETA";
+        if (!deliveryAddressInput.value || deliveryAddressInput.value.includes("Benoni") || deliveryAddressInput.value === "Shop Pickup") {
+          deliveryAddressInput.value = "Camiguin Airport, Mambajao";
+        }
+      }
+      initOrUpdateDeliveryMap(9.2530, 124.7061);
+      setDeliveryCoordinates(9.2530, 124.7061, "Camiguin Airport, Mambajao");
+    } else if (method === "around_mambajao" || method === "mambajao" || method === "delivery") {
+      if (labelEl) labelEl.textContent = "Delivery Address (Resort / Hotel / Location in Mambajao) *";
+      if (deliveryAddressInput) {
+        deliveryAddressInput.required = true;
+        deliveryAddressInput.placeholder = "e.g., Paras Beach Resort / Balyali / Tongatok Cliff / Yumbing";
+        if (deliveryAddressInput.value === "Benoni Port, Mahinog" || deliveryAddressInput.value === "Camiguin Airport, Mambajao" || deliveryAddressInput.value === "Shop Pickup") {
+          deliveryAddressInput.value = "";
+        }
+      }
+      initOrUpdateDeliveryMap();
+    } else {
+      // shop
+      if (deliveryAddressInput) {
+        deliveryAddressInput.required = false;
+        if (deliveryAddressInput.value === "Benoni Port, Mahinog" || deliveryAddressInput.value === "Camiguin Airport, Mambajao") {
+          deliveryAddressInput.value = "";
+        }
+      }
+    }
+  }
+
   if (bookingPickupMethod) {
     bookingPickupMethod.addEventListener("change", () => {
-      const isDelivery = bookingPickupMethod.value === "delivery";
-      deliveryAddressGroup.classList.toggle("hidden", !isDelivery);
-      deliveryAddressInput.required = isDelivery;
-      if (isDelivery) {
-        initOrUpdateDeliveryMap();
-      }
+      syncPickupMethodUi();
       refreshQuote();
     });
   }
@@ -1455,9 +1512,21 @@
       if (!chip) return;
       const lat = parseFloat(chip.getAttribute("data-lat"));
       const lng = parseFloat(chip.getAttribute("data-lng"));
-      const name = chip.getAttribute("data-name");
+      const name = chip.getAttribute("data-name") || "";
+
+      if (bookingPickupMethod) {
+        if (name.includes("Benoni")) {
+          bookingPickupMethod.value = "benoni_port";
+        } else if (name.includes("Airport")) {
+          bookingPickupMethod.value = "airport";
+        } else {
+          bookingPickupMethod.value = "around_mambajao";
+        }
+        syncPickupMethodUi();
+      }
       initOrUpdateDeliveryMap(lat, lng);
       setDeliveryCoordinates(lat, lng, name);
+      refreshQuote();
     });
   }
 
@@ -1695,9 +1764,15 @@
   function applyPendingDeliverySpot() {
     if (!pendingDeliverySpot) return;
     if (bookingPickupMethod) {
-      bookingPickupMethod.value = "delivery";
-      deliveryAddressGroup.classList.remove("hidden");
-      deliveryAddressInput.required = true;
+      const spotName = pendingDeliverySpot.name || pendingDeliverySpot.address || "";
+      if (spotName.includes("Benoni")) {
+        bookingPickupMethod.value = "benoni_port";
+      } else if (spotName.includes("Airport")) {
+        bookingPickupMethod.value = "airport";
+      } else {
+        bookingPickupMethod.value = "around_mambajao";
+      }
+      syncPickupMethodUi();
       initOrUpdateDeliveryMap(pendingDeliverySpot.lat, pendingDeliverySpot.lng);
       setDeliveryCoordinates(
         pendingDeliverySpot.lat,
@@ -2276,6 +2351,22 @@
     });
   }
 
+  function formatStorefrontPickupLabel(method, address) {
+    if (method === "benoni_port") {
+      return `Benoni Port (+₱200)${address ? ` — ${escapeHtml(address)}` : ""}`;
+    }
+    if (method === "airport") {
+      return `Airport Delivery (Free)${address ? ` — ${escapeHtml(address)}` : ""}`;
+    }
+    if (method === "around_mambajao" || method === "mambajao") {
+      return `Around Mambajao Delivery (Free)${address ? ` — ${escapeHtml(address)}` : ""}`;
+    }
+    if (method === "delivery") {
+      return `Delivery${address ? ` (${escapeHtml(address)})` : ""}`;
+    }
+    return "Shop Pickup (Free)";
+  }
+
   function showConfirmationModal(booking, checkoutUrl) {
     document.getElementById("confirm-booking-code").textContent = booking.booking_code;
 
@@ -2295,7 +2386,7 @@
       <div><strong>Motorbike:</strong> ${escapeHtml(booking.bike_name)}</div>
       ${booking.customer_address ? `<div><strong>Address:</strong> ${escapeHtml(booking.customer_address)}</div>` : ""}
       <div><strong>Dates:</strong> ${escapeHtml(booking.pickup_date)} to ${escapeHtml(booking.return_date)} (${booking.rental_days} day(s))</div>
-      <div><strong>Pickup:</strong> ${escapeHtml(booking.pickup_time)} &bull; ${booking.pickup_method === "delivery" ? `Delivery (${escapeHtml(booking.delivery_address)})` : "Shop Pickup"}</div>
+      <div><strong>Pickup:</strong> ${escapeHtml(booking.pickup_time)} &bull; ${formatStorefrontPickupLabel(booking.pickup_method, booking.delivery_address)}</div>
       <div><strong>Total Rental:</strong> ${escapeHtml(formatMoney(booking.total_amount))}</div>
       ${Number(booking.reservation_fee || 0) > 0 ? `<div><strong>Down Payment (${escapeHtml((booking.payment_channel || "gcash").toUpperCase())}):</strong> ${escapeHtml(formatMoney(booking.reservation_fee))} (${escapeHtml(paymentStatusLabel(booking.payment_status))})${booking.payment_reference ? ` &bull; Ref # ${escapeHtml(booking.payment_reference)}` : ""}</div>` : ""}
       <div><strong>Balance Due on Pickup:</strong> ${escapeHtml(formatMoney(booking.balance_due !== undefined && booking.balance_due !== null ? booking.balance_due : booking.total_amount))}</div>
