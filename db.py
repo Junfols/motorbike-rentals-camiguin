@@ -656,7 +656,7 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
                         250,
                         generate_password_hash("partner1234"),
                         "approved",
-                        1,
+                        0,
                         now,
                     ),
                     (
@@ -851,23 +851,13 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
                             rev,
                         )
 
-            # Promote RAFOLS MOTORBIKE RENTAL to Main Hub once if present in existing DB
+            # Clear legacy is_main flags so all partner shops are treated equally
+            conn.execute("UPDATE shops SET is_main = 0 WHERE is_main != 0")
+
             rafols_row = conn.execute(
-                "SELECT id, is_main FROM shops WHERE LOWER(shop_name) = 'rafols motorbike rental' ORDER BY id ASC LIMIT 1"
+                "SELECT id FROM shops WHERE LOWER(shop_name) = 'rafols motorbike rental' ORDER BY id ASC LIMIT 1"
             ).fetchone()
             if rafols_row:
-                migrated_flag = conn.execute(
-                    "SELECT value FROM settings WHERE key = 'main_hub_rafols_migrated'"
-                ).fetchone()
-                if not migrated_flag:
-                    conn.execute("UPDATE shops SET is_main = 0 WHERE is_main != 0")
-                    conn.execute(
-                        "UPDATE shops SET is_main = 1, status = 'approved' WHERE id = ?",
-                        (int(rafols_row["id"]),),
-                    )
-                    conn.execute(
-                        "INSERT INTO settings (key, value) VALUES ('main_hub_rafols_migrated', '1') ON CONFLICT (key) DO NOTHING"
-                    )
                 pw_reset_flag = conn.execute(
                     "SELECT value FROM settings WHERE key = 'rafols_pw_reset_v1'"
                 ).fetchone()

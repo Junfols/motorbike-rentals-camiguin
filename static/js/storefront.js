@@ -417,7 +417,7 @@
             aria-pressed="${isActive ? "true" : "false"}"
           >
             <div class="shop-strip-cover" ${coverStyle}>
-              ${s.is_main ? `<span class="shop-strip-hub-tag">Main Hub</span>` : `<span class="shop-strip-hub-tag verified">Verified</span>`}
+              <span class="shop-strip-hub-tag verified">Verified</span>
             </div>
             <div class="shop-strip-body">
               <div class="shop-strip-avatar">${avatarHtml}</div>
@@ -466,7 +466,7 @@
         <div class="shop-banner-cover-overlay"></div>
         <div class="shop-banner-top-bar">
           <span class="shop-banner-verified-pill">
-            ${activeShop.is_main ? "&#9733; Official Main Hub" : "&#10003; Verified Camiguin Partner Shop"}
+            &#10003; Verified Camiguin Partner Shop
           </span>
           <button type="button" class="btn btn-sm shop-banner-reset-btn" data-clear-shop-filter="1">
             &larr; All Island Shops
