@@ -2479,6 +2479,31 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertIn("stats", shop_rev_data)
         self.assertTrue(len(shop_rev_data["reviews"]) >= 1)
 
+        # Test printable contract and receipt page
+        code = booking["booking_code"]
+        # Unauthorized without phone -> redirects to /customer?code=...
+        anon_resp = self.client.get(f"/bookings/{code}/contract")
+        self.assertEqual(anon_resp.status_code, 302)
+        self.assertIn("/customer?code=", anon_resp.headers.get("Location", ""))
+
+        # Authorized customer with phone
+        cust_contract = self.client.get(f"/bookings/{code}/contract?phone=09187654321")
+        self.assertEqual(cust_contract.status_code, 200)
+        html = cust_contract.get_data(as_text=True)
+        self.assertIn("OFFICIAL RENTAL CONTRACT", html)
+        self.assertIn(code, html)
+        self.assertIn("Maria Tourist", html)
+        self.assertIn("window.print()", html)
+
+        # Authorized admin
+        self.assertEqual(
+            self.client.post("/api/admin/login", json={"password": "admin1234"}).status_code,
+            200,
+        )
+        admin_contract = self.client.get(f"/bookings/{code}/contract")
+        self.assertEqual(admin_contract.status_code, 200)
+        self.assertIn("OFFICIAL RENTAL CONTRACT", admin_contract.get_data(as_text=True))
+
     def test_in_app_voice_call_signaling(self):
         bike = self.client.get("/api/bikes").get_json()["bikes"][0]
         booking = self.client.post(

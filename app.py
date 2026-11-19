@@ -13,6 +13,7 @@ from flask import (
     g,
     jsonify,
     make_response,
+    redirect,
     render_template,
     request,
     send_from_directory,
@@ -724,6 +725,47 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.get("/bookings")
     def bookings_page():
         return render_template("bookings.html", active_nav="customer")
+
+    @app.get("/bookings/<booking_code>/contract")
+    @app.get("/bookings/<booking_code>/receipt")
+    def view_booking_contract(booking_code: str):
+        conn = get_db()
+        code = booking_code.strip().upper()
+        row = conn.execute(
+            """
+            SELECT b.*,
+                   k.name AS bike_name, k.image_url AS bike_image,
+                   k.category AS bike_category, k.transmission AS bike_transmission,
+                   k.plate_number AS plate_number,
+                   s.shop_name AS shop_name, s.municipality AS shop_municipality,
+                   s.address AS shop_address, s.phone AS shop_phone,
+                   s.whatsapp_number AS shop_whatsapp,
+                   s.contract_terms AS shop_contract_terms
+            FROM bookings b
+            JOIN bikes k ON k.id = b.bike_id
+            JOIN shops s ON s.id = b.shop_id
+            WHERE UPPER(b.booking_code) = ?
+            """,
+            (code,),
+        ).fetchone()
+
+        if not row:
+            return redirect("/customer?not_found=1")
+
+        partner_id = int(session.get("partner_shop_id") or 0)
+        is_admin = bool(session.get("is_admin"))
+        is_shop = partner_id == int(row["shop_id"])
+        phone_param = (request.args.get("phone") or "").strip()
+        is_customer = bool(phone_param and _phones_match(row["customer_phone"], phone_param))
+
+        if not (is_admin or is_shop or is_customer):
+            return redirect(f"/customer?code={code}")
+
+        booking_data = _serialize_booking(row)
+        return render_template(
+            "contract_print.html",
+            b=booking_data,
+        )
 
     @app.get("/shop")
     @app.get("/rider")

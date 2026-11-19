@@ -177,7 +177,8 @@
         <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;">
           ${
             b.contract_agreed || b.signature_url || b.license_photo_url
-              ? `<button type="button" class="btn btn-outline btn-sm" id="view-contract-btn">📝 View Rental Contract &amp; ID</button>`
+              ? `<button type="button" class="btn btn-outline btn-sm" id="view-contract-btn">📝 View Rental Contract &amp; ID</button>
+                 <a href="/bookings/${encodeURIComponent(b.booking_code)}/contract?phone=${encodeURIComponent(b.customer_phone)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">🖨️ Print / Save PDF Contract</a>`
               : ""
           }
           ${
@@ -262,6 +263,10 @@
         <div class="info-box" style="margin-top:14px;background:#f0fdf4;border-color:#bbf7d0;">
           <strong style="color:#166534;">&#127881; Express Key Handover Ready</strong>
           <p class="text-muted" style="margin:4px 0 0;font-size:0.83rem;">Your contract and license are securely verified on file. When you meet your delivery driver or arrive at ${escapeHtml(b.shop_name || "the rental shop")}, just show this screen to collect your helmet and keys immediately!</p>
+        </div>
+
+        <div style="margin-top:14px;text-align:center;">
+          <a href="/bookings/${encodeURIComponent(b.booking_code)}/contract?phone=${encodeURIComponent(b.customer_phone)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm" style="display:inline-flex;align-items:center;gap:6px;">🖨️ Print / Save as PDF Contract &amp; Receipt</a>
         </div>
       </div>
     `;

@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rental Contract &amp; Receipt &bull; {{ b.booking_code }} &bull; Motorbike Rentals Camiguin</title>
+  <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg">
+  <style>
+    :root {
+      --primary: #0f2b3a;
+      --accent: #ff6b35;
+      --text: #0f172a;
+      --muted: #475569;
+      --border: #cbd5e1;
+      --bg: #f8fafc;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text);
+      background: #e2e8f0;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .no-print-bar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: #0f2b3a;
+      color: #fff;
+      padding: 12px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .no-print-bar a {
+      color: #fff;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .print-actions {
+      display: flex;
+      gap: 10px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      text-decoration: none;
+    }
+    .btn-primary { background: #ff6b35; color: #fff; }
+    .btn-outline { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.4); }
+
+    .doc-page {
+      max-width: 820px;
+      margin: 24px auto;
+      background: #fff;
+      padding: 32px 36px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      border-radius: 8px;
+    }
+
+    .doc-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2px solid var(--primary);
+      padding-bottom: 16px;
+      margin-bottom: 20px;
+      gap: 16px;
+    }
+    .doc-brand h1 {
+      margin: 0 0 4px;
+      font-size: 1.35rem;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .doc-brand p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .doc-shop-info {
+      text-align: right;
+      font-size: 0.85rem;
+    }
+    .doc-shop-info strong {
+      font-size: 1rem;
+      color: var(--primary);
+      display: block;
+    }
+
+    .doc-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+      background: #f1f5f9;
+      padding: 10px 14px;
+      border-radius: 6px;
+    }
+    .doc-title-row h2 {
+      margin: 0;
+      font-size: 1rem;
+      color: var(--primary);
+      letter-spacing: 0.5px;
+    }
+    .doc-ref-badge {
+      font-weight: 700;
+      color: #ff6b35;
+      font-size: 1rem;
+    }
+
+    .doc-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .doc-panel {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      background: #fafafa;
+    }
+    .doc-panel-title {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 8px;
+      border-bottom: 1px dashed var(--border);
+      padding-bottom: 4px;
+    }
+    .doc-kv-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      font-size: 0.85rem;
+    }
+    .doc-kv-row span:first-child { color: var(--muted); }
+    .doc-kv-row span:last-child { font-weight: 600; text-align: right; }
+
+    table.calc-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 18px;
+      font-size: 0.85rem;
+    }
+    table.calc-table th {
+      background: #f1f5f9;
+      color: var(--primary);
+      text-align: left;
+      padding: 8px 10px;
+      border-bottom: 2px solid var(--border);
+    }
+    table.calc-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    table.calc-table tr.total-row td {
+      font-size: 0.95rem;
+      font-weight: 700;
+      border-top: 2px solid var(--border);
+      border-bottom: 2px solid var(--border);
+      background: #f8fafc;
+    }
+    table.calc-table tr.balance-row td {
+      font-size: 1rem;
+      font-weight: 800;
+      background: #ecfdf5;
+      color: #065f46;
+      border-bottom: 2px solid #a7f3d0;
+    }
+
+    .terms-box {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      background: #fff;
+      font-size: 0.8rem;
+      line-height: 1.4;
+      color: #334155;
+      margin-bottom: 18px;
+    }
+    .terms-box h4 {
+      margin: 0 0 6px;
+      font-size: 0.85rem;
+      color: var(--primary);
+      text-transform: uppercase;
+    }
+    .terms-box ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+    .terms-box li {
+      margin-bottom: 3px;
+    }
+
+    .proof-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .proof-card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      text-align: center;
+      background: #f8fafc;
+    }
+    .proof-card img {
+      max-width: 100%;
+      max-height: 140px;
+      object-fit: contain;
+      border-radius: 4px;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+    }
+
+    .sign-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+      margin-top: 24px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+    .sign-box {
+      text-align: center;
+      font-size: 0.82rem;
+    }
+    .sign-line {
+      border-top: 1px solid var(--text);
+      margin-top: 48px;
+      padding-top: 4px;
+      font-weight: 600;
+    }
+
+    .doc-footer {
+      margin-top: 24px;
+      border-top: 1px dashed var(--border);
+      padding-top: 10px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    @media print {
+      body { background: #fff !important; }
+      .no-print-bar { display: none !important; }
+      .doc-page {
+        box-shadow: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        max-width: 100% !important;
+        border-radius: 0 !important;
+      }
+      @page {
+        size: A4 portrait;
+        margin: 10mm 12mm;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="no-print-bar">
+    <div>
+      <a href="/customer">&larr; Back to Booking Lookup</a>
+    </div>
+    <div class="print-actions">
+      <button type="button" class="btn btn-outline" onclick="window.print()">🖨️ Print / Save as PDF</button>
+    </div>
+  </div>
+
+  <main class="doc-page">
+    <header class="doc-header">
+      <div class="doc-brand">
+        <h1>Motorbike Rentals Camiguin</h1>
+        <p>Camiguin Island, Philippines &bull; motorbikerentalscamiguin.ph</p>
+      </div>
+      <div class="doc-shop-info">
+        <strong>{{ b.shop_name or "Official Partner Shop" }}</strong>
+        <div>{{ b.shop_address or b.shop_municipality or "Camiguin Island" }}</div>
+        {% if b.shop_phone %}<div>📞 {{ b.shop_phone }}</div>{% endif %}
+      </div>
+    </header>
+
+    <div class="doc-title-row">
+      <h2>OFFICIAL RENTAL CONTRACT &amp; PAYMENT RECEIPT</h2>
+      <div class="doc-ref-badge">#{{ b.booking_code }}</div>
+    </div>
+
+    <section class="doc-grid">
+      <div class="doc-panel">
+        <div class="doc-panel-title">1. Renter (Customer) Information</div>
+        <div class="doc-kv-row"><span>Full Name:</span> <span>{{ b.customer_name }}</span></div>
+        <div class="doc-kv-row"><span>Mobile / WhatsApp:</span> <span>{{ b.customer_phone }}</span></div>
+        <div class="doc-kv-row"><span>Driver's License #:</span> <span>{{ b.license_number }}</span></div>
+        {% if b.customer_address %}
+        <div class="doc-kv-row"><span>Renter Address:</span> <span>{{ b.customer_address }}</span></div>
+        {% endif %}
+        {% if b.customer_email %}
+        <div class="doc-kv-row"><span>Email:</span> <span>{{ b.customer_email }}</span></div>
+        {% endif %}
+      </div>
+
+      <div class="doc-panel">
+        <div class="doc-panel-title">2. Motorbike &amp; Rental Schedule</div>
+        <div class="doc-kv-row"><span>Motorbike:</span> <span>{{ b.bike_name }}</span></div>
+        <div class="doc-kv-row"><span>Category:</span> <span>{{ b.bike_category }} ({{ b.bike_transmission }})</span></div>
+        {% if b.plate_number %}
+        <div class="doc-kv-row"><span>Plate Number:</span> <span>{{ b.plate_number }}</span></div>
+        {% endif %}
+        <div class="doc-kv-row"><span>Pickup Date &amp; Time:</span> <span>{{ b.pickup_date }} &bull; {{ b.pickup_time }}</span></div>
+        <div class="doc-kv-row"><span>Return Date:</span> <span>{{ b.return_date }} ({{ b.rental_days }} day{{ 's' if b.rental_days > 1 else '' }})</span></div>
+        <div class="doc-kv-row"><span>Handover Location:</span> <span>{{ b.delivery_address if b.pickup_method == 'delivery' else 'Shop Pickup' }}</span></div>
+      </div>
+    </section>
+
+    <section>
+      <table class="calc-table">
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th style="text-align:right;">Amount ({{ b.currency }})</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Motorbike Rental ({{ b.rental_days }} day{{ 's' if b.rental_days > 1 else '' }} &bull; {{ b.bike_name }})</td>
+            <td style="text-align:right;">{{ b.currency }}{{ "%.2f"|format(b.base_subtotal) }}</td>
+          </tr>
+          {% if b.addons_total and b.addons_total > 0 %}
+          <tr>
+            <td>Add-ons (Helmets / Top Box)</td>
+            <td style="text-align:right;">{{ b.currency }}{{ "%.2f"|format(b.addons_total) }}</td>
+          </tr>
+          {% endif %}
+          {% if b.delivery_total and b.delivery_total > 0 %}
+          <tr>
+            <td>Island Delivery / Handover Fee</td>
+            <td style="text-align:right;">{{ b.currency }}{{ "%.2f"|format(b.delivery_total) }}</td>
+          </tr>
+          {% endif %}
+          <tr class="total-row">
+            <td><strong>TOTAL CONTRACT AMOUNT</strong></td>
+            <td style="text-align:right;"><strong>{{ b.currency }}{{ "%.2f"|format(b.total_amount) }}</strong></td>
+          </tr>
+          <tr>
+            <td>
+              Down Payment ({{ b.payment_channel or "Online" }})
+              {% if b.payment_reference %} &bull; Ref #: <code>{{ b.payment_reference }}</code>{% endif %}
+              &bull; Status: <strong>{{ b.payment_status or "Submitted" }}</strong>
+            </td>
+            <td style="text-align:right;color:#059669;">-{{ b.currency }}{{ "%.2f"|format(b.reservation_fee) }}</td>
+          </tr>
+          <tr class="balance-row">
+            <td><strong>BALANCE DUE UPON HANDOVER</strong></td>
+            <td style="text-align:right;"><strong>{{ b.currency }}{{ "%.2f"|format(b.balance_due) }}</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="terms-box">
+      <h4>📄 Rental Agreement Terms &amp; Conditions</h4>
+      {% if b.shop_contract_terms %}
+      <div style="white-space: pre-line; line-height: 1.45;">{{ b.shop_contract_terms }}</div>
+      {% else %}
+      <ul>
+        <li>Renter certifies holding a valid driver's license authorized for motorcycle riding in the Philippines.</li>
+        <li>Renter and backrider agree to wear approved safety helmets at all times on Camiguin roads.</li>
+        <li>The vehicle shall not be brought outside Camiguin Island.</li>
+        <li>Renter agrees to return the vehicle in the same condition as received, ordinary wear and tear excepted.</li>
+        <li>Loss, damage, and road traffic fines occurring during the rental period are the full responsibility of the renter.</li>
+      </ul>
+      {% endif %}
+    </section>
+
+    {% if b.license_photo_url or b.signature_url %}
+    <section class="proof-grid">
+      <div class="proof-card">
+        <strong style="display:block;margin-bottom:6px;font-size:0.8rem;">Driver's License Photo on File</strong>
+        {% if b.license_photo_url %}
+        <img src="{{ b.license_photo_url }}" alt="Driver's License">
+        {% else %}
+        <span class="text-muted">Verified physically upon handover</span>
+        {% endif %}
+      </div>
+      <div class="proof-card">
+        <strong style="display:block;margin-bottom:6px;font-size:0.8rem;">Renter Digital Signature</strong>
+        {% if b.signature_url %}
+        <img src="{{ b.signature_url }}" alt="Renter Signature">
+        {% if b.contract_signed_at %}
+        <div style="font-size:0.75rem;color:#64748b;margin-top:4px;">Signed: {{ b.contract_signed_at }}</div>
+        {% endif %}
+        {% else %}
+        <span class="text-muted">Signed physically upon handover</span>
+        {% endif %}
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="sign-section">
+      <div class="sign-box">
+        <div class="sign-line">{{ b.customer_name }}</div>
+        <div>Renter (Signature over Printed Name)</div>
+      </div>
+      <div class="sign-box">
+        <div class="sign-line">{{ b.shop_name or "Shop Representative" }}</div>
+        <div>Authorized Shop Representative</div>
+      </div>
+    </section>
+
+    <footer class="doc-footer">
+      Generated automatically by Motorbike Rentals Camiguin &bull; Booking Ref: {{ b.booking_code }} &bull; Print Date: {{ b.created_at or '' }}
+    </footer>
+  </main>
+
+</body>
+</html>
