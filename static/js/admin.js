@@ -390,9 +390,9 @@
         return `
           <div class="admin-booking-card" data-booking-id="${b.id}">
             <div class="admin-booking-top">
-              <div>
-                <strong>${escapeHtml(b.booking_code)}</strong> &bull;
-                <span>${escapeHtml(b.bike_name)}</span>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span class="badge badge-dark" style="font-family:ui-monospace,monospace;letter-spacing:0.02em;font-size:0.84rem;padding:4px 10px;">${escapeHtml(b.booking_code)}</span>
+                <strong style="font-size:1.02rem;color:var(--ink);">${escapeHtml(b.bike_name)}</strong>
                 <span class="badge badge-soft">${escapeHtml(b.shop_name || "Shop")}</span>
               </div>
               <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -405,22 +405,25 @@
               <div>
                 <span class="trip-detail-label">Customer</span>
                 <strong>${escapeHtml(b.customer_name)}</strong>
-                <div class="text-muted">${escapeHtml(b.customer_phone)}</div>
-                ${b.customer_address ? `<div class="text-muted">📍 ${escapeHtml(b.customer_address)}</div>` : ""}
+                <div class="text-muted" style="margin-top:2px;">${escapeHtml(b.customer_phone)}</div>
+                ${b.customer_address ? `<div class="text-muted" style="font-size:0.8rem;margin-top:2px;">📍 ${escapeHtml(b.customer_address)}</div>` : ""}
               </div>
               <div>
                 <span class="trip-detail-label">Dates</span>
                 <strong>${escapeHtml(b.pickup_date)} &rarr; ${escapeHtml(b.return_date)}</strong>
-                <div class="text-muted">${b.rental_days}d &bull; ${escapeHtml(b.pickup_time)}</div>
+                <div class="text-muted" style="margin-top:2px;">${b.rental_days}d &bull; ${escapeHtml(b.pickup_time)}</div>
               </div>
               <div>
                 <span class="trip-detail-label">Total</span>
-                <strong>${escapeHtml(formatMoney(b.total_amount))}</strong>
+                <strong style="color:var(--ink);">${escapeHtml(formatMoney(b.total_amount))}</strong>
               </div>
               <div>
                 <span class="trip-detail-label">Down Payment / Balance Due</span>
-                <strong>${escapeHtml(formatMoney(b.balance_due !== undefined && b.balance_due !== null ? b.balance_due : b.total_amount))}</strong> ${balanceBadge}
-                <div class="text-muted">${hasOnlineFee ? `${escapeHtml(payChannelLabel)}: ${escapeHtml(formatMoney(b.reservation_fee))}` : "Pay 100% at shop"}</div>
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                  <strong style="color:var(--primary-dark);">${escapeHtml(formatMoney(b.balance_due !== undefined && b.balance_due !== null ? b.balance_due : b.total_amount))}</strong>
+                  ${balanceBadge}
+                </div>
+                <div class="text-muted" style="font-size:0.78rem;margin-top:2px;">${hasOnlineFee ? `${escapeHtml(payChannelLabel)}: ${escapeHtml(formatMoney(b.reservation_fee))}` : "Pay 100% at shop"}</div>
               </div>
               <div>
                 <span class="trip-detail-label">License #</span>
@@ -428,17 +431,22 @@
               </div>
             </div>
 
-            ${b.status !== "cancelled" ? `<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button type="button" class="btn btn-sm btn-primary" data-call-booking="${escapeHtml(b.booking_code)}" data-call-name="${escapeHtml(b.customer_name)}" data-call-tel="${escapeHtml(b.customer_phone)}">📞 Call Customer (in app)</button><a href="/bookings/${encodeURIComponent(b.booking_code)}/contract" target="_blank" rel="noopener" class="btn btn-sm btn-outline">🖨️ Print Contract &amp; Receipt</a></div>` : ""}
-            ${(b.payment_reference || b.payment_proof_url) ? `<div class="text-muted"><strong>Payment Proof:</strong> ${escapeHtml(payChannelLabel)}${b.payment_reference ? ` &bull; Ref # ${escapeHtml(b.payment_reference)}` : ""}${b.payment_proof_url ? ` &bull; <a href="${escapeHtml(b.payment_proof_url)}" target="_blank" rel="noopener" class="payment-proof-link">View Receipt Screenshot</a>` : ""}</div>` : ""}
-            ${b.delivery_address ? `<div class="text-muted"><strong>Delivery to:</strong> ${escapeHtml(b.delivery_address)}${b.google_maps_url ? ` &bull; <a href="${escapeHtml(b.google_maps_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.75rem;display:inline-flex;align-items:center;gap:4px;">🗺️ Open GPS Navigation</a>` : ""}</div>` : ""}
-            ${b.contract_agreed || b.signature_url || b.license_photo_url ? `
-              <div class="contract-badge-row" style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:0.8rem;">
-                <span class="badge badge-verified">&#128221; Digital Contract Signed</span>
-                ${b.license_photo_url ? `<a href="${escapeHtml(b.license_photo_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.75rem;">&#129674; Driver's License Photo</a>` : ""}
-                ${b.signature_url ? `<a href="${escapeHtml(b.signature_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.75rem;">&#9997;&#65039; Signature</a>` : ""}
+            ${b.status !== "cancelled" ? `
+              <div style="margin:10px 0 6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                <button type="button" class="btn btn-sm btn-primary" data-call-booking="${escapeHtml(b.booking_code)}" data-call-name="${escapeHtml(b.customer_name)}" data-call-tel="${escapeHtml(b.customer_phone)}">📞 Call Customer (in app)</button>
+                <a href="/bookings/${encodeURIComponent(b.booking_code)}/contract" target="_blank" rel="noopener" class="btn btn-sm btn-outline">🖨️ Print Contract &amp; Receipt</a>
               </div>
             ` : ""}
-            ${b.notes ? `<div class="text-muted"><strong>Customer note:</strong> ${escapeHtml(b.notes)}</div>` : ""}
+            ${(b.payment_reference || b.payment_proof_url) ? `<div class="text-muted" style="margin-top:4px;font-size:0.84rem;"><strong>Payment Proof:</strong> ${escapeHtml(payChannelLabel)}${b.payment_reference ? ` &bull; Ref # ${escapeHtml(b.payment_reference)}` : ""}${b.payment_proof_url ? ` &bull; <a href="${escapeHtml(b.payment_proof_url)}" target="_blank" rel="noopener" class="payment-proof-link">View Receipt Screenshot</a>` : ""}</div>` : ""}
+            ${b.delivery_address ? `<div class="text-muted" style="margin-top:4px;font-size:0.84rem;"><strong>Delivery to:</strong> ${escapeHtml(b.delivery_address)}${b.google_maps_url ? ` &bull; <a href="${escapeHtml(b.google_maps_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.75rem;display:inline-flex;align-items:center;gap:4px;">🗺️ Open GPS Navigation</a>` : ""}</div>` : ""}
+            ${b.contract_agreed || b.signature_url || b.license_photo_url ? `
+              <div class="contract-badge-row" style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:0.8rem;">
+                <span class="badge badge-verified">&#128221; Digital Contract Signed</span>
+                ${b.license_photo_url ? `<a href="${escapeHtml(b.license_photo_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline" style="padding:3px 10px;font-size:0.76rem;">&#129674; Driver's License Photo</a>` : ""}
+                ${b.signature_url ? `<a href="${escapeHtml(b.signature_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline" style="padding:3px 10px;font-size:0.76rem;">&#9997;&#65039; Signature</a>` : ""}
+              </div>
+            ` : ""}
+            ${b.notes ? `<div class="text-muted" style="margin-top:6px;font-size:0.84rem;background:#f8fafc;padding:6px 10px;border-radius:8px;border:1px solid #f1f5f9;"><strong>Customer note:</strong> ${escapeHtml(b.notes)}</div>` : ""}
 
             <div class="admin-booking-actions">
               ${actions.join("")}
