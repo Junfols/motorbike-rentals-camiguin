@@ -633,14 +633,16 @@
             <label for="booking-pickup-method">Pickup Method *</label>
             <select id="booking-pickup-method" name="pickup_method">
               <option value="shop">Shop Pickup (Free)</option>
-              <option id="delivery-option-label" value="delivery">Resort / Port Delivery (+{{ shop.currency }}{{ shop.delivery_fee }})</option>
+              <option id="delivery-option-benoni" value="benoni_port">Benoni Port (+₱200)</option>
+              <option id="delivery-option-airport" value="airport">Camiguin Airport (Free)</option>
+              <option id="delivery-option-mambajao" value="around_mambajao">Around Mambajao (Free)</option>
             </select>
           </div>
         </div>
 
         <div id="delivery-address-group" class="form-group hidden">
-          <label for="booking-delivery-address">Delivery Address (Resort / Port / Airport) *</label>
-          <input type="text" id="booking-delivery-address" name="delivery_address" placeholder="e.g., Paras Beach Resort / Benoni Port / Balbagon Port">
+          <label for="booking-delivery-address" id="delivery-address-label">Delivery Address / Handover Details *</label>
+          <input type="text" id="booking-delivery-address" name="delivery_address" placeholder="e.g., Resort name / Benoni Port / Airport flight details">
           <input type="hidden" id="booking-delivery-lat" name="delivery_lat">
           <input type="hidden" id="booking-delivery-lng" name="delivery_lng">
 

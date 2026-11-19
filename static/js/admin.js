@@ -411,7 +411,17 @@
               <div>
                 <span class="trip-detail-label">Dates</span>
                 <strong>${escapeHtml(b.pickup_date)} &rarr; ${escapeHtml(b.return_date)}</strong>
-                <div class="text-muted" style="margin-top:2px;">${b.rental_days}d &bull; ${escapeHtml(b.pickup_time)}</div>
+                <div class="text-muted" style="margin-top:2px;">${b.rental_days}d &bull; ${escapeHtml(b.pickup_time)} &bull; <span style="font-weight:600;">${
+                  b.pickup_method === "benoni_port"
+                    ? "🚢 Benoni Port (+₱200)"
+                    : b.pickup_method === "airport"
+                    ? "✈️ Airport (Free)"
+                    : (b.pickup_method === "around_mambajao" || b.pickup_method === "mambajao")
+                    ? "🌴 Around Mambajao (Free)"
+                    : b.pickup_method === "delivery"
+                    ? "🚚 Delivery"
+                    : "🏪 Shop Pickup"
+                }</span></div>
               </div>
               <div>
                 <span class="trip-detail-label">Total</span>

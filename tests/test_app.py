@@ -2677,6 +2677,126 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         home_html = self.client.get("/").get_data(as_text=True)
         self.assertIn("/static/js/push.js", home_html)
 
+    def test_pickup_methods_benoni_airport_and_around_mambajao(self):
+        # 1. Homepage contains the new pickup method select options
+        index_html = self.client.get("/").get_data(as_text=True)
+        self.assertIn('value="benoni_port">Benoni Port (+₱200)</option>', index_html)
+        self.assertIn('value="airport">Camiguin Airport (Free)</option>', index_html)
+        self.assertIn('value="around_mambajao">Around Mambajao (Free)</option>', index_html)
+
+        # 2. Get a bike (e.g. Honda Click 125i @ 450/day)
+        click_bike = self.client.get("/api/bikes?category=Scooter").get_json()["bikes"][0]
+        p = self._future_str(1)
+        r = self._future_str(2) # 1 day rental = 450.0
+
+        # Quote: benoni_port adds exactly 200 fee
+        q_benoni = self.client.get(
+            f"/api/quote?bike_id={click_bike['id']}&pickup_date={p}&return_date={r}&pickup_method=benoni_port"
+        ).get_json()["quote"]
+        self.assertEqual(q_benoni["delivery_total"], 200.0)
+        self.assertEqual(q_benoni["total_amount"], 650.0)
+
+        # Quote: airport is FREE (0 fee)
+        q_airport = self.client.get(
+            f"/api/quote?bike_id={click_bike['id']}&pickup_date={p}&return_date={r}&pickup_method=airport"
+        ).get_json()["quote"]
+        self.assertEqual(q_airport["delivery_total"], 0.0)
+        self.assertEqual(q_airport["total_amount"], 450.0)
+
+        # Quote: around_mambajao is FREE (0 fee)
+        q_mambajao = self.client.get(
+            f"/api/quote?bike_id={click_bike['id']}&pickup_date={p}&return_date={r}&pickup_method=around_mambajao"
+        ).get_json()["quote"]
+        self.assertEqual(q_mambajao["delivery_total"], 0.0)
+        self.assertEqual(q_mambajao["total_amount"], 450.0)
+
+        # 3. Create booking with Benoni Port
+        p_b = self._future_str(12)
+        r_b = self._future_str(14) # 2 days = 900 + 200 = 1100
+        b_res = self.client.post(
+            "/api/bookings",
+            json={
+                "bike_id": click_bike["id"],
+                "pickup_date": p_b,
+                "return_date": r_b,
+                "pickup_time": "10:00",
+                "customer_name": "Maria Ferry",
+                "customer_phone": "09179988776",
+                "license_number": "D02-11-223344",
+                "pickup_method": "benoni_port",
+            },
+        )
+        self.assertEqual(b_res.status_code, 201)
+        b_data = b_res.get_json()["booking"]
+        self.assertEqual(b_data["pickup_method"], "benoni_port")
+        self.assertEqual(b_data["delivery_total"], 200.0)
+        self.assertEqual(b_data["total_amount"], 1100.0)
+        self.assertEqual(b_data["delivery_address"], "Benoni Port, Mahinog")
+        self.assertEqual(b_data["delivery_lat"], 9.1306)
+        self.assertEqual(b_data["delivery_lng"], 124.7937)
+
+        # 4. Create booking with Airport
+        p_a = self._future_str(15)
+        r_a = self._future_str(16)
+        a_res = self.client.post(
+            "/api/bookings",
+            json={
+                "bike_id": click_bike["id"],
+                "pickup_date": p_a,
+                "return_date": r_a,
+                "customer_name": "Pedro Flight",
+                "customer_phone": "09187766554",
+                "license_number": "D02-11-556677",
+                "pickup_method": "airport",
+            },
+        )
+        self.assertEqual(a_res.status_code, 201)
+        a_data = a_res.get_json()["booking"]
+        self.assertEqual(a_data["pickup_method"], "airport")
+        self.assertEqual(a_data["delivery_total"], 0.0)
+        self.assertEqual(a_data["total_amount"], 450.0)
+        self.assertEqual(a_data["delivery_address"], "Camiguin Airport, Mambajao")
+        self.assertEqual(a_data["delivery_lat"], 9.2530)
+        self.assertEqual(a_data["delivery_lng"], 124.7061)
+
+        # 5. Create booking with Around Mambajao requires address
+        p_m = self._future_str(17)
+        r_m = self._future_str(18)
+        m_err = self.client.post(
+            "/api/bookings",
+            json={
+                "bike_id": click_bike["id"],
+                "pickup_date": p_m,
+                "return_date": r_m,
+                "customer_name": "Ana Resort",
+                "customer_phone": "09191122334",
+                "license_number": "D02-11-889900",
+                "pickup_method": "around_mambajao",
+            },
+        )
+        self.assertEqual(m_err.status_code, 400)
+        self.assertIn("resort", m_err.get_json()["error"])
+
+        m_ok = self.client.post(
+            "/api/bookings",
+            json={
+                "bike_id": click_bike["id"],
+                "pickup_date": p_m,
+                "return_date": r_m,
+                "customer_name": "Ana Resort",
+                "customer_phone": "09191122334",
+                "license_number": "D02-11-889900",
+                "pickup_method": "around_mambajao",
+                "delivery_address": "Paras Beach Resort, Yumbing",
+            },
+        )
+        self.assertEqual(m_ok.status_code, 201)
+        m_data = m_ok.get_json()["booking"]
+        self.assertEqual(m_data["pickup_method"], "around_mambajao")
+        self.assertEqual(m_data["delivery_total"], 0.0)
+        self.assertEqual(m_data["total_amount"], 450.0)
+        self.assertEqual(m_data["delivery_address"], "Paras Beach Resort, Yumbing")
+
 
 if __name__ == "__main__":
     unittest.main()

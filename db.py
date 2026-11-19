@@ -1357,7 +1357,21 @@ def calculate_quote(
 
     addons_per_day = (helmet_fee if extra_helmet else 0.0) + (top_box_fee if top_box else 0.0)
     addons_total = rental_days * addons_per_day
-    delivery_total = delivery_fee if pickup_method == "delivery" else 0.0
+
+    pickup_method_clean = (pickup_method or "shop").strip().lower()
+    if pickup_method_clean == "benoni_port":
+        delivery_fee_rate = 200.0
+        delivery_total = 200.0
+    elif pickup_method_clean in ("airport", "around_mambajao", "mambajao", "shop"):
+        delivery_fee_rate = 0.0
+        delivery_total = 0.0
+    elif pickup_method_clean == "delivery":
+        delivery_fee_rate = delivery_fee
+        delivery_total = delivery_fee
+    else:
+        delivery_fee_rate = 0.0
+        delivery_total = 0.0
+
     total_amount = round(base_subtotal + addons_total + delivery_total, 2)
 
     # Platform fee was removed: shops keep 100% of every booking.
@@ -1390,8 +1404,9 @@ def calculate_quote(
         "base_subtotal": round(base_subtotal, 2),
         "discount_saved": round(discount_saved, 2),
         "addons_total": round(addons_total, 2),
-        "delivery_fee_rate": round(delivery_fee, 2),
+        "delivery_fee_rate": round(delivery_fee_rate, 2),
         "delivery_total": round(delivery_total, 2),
+        "pickup_method": pickup_method_clean,
         "total_amount": total_amount,
         "commission_rate": round(commission_rate, 2),
         "platform_fee": platform_fee,

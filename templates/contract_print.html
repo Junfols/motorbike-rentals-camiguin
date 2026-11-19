@@ -327,7 +327,7 @@
         {% endif %}
         <div class="doc-kv-row"><span>Pickup Date &amp; Time:</span> <span>{{ b.pickup_date }} &bull; {{ b.pickup_time }}</span></div>
         <div class="doc-kv-row"><span>Return Date:</span> <span>{{ b.return_date }} ({{ b.rental_days }} day{{ 's' if b.rental_days > 1 else '' }})</span></div>
-        <div class="doc-kv-row"><span>Handover Location:</span> <span>{{ b.delivery_address if b.pickup_method == 'delivery' else 'Shop Pickup' }}</span></div>
+        <div class="doc-kv-row"><span>Handover Location:</span> <span>{{ b.delivery_address if b.delivery_address else ('Shop Pickup' if b.pickup_method == 'shop' else (b.pickup_method|replace('_', ' ')|title)) }}</span></div>
       </div>
     </section>
 
