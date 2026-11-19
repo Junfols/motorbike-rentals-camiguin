@@ -1093,12 +1093,6 @@
           </div>
         `;
       }
-      linesHtml += `
-        <div class="quote-line deposit">
-          <span>Refundable Security Deposit (paid at pickup)</span>
-          <span>${escapeHtml(formatMoney(q.deposit_amount))}</span>
-        </div>
-      `;
       quoteLines.innerHTML = linesHtml;
       syncPaymentChannelUi(false);
     } catch (_) {
@@ -2044,6 +2038,7 @@
         top_box: topBoxCheckbox.checked,
         customer_name: document.getElementById("booking-customer-name").value.trim(),
         customer_phone: document.getElementById("booking-customer-phone").value.trim(),
+        customer_address: document.getElementById("booking-customer-address")?.value.trim() || "",
         license_number: document.getElementById("booking-license-number").value.trim(),
         customer_email: document.getElementById("booking-customer-email").value.trim(),
         notes: document.getElementById("booking-notes").value.trim(),
@@ -2173,12 +2168,12 @@
     document.getElementById("confirm-summary").innerHTML = `
       <div><strong>Rental Shop:</strong> ${escapeHtml(booking.shop_name || "Verified Partner")} (${escapeHtml(booking.shop_municipality || "Camiguin")})</div>
       <div><strong>Motorbike:</strong> ${escapeHtml(booking.bike_name)}</div>
+      ${booking.customer_address ? `<div><strong>Address:</strong> ${escapeHtml(booking.customer_address)}</div>` : ""}
       <div><strong>Dates:</strong> ${escapeHtml(booking.pickup_date)} to ${escapeHtml(booking.return_date)} (${booking.rental_days} day(s))</div>
       <div><strong>Pickup:</strong> ${escapeHtml(booking.pickup_time)} &bull; ${booking.pickup_method === "delivery" ? `Delivery (${escapeHtml(booking.delivery_address)})` : "Shop Pickup"}</div>
       <div><strong>Total Rental:</strong> ${escapeHtml(formatMoney(booking.total_amount))}</div>
       ${Number(booking.reservation_fee || 0) > 0 ? `<div><strong>Down Payment (${escapeHtml((booking.payment_channel || "gcash").toUpperCase())}):</strong> ${escapeHtml(formatMoney(booking.reservation_fee))} (${escapeHtml(paymentStatusLabel(booking.payment_status))})${booking.payment_reference ? ` &bull; Ref # ${escapeHtml(booking.payment_reference)}` : ""}</div>` : ""}
       <div><strong>Balance Due on Pickup:</strong> ${escapeHtml(formatMoney(booking.balance_due !== undefined && booking.balance_due !== null ? booking.balance_due : booking.total_amount))}</div>
-      <div><strong>Refundable Deposit:</strong> ${escapeHtml(formatMoney(booking.deposit_amount))}</div>
       <div><strong>Status:</strong> <span class="badge badge-pending">Pending Shop Confirmation</span></div>
     `;
 

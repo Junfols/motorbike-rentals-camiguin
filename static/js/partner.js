@@ -401,6 +401,7 @@
                 <span class="trip-detail-label">Rider</span>
                 <strong>${escapeHtml(b.customer_name)}</strong>
                 <div class="text-muted">${escapeHtml(b.customer_phone)}</div>
+                ${b.customer_address ? `<div class="text-muted">📍 ${escapeHtml(b.customer_address)}</div>` : ""}
               </div>
               <div>
                 <span class="trip-detail-label">Dates</span>
@@ -413,9 +414,9 @@
                 <div class="text-muted">Fee: -${escapeHtml(formatMoney(b.platform_fee))} &bull; Net: ${escapeHtml(formatMoney(b.shop_payout))}</div>
               </div>
               <div>
-                <span class="trip-detail-label">Collect on Pickup / Deposit</span>
+                <span class="trip-detail-label">Collect on Pickup</span>
                 <strong>${escapeHtml(formatMoney(collectDue))}</strong> ${balanceBadge}
-                <div class="text-muted">${hasOnlineFee && payStatus !== "rejected" && payStatus !== "refunded" ? `Paid online: -${escapeHtml(formatMoney(b.reservation_fee))} (${escapeHtml(payChannelLabel)})` : "Full rental due"} &bull; Dep: ${escapeHtml(formatMoney(b.deposit_amount))}</div>
+                <div class="text-muted">${hasOnlineFee && payStatus !== "rejected" && payStatus !== "refunded" ? `Paid online: -${escapeHtml(formatMoney(b.reservation_fee))} (${escapeHtml(payChannelLabel)})` : "Full rental due"}</div>
               </div>
               <div>
                 <span class="trip-detail-label">License #</span>
