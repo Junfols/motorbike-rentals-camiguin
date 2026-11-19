@@ -115,10 +115,12 @@
 
     lookupResult.innerHTML = `
       <div class="trip-card">
-        <div class="trip-card-head">
+        <div class="trip-card-head" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border-soft);">
           <div>
-            <span class="text-muted">Booking Reference</span>
-            <h3 style="margin:2px 0 0;">${escapeHtml(b.booking_code)}</h3>
+            <span class="trip-detail-label">Booking Reference</span>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;">
+              <span class="badge badge-dark" style="font-family:ui-monospace,monospace;letter-spacing:0.02em;font-size:0.95rem;padding:4px 12px;">${escapeHtml(b.booking_code)}</span>
+            </div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
             ${(Number(b.reservation_fee || 0) > 0 || (b.payment_status && b.payment_status !== "unpaid")) ? `<span class="badge badge-${escapeHtml(b.payment_status || "unpaid")}">${escapeHtml(window.MotoRide && window.MotoRide.paymentStatusLabel ? window.MotoRide.paymentStatusLabel(b.payment_status) : (b.payment_status || "unpaid"))}</span>` : ""}
@@ -127,12 +129,12 @@
         </div>
 
         <div class="trip-bike-row">
-          <img src="${escapeHtml(b.bike_image || "/static/images/bike-click125.jpg")}" alt="${escapeHtml(b.bike_name)}" class="trip-bike-thumb">
+          <img src="${escapeHtml(b.bike_image || "/static/images/bike-click125.jpg")}" alt="${escapeHtml(b.bike_name)}" class="trip-bike-thumb" style="border-radius:14px;border:1px solid var(--border-soft);box-shadow:var(--shadow-xs);">
           <div>
-            <strong>${escapeHtml(b.bike_name)}</strong>
-            <div class="text-muted">${escapeHtml(b.bike_category || "")} &bull; ${escapeHtml(b.bike_transmission || "")}</div>
-            ${b.shop_name ? `<div class="text-muted"><strong>Shop:</strong> ${escapeHtml(b.shop_name)} (${escapeHtml(b.shop_municipality || "")})</div>` : ""}
-            ${b.plate_number ? `<div class="text-muted">Plate / Unit: ${escapeHtml(b.plate_number)}</div>` : ""}
+            <strong style="font-size:1.05rem;color:var(--ink);">${escapeHtml(b.bike_name)}</strong>
+            <div class="text-muted" style="margin-top:2px;">${escapeHtml(b.bike_category || "")} &bull; ${escapeHtml(b.bike_transmission || "")}</div>
+            ${b.shop_name ? `<div class="text-muted" style="margin-top:2px;"><strong>Shop:</strong> ${escapeHtml(b.shop_name)} (${escapeHtml(b.shop_municipality || "")})</div>` : ""}
+            ${b.plate_number ? `<div class="text-muted" style="margin-top:2px;">Plate / Unit: ${escapeHtml(b.plate_number)}</div>` : ""}
           </div>
         </div>
 
