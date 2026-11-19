@@ -60,6 +60,7 @@ from db import (
     verify_admin_password,
     verify_shop_password,
 )
+from calls import register_call_routes
 from icons import ensure_icons
 from notifications import (
     dispatch_background,
@@ -3537,6 +3538,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
         ok_any = any(item.get("ok") for item in results.values())
         return jsonify({"ok": ok_any, "results": results}), (200 if ok_any else 400)
+
+    register_call_routes(app, get_db)
 
     return app
 

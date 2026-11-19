@@ -449,6 +449,23 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             is_approved INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS booking_calls (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+            booking_code TEXT NOT NULL,
+            shop_id INTEGER NOT NULL,
+            caller_role TEXT NOT NULL,
+            caller_name TEXT NOT NULL DEFAULT '',
+            callee_name TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'ringing',
+            offer_sdp TEXT NOT NULL DEFAULT '',
+            answer_sdp TEXT NOT NULL DEFAULT '',
+            caller_candidates TEXT NOT NULL DEFAULT '[]',
+            callee_candidates TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
         """
     )
 
@@ -590,6 +607,24 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
             created_at TEXT NOT NULL
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS booking_calls (
+            id SERIAL PRIMARY KEY,
+            booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+            booking_code TEXT NOT NULL,
+            shop_id INTEGER NOT NULL,
+            caller_role TEXT NOT NULL,
+            caller_name TEXT NOT NULL DEFAULT '',
+            callee_name TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'ringing',
+            offer_sdp TEXT NOT NULL DEFAULT '',
+            answer_sdp TEXT NOT NULL DEFAULT '',
+            caller_candidates TEXT NOT NULL DEFAULT '[]',
+            callee_candidates TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """,
     ]
     for stmt in statements:
         conn.execute(stmt)
@@ -606,6 +641,7 @@ def _create_indexes(conn: DatabaseConnection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_reviews_bike ON reviews (bike_id, is_approved)",
         "CREATE INDEX IF NOT EXISTS idx_reviews_shop ON reviews (shop_id, is_approved)",
         "CREATE INDEX IF NOT EXISTS idx_reviews_booking ON reviews (booking_id)",
+        "CREATE INDEX IF NOT EXISTS idx_booking_calls_status ON booking_calls (status, shop_id, booking_code)",
     ]
     for idx in indexes:
         conn.execute(idx)
@@ -832,7 +868,7 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                     "ALTER TABLE bookings ADD COLUMN customer_address TEXT NOT NULL DEFAULT ''"
                 )
 
-            # Ensure reviews table exists in existing database
+            # Ensure reviews and booking_calls tables exist in existing database
             if conn.backend == "postgresql":
                 conn.execute(
                     """
@@ -849,6 +885,26 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                     )
                     """
                 )
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS booking_calls (
+                        id SERIAL PRIMARY KEY,
+                        booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+                        booking_code TEXT NOT NULL,
+                        shop_id INTEGER NOT NULL,
+                        caller_role TEXT NOT NULL,
+                        caller_name TEXT NOT NULL DEFAULT '',
+                        callee_name TEXT NOT NULL DEFAULT '',
+                        status TEXT NOT NULL DEFAULT 'ringing',
+                        offer_sdp TEXT NOT NULL DEFAULT '',
+                        answer_sdp TEXT NOT NULL DEFAULT '',
+                        caller_candidates TEXT NOT NULL DEFAULT '[]',
+                        callee_candidates TEXT NOT NULL DEFAULT '[]',
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                    """
+                )
             else:
                 conn.execute(
                     """
@@ -862,6 +918,26 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                         comment TEXT NOT NULL DEFAULT '',
                         is_approved INTEGER NOT NULL DEFAULT 1,
                         created_at TEXT NOT NULL
+                    )
+                    """
+                )
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS booking_calls (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+                        booking_code TEXT NOT NULL,
+                        shop_id INTEGER NOT NULL,
+                        caller_role TEXT NOT NULL,
+                        caller_name TEXT NOT NULL DEFAULT '',
+                        callee_name TEXT NOT NULL DEFAULT '',
+                        status TEXT NOT NULL DEFAULT 'ringing',
+                        offer_sdp TEXT NOT NULL DEFAULT '',
+                        answer_sdp TEXT NOT NULL DEFAULT '',
+                        caller_candidates TEXT NOT NULL DEFAULT '[]',
+                        callee_candidates TEXT NOT NULL DEFAULT '[]',
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
                     )
                     """
                 )

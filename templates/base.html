@@ -24,7 +24,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   {% block head_extra %}{% endblock %}
 </head>
-<body class="app-body">
+<body class="app-body" data-nav="{{ active_nav }}">
   <div id="offline-banner" class="offline-banner hidden" role="status">
     <span>Offline mode — showing cached fleet info. Connect to internet to submit new bookings.</span>
   </div>
@@ -264,6 +264,7 @@
 
   <script id="shop-config-data" type="application/json">{{ shop | tojson }}</script>
   <script src="/static/js/pwa.js?v=18"></script>
+  <script src="/static/js/calls.js?v=18"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
