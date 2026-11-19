@@ -50,6 +50,7 @@ from db import (
     get_settings,
     get_uploaded_media,
     init_db,
+    is_postgres_url,
     is_reservation_payment_configured,
     parse_iso_date,
     save_uploaded_media,
@@ -693,10 +694,11 @@ def create_app(test_config: dict | None = None) -> Flask:
     def bookings_page():
         return render_template("bookings.html", active_nav="customer")
 
+    @app.get("/shop")
     @app.get("/rider")
     @app.get("/partner")
     def partner_page():
-        return render_template("partner.html", active_nav="rider")
+        return render_template("partner.html", active_nav="shop")
 
     @app.get("/admin")
     def admin_page():
@@ -774,9 +776,9 @@ def create_app(test_config: dict | None = None) -> Flask:
                     "icons": [{"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"}],
                 },
                 {
-                    "name": "Partner Portal",
-                    "short_name": "Partner",
-                    "url": "/partner",
+                    "name": "Shop Portal",
+                    "short_name": "Shop",
+                    "url": "/shop",
                     "icons": [{"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"}],
                 },
             ],
