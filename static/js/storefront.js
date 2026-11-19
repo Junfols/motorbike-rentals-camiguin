@@ -123,10 +123,11 @@
     const hasMaya = Boolean(mayaNum);
     const mode = String((q && q.reservation_mode) || shop.reservation_mode || "required").toLowerCase();
     const percent = Number(
-      q && q.reservation_percent !== undefined ? q.reservation_percent : shop.reservation_percent || 10
+      q && q.reservation_percent !== undefined ? q.reservation_percent : shop.reservation_percent || 30
     );
     const isConfigured = Boolean((q && q.reservation_configured) || hasGcash || hasMaya);
     const fallbackDaily = state.currentBike ? Number(state.currentBike.daily_rate || 0) : 0;
+    const isFlat500 = Boolean(q && Number(q.rental_days || 1) >= 3);
     const feeAmount =
       q && Number(q.reservation_fee || 0) > 0
         ? Number(q.reservation_fee)
@@ -147,12 +148,14 @@
       paymentModePill.className = isReq ? "status-pill-inline ready" : "status-pill-inline muted";
     }
     if (paymentFeeBadge) {
-      paymentFeeBadge.textContent = `Pay Now (${percent}%): ${formatMoney(feeAmount)}`;
+      paymentFeeBadge.textContent = isFlat500
+        ? `Down Payment (3+ Days): ${formatMoney(feeAmount)}`
+        : `Down Payment (${percent}%): ${formatMoney(feeAmount)}`;
     }
     if (paymentInstructionsText) {
       paymentInstructionsText.textContent =
         (shop.payment_instructions || "").trim() ||
-        "Scan the QR code or send the reservation fee below, then enter your Reference No. before submitting.";
+        "Scan the QR code or send the down payment below, then enter your Reference No. before submitting.";
     }
 
     if (channelGcashWrap) channelGcashWrap.classList.toggle("hidden", !hasGcash);
@@ -1076,9 +1079,12 @@
         </div>
       `;
       if (q.reservation_mode !== "off" && q.reservation_configured && Number(q.reservation_fee || 0) > 0) {
+        const dpLabel = Number(q.rental_days || 1) >= 3
+          ? "Down Payment (3+ Days Flat Rate)"
+          : `Down Payment (${q.reservation_percent}% for 1–2 Days)`;
         linesHtml += `
           <div class="quote-line">
-            <span>Reservation Fee (${q.reservation_percent}% via GCash/Maya)</span>
+            <span>${escapeHtml(dpLabel)}</span>
             <span>${escapeHtml(formatMoney(q.reservation_fee))}</span>
           </div>
           <div class="quote-line">
@@ -2170,7 +2176,7 @@
       <div><strong>Dates:</strong> ${escapeHtml(booking.pickup_date)} to ${escapeHtml(booking.return_date)} (${booking.rental_days} day(s))</div>
       <div><strong>Pickup:</strong> ${escapeHtml(booking.pickup_time)} &bull; ${booking.pickup_method === "delivery" ? `Delivery (${escapeHtml(booking.delivery_address)})` : "Shop Pickup"}</div>
       <div><strong>Total Rental:</strong> ${escapeHtml(formatMoney(booking.total_amount))}</div>
-      ${Number(booking.reservation_fee || 0) > 0 ? `<div><strong>Reservation Fee (${escapeHtml((booking.payment_channel || "gcash").toUpperCase())}):</strong> ${escapeHtml(formatMoney(booking.reservation_fee))} (${escapeHtml(paymentStatusLabel(booking.payment_status))})${booking.payment_reference ? ` &bull; Ref # ${escapeHtml(booking.payment_reference)}` : ""}</div>` : ""}
+      ${Number(booking.reservation_fee || 0) > 0 ? `<div><strong>Down Payment (${escapeHtml((booking.payment_channel || "gcash").toUpperCase())}):</strong> ${escapeHtml(formatMoney(booking.reservation_fee))} (${escapeHtml(paymentStatusLabel(booking.payment_status))})${booking.payment_reference ? ` &bull; Ref # ${escapeHtml(booking.payment_reference)}` : ""}</div>` : ""}
       <div><strong>Balance Due on Pickup:</strong> ${escapeHtml(formatMoney(booking.balance_due !== undefined && booking.balance_due !== null ? booking.balance_due : booking.total_amount))}</div>
       <div><strong>Refundable Deposit:</strong> ${escapeHtml(formatMoney(booking.deposit_amount))}</div>
       <div><strong>Status:</strong> <span class="badge badge-pending">Pending Shop Confirmation</span></div>
