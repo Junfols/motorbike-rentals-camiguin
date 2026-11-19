@@ -393,6 +393,7 @@ def _serialize_booking(row) -> dict:
         "customer_name": row["customer_name"],
         "customer_phone": row["customer_phone"],
         "customer_email": row["customer_email"],
+        "customer_address": (row["customer_address"] if "customer_address" in keys else "") or "",
         "license_number": row["license_number"],
         "pickup_date": row["pickup_date"],
         "return_date": row["return_date"],
@@ -1122,6 +1123,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         customer_name = (payload.get("customer_name") or "").strip()
         customer_phone = (payload.get("customer_phone") or "").strip()
         customer_email = (payload.get("customer_email") or "").strip()
+        customer_address = (payload.get("customer_address") or "").strip()
         license_number = (payload.get("license_number") or "").strip()
         pickup_date = (payload.get("pickup_date") or "").strip()
         return_date = (payload.get("return_date") or "").strip()
@@ -1335,13 +1337,13 @@ def create_app(test_config: dict | None = None) -> Flask:
                 """
                 INSERT INTO bookings (
                     booking_code, bike_id, shop_id, customer_name, customer_phone, customer_email,
-                    license_number, pickup_date, return_date, pickup_time, pickup_method,
+                    customer_address, license_number, pickup_date, return_date, pickup_time, pickup_method,
                     delivery_address, delivery_lat, delivery_lng, extra_helmet, top_box, rental_days, base_subtotal,
                     addons_total, delivery_total, total_amount, commission_rate, platform_fee,
                     shop_payout, reservation_fee, balance_due, payment_channel, payment_reference,
                     payment_proof_url, payment_status, deposit_amount, notes, admin_notes, status,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'pending', ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'pending', ?, ?)
                 """,
                 (
                     booking_code,
@@ -1350,6 +1352,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                     customer_name,
                     customer_phone,
                     customer_email,
+                    customer_address,
                     license_number,
                     pickup_date,
                     return_date,
@@ -1870,7 +1873,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             engine_cc = int(data.get("engine_cc", existing["engine_cc"] if existing else 125))
             daily_rate = float(data.get("daily_rate", existing["daily_rate"] if existing else 0))
             weekly_rate = float(data.get("weekly_rate", existing["weekly_rate"] if existing else 0))
-            deposit = float(data.get("deposit", existing["deposit"] if existing else 1500))
+            deposit = float(data.get("deposit", existing["deposit"] if existing else 0))
             units_count = int(data.get("units_count", existing["units_count"] if existing else 1))
         except (TypeError, ValueError):
             raise ValueError("Engine CC, rates, deposit, and units must be valid numbers.")

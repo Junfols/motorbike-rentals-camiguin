@@ -379,6 +379,7 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             customer_name TEXT NOT NULL,
             customer_phone TEXT NOT NULL,
             customer_email TEXT NOT NULL DEFAULT '',
+            customer_address TEXT NOT NULL DEFAULT '',
             license_number TEXT NOT NULL,
             pickup_date TEXT NOT NULL,
             return_date TEXT NOT NULL,
@@ -515,6 +516,7 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
             customer_name TEXT NOT NULL,
             customer_phone TEXT NOT NULL,
             customer_email TEXT NOT NULL DEFAULT '',
+            customer_address TEXT NOT NULL DEFAULT '',
             license_number TEXT NOT NULL,
             pickup_date TEXT NOT NULL,
             return_date TEXT NOT NULL,
@@ -638,7 +640,7 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                 "extra_helmet_fee": "50",
                 "top_box_fee": "100",
                 "opening_hours": "Daily, 7:00 AM – 8:00 PM",
-                "terms_note": "Valid Driver's License required upon pickup. A refundable security deposit may be collected by the partner shop.",
+                "terms_note": "Valid Driver's License required upon pickup.",
                 "telegram_bot_token": os.environ.get("TELEGRAM_BOT_TOKEN", ""),
                 "admin_telegram_chat_id": os.environ.get("ADMIN_TELEGRAM_CHAT_ID", ""),
                 "admin_notify_email": os.environ.get("ADMIN_NOTIFY_EMAIL", ""),
@@ -824,6 +826,10 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
             if "contract_signed_at" not in booking_cols:
                 conn.execute(
                     "ALTER TABLE bookings ADD COLUMN contract_signed_at TEXT DEFAULT NULL"
+                )
+            if "customer_address" not in booking_cols:
+                conn.execute(
+                    "ALTER TABLE bookings ADD COLUMN customer_address TEXT NOT NULL DEFAULT ''"
                 )
 
             # Ensure reviews table exists in existing database

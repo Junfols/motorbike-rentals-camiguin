@@ -2384,6 +2384,8 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertIn('id="reviews-section"', index_html)
         self.assertIn('Verified Tourist Reviews', index_html)
         self.assertIn('bike-rating-pill', index_html)
+        self.assertIn('id="booking-customer-address"', index_html)
+        self.assertNotIn('id="modal-deposit-rate"', index_html)
 
         # 2. Test booking with Digital Contract, License Upload, and E-Signature
         png_1x1 = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
@@ -2394,6 +2396,7 @@ class MotorbikeRentalPWATests(unittest.TestCase):
             "customer_name": "Maria Tourist",
             "customer_phone": "09187654321",
             "customer_email": "maria@tourist.ph",
+            "customer_address": "Cagayan de Oro City",
             "license_number": "D02-24-998877",
             "pickup_date": self._future_str(2),
             "return_date": self._future_str(4),
@@ -2412,6 +2415,7 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         )
         self.assertEqual(booking_resp.status_code, 201)
         booking = booking_resp.get_json()["booking"]
+        self.assertEqual(booking["customer_address"], "Cagayan de Oro City")
         self.assertTrue(booking["contract_agreed"])
         self.assertIsNotNone(booking["contract_signed_at"])
         self.assertIsNotNone(booking["license_photo_url"])
@@ -2423,6 +2427,7 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         )
         self.assertEqual(lookup_resp.status_code, 200)
         lookup_booking = lookup_resp.get_json()["booking"]
+        self.assertEqual(lookup_booking["customer_address"], "Cagayan de Oro City")
         self.assertTrue(lookup_booking["contract_agreed"])
         self.assertEqual(lookup_booking["license_photo_url"], booking["license_photo_url"])
         self.assertEqual(lookup_booking["signature_url"], booking["signature_url"])

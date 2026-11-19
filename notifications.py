@@ -149,7 +149,8 @@ def format_new_booking_message(settings: dict, shop: dict, booking: dict) -> tup
         f"Add-ons: {addons_text}\n\n"
         f"Customer: {booking.get('customer_name')}\n"
         f"Phone: {booking.get('customer_phone')}\n"
-        f"License: {booking.get('license_number')}\n"
+        + (f"Address: {booking.get('customer_address')}\n" if booking.get("customer_address") else "")
+        + f"License: {booking.get('license_number')}\n"
         + (f"Notes: {booking.get('notes')}\n" if booking.get("notes") else "")
         + f"\nTotal: {cur}{float(booking.get('total_amount') or 0):,.2f}\n"
         + (
@@ -163,8 +164,7 @@ def format_new_booking_message(settings: dict, shop: dict, booking: dict) -> tup
         )
         + f"Platform Fee ({float(booking.get('commission_rate') or 0):g}%): "
         f"{cur}{float(booking.get('platform_fee') or 0):,.2f}\n"
-        f"Partner Net Payout: {cur}{float(booking.get('shop_payout') or 0):,.2f}\n"
-        f"Security Deposit: {cur}{float(booking.get('deposit_amount') or 0):,.2f}"
+        f"Partner Net Payout: {cur}{float(booking.get('shop_payout') or 0):,.2f}"
     )
     return subject, body
 
@@ -215,8 +215,7 @@ def notify_new_booking(settings: dict, shop: dict, booking: dict) -> dict:
                 f"Shop Contact: {shop.get('phone')}\n"
                 f"Dates: {booking.get('pickup_date')} to {booking.get('return_date')} "
                 f"({booking.get('rental_days')} day(s))\n"
-                f"Estimated Total: {cur}{float(booking.get('total_amount') or 0):,.2f}\n"
-                f"Security Deposit (at pickup): {cur}{float(booking.get('deposit_amount') or 0):,.2f}\n\n"
+                f"Estimated Total: {cur}{float(booking.get('total_amount') or 0):,.2f}\n\n"
                 f"Keep your Booking Code ({booking.get('booking_code')}) to check status anytime on My Bookings."
             )
             ok, detail = send_email_message(settings, cust_email, cust_subject, cust_body)

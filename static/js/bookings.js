@@ -158,17 +158,19 @@
             <strong>${escapeHtml(formatMoney(b.balance_due !== undefined && b.balance_due !== null ? b.balance_due : b.total_amount))}</strong>
             ${Number(b.reservation_fee || 0) > 0 ? `<div class="text-muted">Down payment: ${escapeHtml(formatMoney(b.reservation_fee))}</div>` : ""}
           </div>
+          ${b.customer_address ? `
           <div>
-            <span class="trip-detail-label">Security Deposit</span>
-            <strong>${escapeHtml(formatMoney(b.deposit_amount))}</strong>
+            <span class="trip-detail-label">Address</span>
+            <strong>${escapeHtml(b.customer_address)}</strong>
           </div>
+          ` : ""}
           <div>
             <span class="trip-detail-label">License #</span>
             <strong>${escapeHtml(b.license_number)}</strong>
           </div>
         </div>
 
-        ${(b.payment_reference || b.payment_proof_url) ? `<p class="text-muted"><strong>Reservation Payment:</strong> ${escapeHtml((b.payment_channel || "gcash").toUpperCase())}${b.payment_reference ? ` &bull; Ref # ${escapeHtml(b.payment_reference)}` : ""}${b.payment_proof_url ? ` &bull; <a href="${escapeHtml(b.payment_proof_url)}" target="_blank" rel="noopener" class="payment-proof-link">View Receipt</a>` : ""}</p>` : ""}
+        ${(b.payment_reference || b.payment_proof_url) ? `<p class="text-muted"><strong>Down Payment:</strong> ${escapeHtml((b.payment_channel || "gcash").toUpperCase())}${b.payment_reference ? ` &bull; Ref # ${escapeHtml(b.payment_reference)}` : ""}${b.payment_proof_url ? ` &bull; <a href="${escapeHtml(b.payment_proof_url)}" target="_blank" rel="noopener" class="payment-proof-link">View Receipt</a>` : ""}</p>` : ""}
         ${b.delivery_address ? `<p class="text-muted"><strong>Delivery Address:</strong> ${escapeHtml(b.delivery_address)}${b.google_maps_url ? ` &bull; <a href="${escapeHtml(b.google_maps_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.75rem;display:inline-flex;align-items:center;gap:4px;">🗺️ Open in Google Maps</a>` : ""}</p>` : ""}
         ${b.admin_notes ? `<div class="info-box"><h4>Shop Note</h4><p>${escapeHtml(b.admin_notes)}</p></div>` : ""}
 
@@ -218,7 +220,7 @@
             <span class="badge badge-verified">&#10003; Signed Digital Agreement</span>
           </div>
           <div style="margin-top:6px;font-size:0.85rem;color:#475569;">
-            <strong>Renter:</strong> ${escapeHtml(b.customer_name)} &bull; <strong>License:</strong> ${escapeHtml(b.license_number)}
+            <strong>Renter:</strong> ${escapeHtml(b.customer_name)} &bull; <strong>License:</strong> ${escapeHtml(b.license_number)}${b.customer_address ? ` &bull; <strong>Address:</strong> ${escapeHtml(b.customer_address)}` : ""}
             ${b.contract_signed_at ? `<br><strong>Signed At:</strong> ${escapeHtml(b.contract_signed_at)}` : ""}
           </div>
         </div>
@@ -229,7 +231,6 @@
             <li>Renter certifies holding a valid driver's license authorized for motorcycle riding in the Philippines.</li>
             <li>Renter and backrider agree to wear helmets at all times on Camiguin roads.</li>
             <li>The motorbike shall be kept on Camiguin Island during the entire rental period.</li>
-            <li>Security deposit will be refunded upon inspection and key return to ${escapeHtml(b.shop_name || "the partner shop")}.</li>
           </ul>
         </div>
 

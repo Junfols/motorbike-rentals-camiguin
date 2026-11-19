@@ -408,6 +408,7 @@
                 <span class="trip-detail-label">Customer</span>
                 <strong>${escapeHtml(b.customer_name)}</strong>
                 <div class="text-muted">${escapeHtml(b.customer_phone)}</div>
+                ${b.customer_address ? `<div class="text-muted">📍 ${escapeHtml(b.customer_address)}</div>` : ""}
               </div>
               <div>
                 <span class="trip-detail-label">Dates</span>
@@ -422,7 +423,7 @@
               <div>
                 <span class="trip-detail-label">Down Payment / Balance Due</span>
                 <strong>${escapeHtml(formatMoney(b.balance_due !== undefined && b.balance_due !== null ? b.balance_due : b.total_amount))}</strong> ${balanceBadge}
-                <div class="text-muted">${hasOnlineFee ? `${escapeHtml(payChannelLabel)}: ${escapeHtml(formatMoney(b.reservation_fee))}` : "Pay 100% at shop"} &bull; Dep: ${escapeHtml(formatMoney(b.deposit_amount))}</div>
+                <div class="text-muted">${hasOnlineFee ? `${escapeHtml(payChannelLabel)}: ${escapeHtml(formatMoney(b.reservation_fee))}` : "Pay 100% at shop"}</div>
               </div>
               <div>
                 <span class="trip-detail-label">License #</span>
