@@ -247,6 +247,10 @@
     document.getElementById("prof-delivery-fee").value = shop.delivery_fee ?? 250;
     document.getElementById("prof-address").value = shop.address || "";
     document.getElementById("prof-description").value = shop.description || "";
+    const profContractEl = document.getElementById("prof-contract-terms");
+    if (profContractEl) {
+      profContractEl.value = shop.contract_terms || shop.default_contract_terms || "";
+    }
   }
 
   async function checkSession() {
@@ -859,6 +863,19 @@
     }
   });
 
+  const resetContractBtn = document.getElementById("prof-reset-contract-btn");
+  if (resetContractBtn) {
+    resetContractBtn.addEventListener("click", () => {
+      const profContractEl = document.getElementById("prof-contract-terms");
+      if (!profContractEl) return;
+      const defaultTerms = (state.shop && state.shop.default_contract_terms) || "";
+      if (defaultTerms) {
+        profContractEl.value = defaultTerms;
+        showToast("Default Rental Form Agreement template loaded. Click 'Save Shop Profile' to apply.", "success");
+      }
+    });
+  }
+
   profileForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     profileError.classList.add("hidden");
@@ -873,6 +890,10 @@
       fd.append("delivery_fee", document.getElementById("prof-delivery-fee").value);
       fd.append("address", document.getElementById("prof-address").value.trim());
       fd.append("description", document.getElementById("prof-description").value.trim());
+      const profContractEl = document.getElementById("prof-contract-terms");
+      if (profContractEl) {
+        fd.append("contract_terms", profContractEl.value.trim());
+      }
       fd.append("current_password", document.getElementById("prof-current-password").value);
       fd.append("new_password", document.getElementById("prof-new-password").value);
       if (profLogoFile && profLogoFile.files && profLogoFile.files[0]) {

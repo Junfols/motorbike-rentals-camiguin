@@ -17,6 +17,30 @@ VALID_CATEGORIES = ("Scooter", "Maxi Scooter", "Adventure", "Big Bike")
 VALID_TRANSMISSIONS = ("Automatic", "Manual")
 CAMIGUIN_MUNICIPALITIES = ("Mambajao", "Catarman", "Sagay", "Guinsiliban", "Mahinog")
 
+DEFAULT_CONTRACT_TERMS = """RESPONSIBILITIES & LIABILITY:
+• I am responsible for any damages caused by myself or members of my party against people, equipment, and property. I understand that loss or damage to any part of the motor vehicle will require payment for replacement or repair fees.
+• I am aware of local laws; I am able and have a valid license to drive, and I take full responsibility for any loss or damage due to collision, accident, fire, flood, theft, or vandalism.
+• I am responsible for all fines and penalties for traffic law violations that occur during rental days.
+
+MINIMUM CHARGE FOR DAMAGE AND LOSS AS IT FOLLOWS:
+• ₱2,000.00 minimum fee for any crash, more for further damage
+• ₱1,000.00 helmet loss / broken
+• ₱500.00 helmet lock
+• ₱500.00 phone holder loss
+• ₱3,000.00 loss key
+
+ADDITIONAL CHARGES THAT APPLIED:
+• ₱100.00 transportation fee for motor vehicle
+• ₱200.00 service fee for returning vehicle without gas / not maintaining the exact gas level when rented at the beginning
+• ₱500.00 flat tire
+
+OTHER TERMS & REMINDERS:
+• The rental fee is for a 24-hour period ONLY unless additional charge is paid for extension.
+• Take a photo of any Valid ID / Driver's License.
+• No refund for motor rental payment.
+• Gas is Unleaded. Please provide Driver's License.
+• I fully understand the terms and conditions mentioned above."""
+
 MEDIA_MIME_TYPES = {
     "png": "image/png",
     "jpg": "image/jpeg",
@@ -318,6 +342,7 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             telegram_chat_id TEXT NOT NULL DEFAULT '',
             logo_url TEXT NOT NULL DEFAULT '',
             cover_url TEXT NOT NULL DEFAULT '',
+            contract_terms TEXT NOT NULL DEFAULT '',
             password_hash TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'pending',
             is_main INTEGER NOT NULL DEFAULT 0,
@@ -451,6 +476,7 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
             telegram_chat_id TEXT NOT NULL DEFAULT '',
             logo_url TEXT NOT NULL DEFAULT '',
             cover_url TEXT NOT NULL DEFAULT '',
+            contract_terms TEXT NOT NULL DEFAULT '',
             password_hash TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'pending',
             is_main INTEGER NOT NULL DEFAULT 0,
@@ -714,6 +740,8 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                 conn.execute("ALTER TABLE shops ADD COLUMN logo_url TEXT NOT NULL DEFAULT ''")
             if "cover_url" not in shop_cols:
                 conn.execute("ALTER TABLE shops ADD COLUMN cover_url TEXT NOT NULL DEFAULT ''")
+            if "contract_terms" not in shop_cols:
+                conn.execute("ALTER TABLE shops ADD COLUMN contract_terms TEXT NOT NULL DEFAULT ''")
 
             bike_cols = _table_columns(conn, "bikes")
             if "shop_id" not in bike_cols:

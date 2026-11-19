@@ -26,6 +26,7 @@ from db import (
     BASE_DIR,
     BLOCKING_STATUSES,
     CAMIGUIN_MUNICIPALITIES,
+    DEFAULT_CONTRACT_TERMS,
     DEFAULT_DB_PATH,
     VALID_BIKE_STATUSES,
     VALID_BOOKING_STATUSES,
@@ -151,6 +152,7 @@ def _save_validated_image(
 
 def _serialize_shop(row, include_private: bool = False) -> dict:
     keys = row.keys()
+    raw_contract = (row["contract_terms"] if "contract_terms" in keys else "") or ""
     data = {
         "id": row["id"],
         "shop_name": row["shop_name"],
@@ -163,6 +165,9 @@ def _serialize_shop(row, include_private: bool = False) -> dict:
         "whatsapp_number": row["whatsapp_number"],
         "logo_url": (row["logo_url"] if "logo_url" in keys else "") or "",
         "cover_url": (row["cover_url"] if "cover_url" in keys else "") or "",
+        "contract_terms": raw_contract.strip() or DEFAULT_CONTRACT_TERMS,
+        "custom_contract_terms": raw_contract.strip(),
+        "default_contract_terms": DEFAULT_CONTRACT_TERMS,
         "share_url": f"/shop/{row['slug']}",
         "status": row["status"],
         "is_main": bool(row["is_main"]),
@@ -191,6 +196,7 @@ def _serialize_bike(row, booked_units: int = 0, schedule: dict | None = None, ra
     available_units = max(0, units_count - booked_units) if row["status"] == "available" else 0
     r_avg = float(rating_stats.get("avg_rating", 5.0)) if rating_stats else (float(row["rating_avg"]) if "rating_avg" in keys and row["rating_avg"] is not None else 5.0)
     r_cnt = int(rating_stats.get("review_count", 0)) if rating_stats else (int(row["rating_count"]) if "rating_count" in keys and row["rating_count"] is not None else 0)
+    raw_shop_contract = (row["shop_contract_terms"] if "shop_contract_terms" in keys else "") or ""
     data = {
         "id": row["id"],
         "shop_id": int(row["shop_id"]),
@@ -205,6 +211,7 @@ def _serialize_bike(row, booked_units: int = 0, schedule: dict | None = None, ra
         "shop_delivery_fee": (
             float(row["shop_delivery_fee"] or 0) if "shop_delivery_fee" in keys else None
         ),
+        "shop_contract_terms": raw_shop_contract.strip() or DEFAULT_CONTRACT_TERMS,
         "shop_status": row["shop_status"] if "shop_status" in keys else None,
         "name": row["name"],
         "slug": row["slug"],
@@ -237,7 +244,8 @@ def _serialize_bike(row, booked_units: int = 0, schedule: dict | None = None, ra
 def _fetch_bike_with_shop(conn, bike_id: int):
     return conn.execute(
         "SELECT b.*, s.shop_name AS shop_name, s.slug AS shop_slug, s.logo_url AS shop_logo_url, "
-        "s.cover_url AS shop_cover_url, s.municipality AS shop_municipality, s.status AS shop_status "
+        "s.cover_url AS shop_cover_url, s.contract_terms AS shop_contract_terms, "
+        "s.municipality AS shop_municipality, s.status AS shop_status "
         "FROM bikes b JOIN shops s ON s.id = b.shop_id WHERE b.id = ?",
         (bike_id,),
     ).fetchone()
@@ -628,6 +636,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                    s.phone AS shop_phone,
                    s.whatsapp_number AS shop_whatsapp,
                    s.delivery_fee AS shop_delivery_fee,
+                   s.contract_terms AS shop_contract_terms,
                    s.status AS shop_status
             FROM bikes b
             JOIN shops s ON s.id = b.shop_id
@@ -910,6 +919,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                    s.phone AS shop_phone,
                    s.whatsapp_number AS shop_whatsapp,
                    s.delivery_fee AS shop_delivery_fee,
+                   s.contract_terms AS shop_contract_terms,
                    s.status AS shop_status
             FROM bikes b
             JOIN shops s ON s.id = b.shop_id
@@ -1004,6 +1014,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                    s.phone AS shop_phone,
                    s.whatsapp_number AS shop_whatsapp,
                    s.delivery_fee AS shop_delivery_fee,
+                   s.contract_terms AS shop_contract_terms,
                    s.status AS shop_status
             FROM bikes b
             JOIN shops s ON s.id = b.shop_id
@@ -2476,6 +2487,10 @@ def create_app(test_config: dict | None = None) -> Flask:
         description = (
             payload.get("description") if "description" in payload else shop["description"]
         ).strip()
+        existing_contract = (shop["contract_terms"] if "contract_terms" in shop.keys() else "") or ""
+        contract_terms = (
+            (payload.get("contract_terms") if "contract_terms" in payload else existing_contract) or ""
+        ).strip()
 
         if not shop_name or not owner_name:
             return jsonify({"error": "Shop name and owner name are required."}), 400
@@ -2535,7 +2550,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                 UPDATE shops SET
                     shop_name = ?, slug = ?, owner_name = ?, phone = ?, whatsapp_number = ?,
                     telegram_chat_id = ?, municipality = ?, address = ?, description = ?, delivery_fee = ?,
-                    logo_url = ?, cover_url = ?, password_hash = ?
+                    logo_url = ?, cover_url = ?, contract_terms = ?, password_hash = ?
                 WHERE id = ?
                 """,
                 (
@@ -2551,6 +2566,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                     delivery_fee,
                     logo_url,
                     cover_url,
+                    contract_terms,
                     password_hash,
                     shop["id"],
                 ),

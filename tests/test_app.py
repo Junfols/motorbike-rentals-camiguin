@@ -2188,6 +2188,18 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertEqual(self.client.get(old_logo_url).status_code, 404)
         self.assertEqual(self.client.get(old_cover_url).status_code, 404)
 
+        # Verify default contract terms and custom shop contract terms
+        self.assertIn("2,000.00 minimum fee for any crash", cleared_shop["contract_terms"])
+        custom_terms = "MINIMUM CHARGE:\n• ₱2,500.00 crash minimum\n• ₱1,200.00 helmet loss"
+        update_contract = self.client.put(
+            "/api/partner/profile",
+            json={"contract_terms": custom_terms},
+        )
+        self.assertEqual(update_contract.status_code, 200)
+        self.assertEqual(update_contract.get_json()["shop"]["contract_terms"], custom_terms)
+        bikes_after_contract = self.client.get(f"/api/bikes?shop_id={shop_after['id']}").get_json()["bikes"]
+        self.assertEqual(bikes_after_contract[0]["shop_contract_terms"], custom_terms)
+
     def test_paymongo_settings_and_booking_link_and_webhook_auto_confirm(self):
         # 1. Admin login and save PayMongo credentials
         login_resp = self.client.post("/api/admin/login", json={"password": "admin1234"})
