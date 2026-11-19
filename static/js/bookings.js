@@ -488,5 +488,12 @@
     codeInput.value = preCode;
     phoneInput.value = prePhone;
     runLookup(preCode, prePhone);
+  } else if (!phoneInput.value) {
+    try {
+      const savedProfile = JSON.parse(localStorage.getItem("motoride_customer_profile") || "null");
+      if (savedProfile && savedProfile.customer_phone) {
+        phoneInput.value = savedProfile.customer_phone;
+      }
+    } catch (_) {}
   }
 })();

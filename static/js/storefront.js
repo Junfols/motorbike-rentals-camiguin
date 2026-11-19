@@ -873,6 +873,7 @@
 
     // Open modal immediately for instant feedback
     openModal("booking-modal");
+    restoreCustomerProfile();
     syncPaymentChannelUi(true);
 
     // Step 2: Fetch full live schedule and quote in the background
@@ -1902,6 +1903,99 @@
     });
   }
 
+  // Auto-save & restore rider profile so returning tourists don't re-type info
+  const CUSTOMER_PROFILE_KEY = "motoride_customer_profile";
+
+  function saveCustomerProfile(p) {
+    if (!p) return;
+    try {
+      localStorage.setItem(
+        CUSTOMER_PROFILE_KEY,
+        JSON.stringify({
+          customer_name: (p.customer_name || "").trim(),
+          customer_phone: (p.customer_phone || "").trim(),
+          customer_address: (p.customer_address || "").trim(),
+          license_number: (p.license_number || "").trim(),
+          customer_email: (p.customer_email || "").trim(),
+        })
+      );
+    } catch (_) {}
+  }
+
+  function getSavedCustomerProfile() {
+    try {
+      const raw = localStorage.getItem(CUSTOMER_PROFILE_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (data && typeof data === "object") return data;
+    } catch (_) {}
+    return null;
+  }
+
+  function restoreCustomerProfile() {
+    const profile = getSavedCustomerProfile();
+    const pill = document.getElementById("saved-customer-pill");
+    if (!profile) {
+      if (pill) pill.style.display = "none";
+      return;
+    }
+    const nameEl = document.getElementById("booking-customer-name");
+    const phoneEl = document.getElementById("booking-customer-phone");
+    const addrEl = document.getElementById("booking-customer-address");
+    const licEl = document.getElementById("booking-license-number");
+    const emailEl = document.getElementById("booking-customer-email");
+
+    let filledAny = false;
+    if (nameEl && !nameEl.value && profile.customer_name) {
+      nameEl.value = profile.customer_name;
+      filledAny = true;
+    }
+    if (phoneEl && !phoneEl.value && profile.customer_phone) {
+      phoneEl.value = profile.customer_phone;
+      filledAny = true;
+    }
+    if (addrEl && !addrEl.value && profile.customer_address) {
+      addrEl.value = profile.customer_address;
+      filledAny = true;
+    }
+    if (licEl && !licEl.value && profile.license_number) {
+      licEl.value = profile.license_number;
+      filledAny = true;
+    }
+    if (emailEl && !emailEl.value && profile.customer_email) {
+      emailEl.value = profile.customer_email;
+      filledAny = true;
+    }
+    if (pill) pill.style.display = filledAny ? "inline" : "none";
+  }
+
+  function clearSavedCustomerProfile() {
+    try {
+      localStorage.removeItem(CUSTOMER_PROFILE_KEY);
+    } catch (_) {}
+    const nameEl = document.getElementById("booking-customer-name");
+    const phoneEl = document.getElementById("booking-customer-phone");
+    const addrEl = document.getElementById("booking-customer-address");
+    const licEl = document.getElementById("booking-license-number");
+    const emailEl = document.getElementById("booking-customer-email");
+    if (nameEl) nameEl.value = "";
+    if (phoneEl) phoneEl.value = "";
+    if (addrEl) addrEl.value = "";
+    if (licEl) licEl.value = "";
+    if (emailEl) emailEl.value = "";
+    const pill = document.getElementById("saved-customer-pill");
+    if (pill) pill.style.display = "none";
+    showToast("Saved rider information cleared.", "success");
+  }
+
+  const clearSavedCustomerBtn = document.getElementById("clear-saved-customer-btn");
+  if (clearSavedCustomerBtn) {
+    clearSavedCustomerBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      clearSavedCustomerProfile();
+    });
+  }
+
   const sigCanvas = document.getElementById("signature-pad");
   const sigStatus = document.getElementById("signature-status");
   const clearSigBtn = document.getElementById("clear-signature-btn");
@@ -2129,6 +2223,7 @@
         }
 
         const booking = data.booking;
+        saveCustomerProfile(payload);
         saveRecentTrip(booking);
         closeModal("booking-modal");
         bookingForm.reset();
