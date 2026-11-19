@@ -294,10 +294,9 @@
       <div class="kpi-card">
         <div class="kpi-label">Gross Bookings</div>
         <div class="kpi-value">${escapeHtml(formatMoney(k.gross_revenue))}</div>
-        <div class="kpi-sub">Platform fee (${data.commission_rate}%): -${escapeHtml(formatMoney(k.platform_fee_total))}</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Net Shop Payout</div>
+        <div class="kpi-label">Total Earnings</div>
         <div class="kpi-value">${escapeHtml(formatMoney(k.net_payout))}</div>
         <div class="kpi-sub">This month: ${escapeHtml(formatMoney(k.month_payout))}</div>
       </div>
@@ -409,9 +408,8 @@
                 <div class="text-muted">${b.rental_days}d &bull; ${escapeHtml(b.pickup_time)}</div>
               </div>
               <div>
-                <span class="trip-detail-label">Gross / Platform Fee (${b.commission_rate}%)</span>
+                <span class="trip-detail-label">Total</span>
                 <strong>${escapeHtml(formatMoney(b.total_amount))}</strong>
-                <div class="text-muted">Fee: -${escapeHtml(formatMoney(b.platform_fee))} &bull; Net: ${escapeHtml(formatMoney(b.shop_payout))}</div>
               </div>
               <div>
                 <span class="trip-detail-label">Collect on Pickup</span>

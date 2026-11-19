@@ -671,7 +671,7 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                 "messenger_url": "https://m.me/motorbikerentalscamiguin",
                 "whatsapp_number": "639175550148",
                 "currency": "₱",
-                "commission_rate": "10",
+                "commission_rate": "0",
                 "delivery_fee": "250",
                 "extra_helmet_fee": "50",
                 "top_box_fee": "100",
@@ -797,6 +797,12 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                 conn.execute(
                     "UPDATE bookings SET shop_payout = total_amount WHERE shop_payout = 0 AND total_amount > 0"
                 )
+            # Platform fee removed: zero any previously stored fee so shops keep 100%.
+            conn.execute(
+                "UPDATE bookings SET commission_rate = 0, platform_fee = 0, shop_payout = total_amount "
+                "WHERE commission_rate <> 0 OR platform_fee <> 0 OR shop_payout <> total_amount"
+            )
+            conn.execute("UPDATE settings SET value = '0' WHERE key = 'commission_rate' AND value <> '0'")
             if "reservation_fee" not in booking_cols:
                 conn.execute("ALTER TABLE bookings ADD COLUMN reservation_fee REAL NOT NULL DEFAULT 0")
             if "balance_due" not in booking_cols:
@@ -1293,10 +1299,10 @@ def calculate_quote(
     delivery_total = delivery_fee if pickup_method == "delivery" else 0.0
     total_amount = round(base_subtotal + addons_total + delivery_total, 2)
 
-    commission_rate = float(settings.get("commission_rate", "10") or 0)
-    commission_rate = max(0.0, min(100.0, commission_rate))
-    platform_fee = round(total_amount * (commission_rate / 100.0), 2)
-    shop_payout = round(total_amount - platform_fee, 2)
+    # Platform fee was removed: shops keep 100% of every booking.
+    commission_rate = 0.0
+    platform_fee = 0.0
+    shop_payout = total_amount
 
     reservation_mode = str(settings.get("reservation_mode", "off") or "off").strip().lower()
     if reservation_mode not in VALID_RESERVATION_MODES:

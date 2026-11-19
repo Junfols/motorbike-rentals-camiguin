@@ -162,9 +162,7 @@ def format_new_booking_message(settings: dict, shop: dict, booking: dict) -> tup
             if float(booking.get("reservation_fee") or 0) > 0 or booking.get("payment_reference")
             else ""
         )
-        + f"Platform Fee ({float(booking.get('commission_rate') or 0):g}%): "
-        f"{cur}{float(booking.get('platform_fee') or 0):,.2f}\n"
-        f"Partner Net Payout: {cur}{float(booking.get('shop_payout') or 0):,.2f}"
+        + f"Shop Payout: {cur}{float(booking.get('shop_payout') or 0):,.2f}"
     )
     return subject, body
 
