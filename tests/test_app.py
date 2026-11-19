@@ -34,11 +34,20 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         return (date.today() + timedelta(days=days_ahead)).isoformat()
 
     def test_pages_and_pwa_endpoints(self):
-        for route in ("/", "/bookings", "/partner", "/admin", "/offline"):
+        for route in ("/", "/customer", "/bookings", "/rider", "/partner", "/admin", "/offline"):
             resp = self.client.get(route)
             self.assertEqual(resp.status_code, 200, f"Route {route} failed")
+            html = resp.get_data(as_text=True)
             if route != "/admin":
-                self.assertNotIn('href="/admin"', resp.get_data(as_text=True))
+                self.assertNotIn('href="/admin"', html)
+                self.assertIn("data-admin-tap-trigger", html)
+            else:
+                self.assertIn('href="/admin"', html)
+
+        with self.client.get("/static/js/pwa.js") as pwa_resp:
+            pwa_js = pwa_resp.get_data(as_text=True)
+        self.assertIn("ADMIN_TAP_TARGET = 10", pwa_js)
+        self.assertIn('"/admin"', pwa_js)
 
         shops_resp = self.client.get("/api/shops")
         self.assertEqual(shops_resp.status_code, 200)
@@ -56,6 +65,7 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         sw_resp = self.client.get("/sw.js")
         self.assertEqual(sw_resp.status_code, 200)
         self.assertEqual(sw_resp.headers.get("Service-Worker-Allowed"), "/")
+        self.assertIn('"/rider"', sw_resp.get_data(as_text=True))
 
         admin_manifest_resp = self.client.get("/admin.webmanifest")
         self.assertEqual(admin_manifest_resp.status_code, 200)
@@ -1637,13 +1647,13 @@ class MotorbikeRentalPWATests(unittest.TestCase):
     def test_qr_upload_accepts_jfif_and_highres_images_and_network_first_scripts(self):
         with self.client.get("/sw.js") as sw_resp:
             sw_text = sw_resp.get_data(as_text=True)
-        self.assertIn("motoride-pwa-v17", sw_text)
+        self.assertIn("motoride-pwa-v18", sw_text)
         self.assertIn('/static/js/', sw_text)
 
         login_resp = self.client.post("/api/admin/login", json={"password": "admin1234"})
         self.assertEqual(login_resp.status_code, 200)
         admin_html = self.client.get("/admin").get_data(as_text=True)
-        self.assertIn('/static/js/admin.js?v=17', admin_html)
+        self.assertIn('/static/js/admin.js?v=18', admin_html)
         self.assertIn('.jfif', admin_html)
 
         # Windows/Edge/Messenger saves often use .jfif -> served cleanly as image/jpeg
@@ -1682,8 +1692,8 @@ class MotorbikeRentalPWATests(unittest.TestCase):
 
     def test_return_date_defaults_to_select_date_prompt_without_prefill(self):
         index_html = self.client.get("/").get_data(as_text=True)
-        self.assertIn('/static/css/style.css?v=17', index_html)
-        self.assertIn('/static/js/storefront.js?v=17', index_html)
+        self.assertIn('/static/css/style.css?v=18', index_html)
+        self.assertIn('/static/js/storefront.js?v=18', index_html)
         self.assertIn('class="bike-card"', index_html)
         self.assertNotIn('<div class="loading-state">Loading motorbikes...</div>', index_html)
         self.assertIn('id="modal-availability-calendar"', index_html)
@@ -1954,7 +1964,7 @@ class MotorbikeRentalPWATests(unittest.TestCase):
 
         partner_html = self.client.get("/partner").get_data(as_text=True)
         self.assertIn('id="bike-schedule-modal"', partner_html)
-        self.assertIn('/static/js/partner.js?v=17', partner_html)
+        self.assertIn('/static/js/partner.js?v=18', partner_html)
         admin_html = self.client.get("/admin").get_data(as_text=True)
         self.assertIn('id="bike-schedule-modal"', admin_html)
 
@@ -2335,8 +2345,8 @@ class MotorbikeRentalPWATests(unittest.TestCase):
             "customer_phone": "09187654321",
             "customer_email": "maria@tourist.ph",
             "license_number": "D02-24-998877",
-            "pickup_date": "2026-11-20",
-            "return_date": "2026-11-22",
+            "pickup_date": self._future_str(2),
+            "return_date": self._future_str(4),
             "pickup_time": "09:00",
             "pickup_method": "shop",
             "payment_channel": "pay_at_shop",

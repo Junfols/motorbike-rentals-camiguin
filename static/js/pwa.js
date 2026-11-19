@@ -146,6 +146,65 @@
   if (mobileInstallBtn) mobileInstallBtn.addEventListener("click", handleInstallClick);
   if (triggerNativeInstallBtn) triggerNativeInstallBtn.addEventListener("click", handleInstallClick);
 
+  // Hidden 10-tap shortcut on the app icon to open /admin
+  (function initAdminTapShortcut() {
+    const ADMIN_TAP_TARGET = 10;
+    const TAP_RESET_MS = 2500;
+    const SINGLE_TAP_NAV_DELAY_MS = 700;
+    let tapCount = 0;
+    let resetTimer = null;
+    let homeNavTimer = null;
+
+    document.addEventListener("click", (event) => {
+      const trigger = event.target.closest("[data-admin-tap-trigger]");
+      if (!trigger) return;
+
+      const parentLink = trigger.closest("a[href]");
+      if (parentLink) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+
+      if (homeNavTimer) {
+        clearTimeout(homeNavTimer);
+        homeNavTimer = null;
+      }
+      if (resetTimer) {
+        clearTimeout(resetTimer);
+      }
+
+      tapCount += 1;
+
+      if (tapCount >= ADMIN_TAP_TARGET) {
+        tapCount = 0;
+        resetTimer = null;
+        if (window.location.pathname !== "/admin") {
+          window.location.assign("/admin");
+        }
+        return;
+      }
+
+      resetTimer = setTimeout(() => {
+        tapCount = 0;
+        resetTimer = null;
+      }, TAP_RESET_MS);
+
+      if (tapCount === 1 && parentLink) {
+        const targetHref = parentLink.getAttribute("href") || "/";
+        const targetUrl = new URL(targetHref, window.location.origin);
+        if (targetUrl.pathname !== window.location.pathname) {
+          homeNavTimer = setTimeout(() => {
+            homeNavTimer = null;
+            if (tapCount === 1) {
+              tapCount = 0;
+              window.location.assign(parentLink.href);
+            }
+          }, SINGLE_TAP_NAV_DELAY_MS);
+        }
+      }
+    });
+  })();
+
   function saveRecentTrip(booking) {
     try {
       const key = "motoride_recent_trips";
