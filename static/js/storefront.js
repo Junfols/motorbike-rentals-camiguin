@@ -427,6 +427,7 @@
               <div class="shop-strip-info">
                 <strong class="shop-strip-name">${escapeHtml(s.shop_name)}</strong>
                 <span class="shop-strip-meta">${escapeHtml(s.municipality || "Camiguin")} &bull; ${unitCount} model(s)</span>
+                <span style="font-size:0.75rem;color:#f59e0b;display:inline-flex;align-items:center;gap:3px;margin-top:2px;">★ <strong style="color:#0f172a;">${Number(s.rating_avg || 5.0).toFixed(1)}</strong> <small style="color:#64748b;">(${s.review_count || 0})</small></span>
               </div>
             </div>
           </button>
@@ -486,6 +487,7 @@
             <p class="shop-banner-location">${escapeHtml(locParts)}</p>
             <div class="shop-banner-chips">
               ${activeShop.phone ? `<span class="shop-banner-chip">&#128222; ${escapeHtml(activeShop.phone)}</span>` : ""}
+              <span class="shop-banner-chip" title="Average tourist rating">&#11088; ${Number(activeShop.rating_avg || 5.0).toFixed(1)} (${Number(activeShop.review_count || 0)} review${activeShop.review_count === 1 ? "" : "s"})</span>
               <span class="shop-banner-chip">&#128666; Delivery: ${escapeHtml(formatMoney(activeShop.delivery_fee || 0))}</span>
               ${activeShop.bike_count !== undefined ? `<span class="shop-banner-chip">&#127949; ${Number(activeShop.bike_count)} Motorbike Model(s)</span>` : ""}
             </div>
@@ -511,6 +513,34 @@
             }
           </div>
         </div>
+        ${
+          activeShop.reviews && activeShop.reviews.length
+            ? `
+          <div class="shop-banner-reviews" style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(0,0,0,0.08);">
+            <div style="font-weight:700;font-size:0.95rem;margin-bottom:8px;color:#0f2b3a;">
+              ⭐ Customer Reviews (${activeShop.reviews.length})
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px;">
+              ${activeShop.reviews
+                .slice(0, 6)
+                .map(
+                  (r) => `
+                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;font-size:0.85rem;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                    <strong style="color:#0f2b3a;">${escapeHtml(r.customer_name)}</strong>
+                    <span style="color:#f59e0b;letter-spacing:1px;">${"★".repeat(Math.max(1, Math.min(5, r.rating || 5)))}</span>
+                  </div>
+                  <div class="text-muted" style="font-size:0.75rem;margin-bottom:4px;">Rented ${escapeHtml(r.bike_name || "Motorbike")}</div>
+                  ${r.comment ? `<p style="margin:0;color:#334155;font-style:italic;">"${escapeHtml(r.comment)}"</p>` : ""}
+                </div>
+              `
+                )
+                .join("")}
+            </div>
+          </div>
+        `
+            : ""
+        }
       </div>
     `;
   }

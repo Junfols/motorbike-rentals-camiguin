@@ -2463,6 +2463,22 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertIn("reviews", bike_data)
         self.assertTrue(len(bike_data["reviews"]) >= 1)
 
+        # Test shop reviews and rating stats
+        shop_resp = self.client.get("/api/shops")
+        self.assertEqual(shop_resp.status_code, 200)
+        shops = shop_resp.get_json()["shops"]
+        self.assertTrue(len(shops) >= 1)
+        self.assertIn("rating_avg", shops[0])
+        self.assertIn("review_count", shops[0])
+
+        shop_id = bike_data.get("shop_id") or shops[0]["id"]
+        shop_revs_resp = self.client.get(f"/api/reviews/shop/{shop_id}")
+        self.assertEqual(shop_revs_resp.status_code, 200)
+        shop_rev_data = shop_revs_resp.get_json()
+        self.assertIn("reviews", shop_rev_data)
+        self.assertIn("stats", shop_rev_data)
+        self.assertTrue(len(shop_rev_data["reviews"]) >= 1)
+
     def test_in_app_voice_call_signaling(self):
         bike = self.client.get("/api/bikes").get_json()["bikes"][0]
         booking = self.client.post(

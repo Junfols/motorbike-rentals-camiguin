@@ -43,12 +43,15 @@ from db import (
     generate_booking_code,
     get_admin_settings_view,
     get_all_bike_rating_stats,
+    get_all_shop_rating_stats,
     get_bike_rating_stats,
     get_bike_reviews,
     get_connection,
     get_database_url,
     get_recent_reviews,
     get_settings,
+    get_shop_rating_stats,
+    get_shop_reviews,
     get_uploaded_media,
     init_db,
     is_postgres_url,
@@ -151,9 +154,11 @@ def _save_validated_image(
     return f"/uploads/{unique_name}"
 
 
-def _serialize_shop(row, include_private: bool = False) -> dict:
+def _serialize_shop(row, include_private: bool = False, rating_stats: dict | None = None) -> dict:
     keys = row.keys()
     raw_contract = (row["contract_terms"] if "contract_terms" in keys else "") or ""
+    r_avg = float(rating_stats.get("avg_rating", 5.0)) if rating_stats else (float(row["rating_avg"]) if "rating_avg" in keys and row["rating_avg"] is not None else 5.0)
+    r_cnt = int(rating_stats.get("review_count", 0)) if rating_stats else (int(row["review_count"]) if "review_count" in keys and row["review_count"] is not None else 0)
     data = {
         "id": row["id"],
         "shop_name": row["shop_name"],
@@ -172,6 +177,8 @@ def _serialize_shop(row, include_private: bool = False) -> dict:
         "share_url": f"/shop/{row['slug']}",
         "status": row["status"],
         "is_main": bool(row["is_main"]),
+        "rating_avg": round(r_avg, 1),
+        "review_count": r_cnt,
     }
     if "bike_count" in keys:
         data["bike_count"] = int(row["bike_count"] or 0)
@@ -610,7 +617,12 @@ def create_app(test_config: dict | None = None) -> Flask:
             """,
             (ref, ref, partner_id, 1 if is_admin else 0),
         ).fetchone()
-        return _serialize_shop(row) if row else None
+        if not row:
+            return None
+        stats = get_shop_rating_stats(conn, int(row["id"]))
+        shop_dict = _serialize_shop(row, rating_stats=stats)
+        shop_dict["reviews"] = get_shop_reviews(conn, int(row["id"]), limit=15)
+        return shop_dict
 
     def _build_storefront_bootstrap(conn, featured_shop: dict | None = None) -> dict:
         today_str = date.today().isoformat()
@@ -625,7 +637,8 @@ def create_app(test_config: dict | None = None) -> Flask:
             ORDER BY s.is_main DESC, s.shop_name ASC
             """
         ).fetchall()
-        shops_list = [_serialize_shop(r) for r in shop_rows]
+        shop_stats = get_all_shop_rating_stats(conn)
+        shops_list = [_serialize_shop(r, rating_stats=shop_stats.get(int(r["id"]))) for r in shop_rows]
 
         bike_sql = """
             SELECT b.*,
@@ -864,9 +877,10 @@ def create_app(test_config: dict | None = None) -> Flask:
             ORDER BY s.is_main DESC, s.shop_name ASC
             """
         ).fetchall()
+        shop_stats = get_all_shop_rating_stats(conn)
         return jsonify(
             {
-                "shops": [_serialize_shop(r) for r in rows],
+                "shops": [_serialize_shop(r, rating_stats=shop_stats.get(int(r["id"]))) for r in rows],
                 "municipalities": list(CAMIGUIN_MUNICIPALITIES),
             }
         )
@@ -1628,6 +1642,14 @@ def create_app(test_config: dict | None = None) -> Flask:
             "stats": get_bike_rating_stats(conn, bike_id),
         })
 
+    @app.get("/api/reviews/shop/<int:shop_id>")
+    def list_shop_reviews(shop_id: int):
+        conn = get_db()
+        return jsonify({
+            "reviews": get_shop_reviews(conn, shop_id, limit=20),
+            "stats": get_shop_rating_stats(conn, shop_id),
+        })
+
     # ------------------------------------------------------------------
     # PayMongo Online Payment & Webhook Routes
     # ------------------------------------------------------------------
@@ -2112,10 +2134,11 @@ def create_app(test_config: dict | None = None) -> Flask:
             (shop_id, today_str),
         ).fetchall()
 
+        shop_rating = get_shop_rating_stats(conn, shop_id)
         settings = get_settings(conn)
         return jsonify(
             {
-                "shop": _serialize_shop(g.partner_shop, include_private=True),
+                "shop": _serialize_shop(g.partner_shop, include_private=True, rating_stats=shop_rating),
                 **_platform_alert_flags(conn),
                 "commission_rate": float(settings.get("commission_rate", "10") or 0),
                 "kpis": {
@@ -2132,8 +2155,11 @@ def create_app(test_config: dict | None = None) -> Flask:
                     "net_payout": float(revenue_row["net_payout"]),
                     "completed_payout": float(revenue_row["completed_payout"]),
                     "month_payout": float(revenue_row["month_payout"]),
+                    "rating_avg": shop_rating["avg_rating"],
+                    "review_count": shop_rating["review_count"],
                 },
                 "upcoming": [_serialize_booking(r) for r in upcoming_rows],
+                "reviews": get_shop_reviews(conn, shop_id, limit=8),
             }
         )
 

@@ -1882,3 +1882,66 @@ def get_bike_rating_stats(conn: DatabaseConnection, bike_id: int) -> dict:
     except Exception:
         return {"avg_rating": 5.0, "review_count": 0}
 
+
+def get_shop_reviews(conn: DatabaseConnection, shop_id: int, limit: int = 15) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT r.*, b.name AS bike_name, b.image_url AS bike_image, s.shop_name AS shop_name
+        FROM reviews r
+        JOIN bikes b ON b.id = r.bike_id
+        JOIN shops s ON s.id = r.shop_id
+        WHERE r.shop_id = ? AND r.is_approved = 1
+        ORDER BY r.created_at DESC
+        LIMIT ?
+        """,
+        (shop_id, limit),
+    ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "booking_id": row["booking_id"],
+            "bike_id": row["bike_id"],
+            "bike_name": row["bike_name"],
+            "bike_image": row["bike_image"],
+            "shop_id": row["shop_id"],
+            "shop_name": row["shop_name"],
+            "customer_name": row["customer_name"],
+            "rating": int(row["rating"]),
+            "comment": row["comment"],
+            "created_at": row["created_at"],
+        }
+        for row in rows
+    ]
+
+
+def get_all_shop_rating_stats(conn: DatabaseConnection) -> dict[int, dict]:
+    try:
+        rows = conn.execute(
+            "SELECT shop_id, AVG(rating) as avg_rating, COUNT(*) as review_count FROM reviews WHERE is_approved = 1 GROUP BY shop_id"
+        ).fetchall()
+        res = {}
+        for r in rows:
+            if r["shop_id"] is None:
+                continue
+            avg_val = float(r["avg_rating"]) if r["avg_rating"] is not None else 5.0
+            res[int(r["shop_id"])] = {
+                "avg_rating": round(avg_val, 1),
+                "review_count": int(r["review_count"]),
+            }
+        return res
+    except Exception:
+        return {}
+
+
+def get_shop_rating_stats(conn: DatabaseConnection, shop_id: int) -> dict:
+    try:
+        row = conn.execute(
+            "SELECT AVG(rating) as avg_rating, COUNT(*) as review_count FROM reviews WHERE shop_id = ? AND is_approved = 1",
+            (shop_id,),
+        ).fetchone()
+        avg_val = float(row["avg_rating"]) if row and row["avg_rating"] is not None else 5.0
+        cnt = int(row["review_count"]) if row and row["review_count"] is not None else 0
+        return {"avg_rating": round(avg_val, 1), "review_count": cnt}
+    except Exception:
+        return {"avg_rating": 5.0, "review_count": 0}
+
