@@ -2621,6 +2621,62 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertIn("/static/js/calls.js", html)
         self.assertIn('data-nav="customer"', html)
 
+    def test_web_push_notification_endpoints_and_triggers(self):
+        # 1. Fetch VAPID public key
+        key_resp = self.client.get("/api/push/vapid-public-key")
+        self.assertEqual(key_resp.status_code, 200)
+        pub_key = key_resp.get_json()["publicKey"]
+        self.assertTrue(len(pub_key) >= 50)
+
+        # 2. Test Subscribe validation
+        bad_sub = self.client.post("/api/push/subscribe", json={})
+        self.assertEqual(bad_sub.status_code, 400)
+
+        sub_payload = {
+            "endpoint": "https://fcm.googleapis.com/fcm/send/test-sub-12345",
+            "keys": {
+                "p256dh": "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QT9t044Yjs2oWGWKek8KaIR8HTDHUt8pvE0og-7Fm927pfGE",
+                "auth": "tBHItJI5svbpez7KI4CCXg",
+            },
+            "phone": "0917 555 7788",
+            "booking_code": "MR-2611-TEST",
+        }
+
+        # Customer subscribe
+        cust_sub = self.client.post("/api/push/subscribe", json=sub_payload)
+        self.assertEqual(cust_sub.status_code, 200)
+        self.assertEqual(cust_sub.get_json()["role"], "customer")
+
+        # Admin subscribe
+        admin_client = self.app.test_client()
+        self.assertEqual(
+            admin_client.post("/api/admin/login", json={"password": "admin1234"}).status_code,
+            200,
+        )
+        admin_sub_payload = dict(sub_payload)
+        admin_sub_payload["endpoint"] = "https://updates.push.services.mozilla.com/wpush/v2/admin-test"
+        admin_sub = admin_client.post("/api/push/subscribe", json=admin_sub_payload)
+        self.assertEqual(admin_sub.status_code, 200)
+        self.assertEqual(admin_sub.get_json()["role"], "admin")
+
+        # 3. Test Push test endpoint (mocking pywebpush.webpush so no real network call happens)
+        anon_test = self.client.post("/api/push/test")
+        self.assertEqual(anon_test.status_code, 401)
+
+        with patch("push_notifications.pywebpush.webpush", return_value=True):
+            ok_test = admin_client.post("/api/push/test")
+            self.assertEqual(ok_test.status_code, 200)
+            self.assertTrue(ok_test.get_json()["ok"])
+
+        # 4. Unsubscribe
+        unsub = self.client.post("/api/push/unsubscribe", json={"endpoint": sub_payload["endpoint"]})
+        self.assertEqual(unsub.status_code, 200)
+        self.assertTrue(unsub.get_json()["ok"])
+
+        # 5. Base template includes push.js script tag
+        home_html = self.client.get("/").get_data(as_text=True)
+        self.assertIn("/static/js/push.js", home_html)
+
 
 if __name__ == "__main__":
     unittest.main()

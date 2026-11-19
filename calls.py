@@ -192,6 +192,12 @@ def register_call_routes(app, get_db) -> None:
                 ),
             )
         row = conn.execute("SELECT * FROM booking_calls WHERE id = ?", (call_id,)).fetchone()
+        callee_role = "shop" if role == "customer" else "customer"
+        try:
+            from push_notifications import notify_incoming_call
+            notify_incoming_call(conn, dict(row), dict(booking), callee_role)
+        except Exception:
+            pass
         return jsonify({"call": _call_view(row, role)}), 201
 
     @app.get("/api/calls/incoming")

@@ -65,6 +65,11 @@ from db import (
     verify_shop_password,
 )
 from calls import register_call_routes
+from push_notifications import (
+    notify_customer_booking_confirmed,
+    notify_shop_new_booking,
+    register_push_routes,
+)
 from icons import ensure_icons
 from notifications import (
     dispatch_background,
@@ -1492,6 +1497,11 @@ def create_app(test_config: dict | None = None) -> Flask:
             _serialize_shop(shop_row, include_private=True),
             booking_data,
         )
+        try:
+            notify_shop_new_booking(conn, booking_data)
+        except Exception:
+            pass
+
         resp_data = {"booking": booking_data, "quote": quote}
         if checkout_url:
             resp_data["checkout_url"] = checkout_url
@@ -2295,6 +2305,11 @@ def create_app(test_config: dict | None = None) -> Flask:
                 (new_status, admin_notes, 1 if new_balance_paid else 0, now, booking_id, shop_id),
             )
         updated = _fetch_booking_by_id(conn, booking_id)
+        if new_status == "confirmed" and existing["status"] != "confirmed":
+            try:
+                notify_customer_booking_confirmed(conn, _serialize_booking(updated))
+            except Exception:
+                pass
         return jsonify({"booking": _serialize_booking(updated)})
 
     @app.get("/api/partner/bikes")
@@ -3164,6 +3179,11 @@ def create_app(test_config: dict | None = None) -> Flask:
                 ),
             )
         updated = _fetch_booking_by_id(conn, booking_id)
+        if new_status == "confirmed" and existing["status"] != "confirmed":
+            try:
+                notify_customer_booking_confirmed(conn, _serialize_booking(updated))
+            except Exception:
+                pass
         return jsonify({"booking": _serialize_booking(updated)})
 
     @app.get("/api/admin/bikes")
@@ -3605,6 +3625,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         return jsonify({"ok": ok_any, "results": results}), (200 if ok_any else 400)
 
     register_call_routes(app, get_db)
+    register_push_routes(app, get_db)
 
     return app
 
