@@ -819,9 +819,12 @@ def create_app(test_config: dict | None = None) -> Flask:
     # ------------------------------------------------------------------
     @app.get("/api/health")
     def health():
-        conn = get_db()
-        conn.execute("SELECT 1").fetchone()
-        return jsonify({"status": "ok", "backend": conn.backend, "date": date.today().isoformat()})
+        backend = "postgresql" if is_postgres_url(app.config.get("DATABASE_URL")) else "sqlite"
+        if (request.args.get("db") or "").strip().lower() in ("1", "true", "yes"):
+            conn = get_db()
+            conn.execute("SELECT 1").fetchone()
+            backend = conn.backend
+        return jsonify({"status": "ok", "backend": backend, "date": date.today().isoformat()})
 
     @app.get("/api/settings")
     def public_settings():
