@@ -32,6 +32,7 @@
 
   const kpiGrid = document.getElementById("partner-kpi-grid");
   const upcomingList = document.getElementById("partner-upcoming-list");
+  const reviewsList = document.getElementById("partner-reviews-list");
   const jumpBookingsBtn = document.getElementById("partner-jump-bookings-btn");
 
   const statusPills = document.getElementById("partner-booking-status-pills");
@@ -300,6 +301,11 @@
         <div class="kpi-value">${escapeHtml(formatMoney(k.net_payout))}</div>
         <div class="kpi-sub">This month: ${escapeHtml(formatMoney(k.month_payout))}</div>
       </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Customer Rating</div>
+        <div class="kpi-value">&#11088; ${Number(k.rating_avg || 5.0).toFixed(1)}</div>
+        <div class="kpi-sub">${k.review_count || 0} customer review(s)</div>
+      </div>
     `;
 
     const upcoming = data.upcoming || [];
@@ -319,6 +325,30 @@
           `
         )
         .join("");
+    }
+
+    if (reviewsList) {
+      const revs = data.reviews || [];
+      if (!revs.length) {
+        reviewsList.innerHTML = `<p class="text-muted" style="padding:12px;">No customer reviews yet. Reviews will show here as riders complete rentals.</p>`;
+      } else {
+        reviewsList.innerHTML = revs
+          .map(
+            (r) => `
+              <div class="upcoming-item" style="display:block;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                  <strong>${escapeHtml(r.customer_name)}</strong>
+                  <span style="color:#f59e0b;letter-spacing:1px;">${"★".repeat(Math.max(1, Math.min(5, r.rating || 5)))}</span>
+                </div>
+                <div class="text-muted" style="font-size:0.75rem;margin-bottom:4px;">
+                  Rented ${escapeHtml(r.bike_name || "Motorbike")} &bull; ${escapeHtml(r.created_at || "")}
+                </div>
+                ${r.comment ? `<div style="font-size:0.85rem;color:#334155;font-style:italic;">"${escapeHtml(r.comment)}"</div>` : ""}
+              </div>
+            `
+          )
+          .join("");
+      }
     }
   }
 
