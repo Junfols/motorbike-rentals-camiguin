@@ -34,10 +34,11 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         return (date.today() + timedelta(days=days_ahead)).isoformat()
 
     def test_pages_and_pwa_endpoints(self):
-        for route in ("/", "/customer", "/bookings", "/rider", "/partner", "/admin", "/offline"):
+        for route in ("/", "/customer", "/bookings", "/shop", "/rider", "/partner", "/admin", "/offline"):
             resp = self.client.get(route)
             self.assertEqual(resp.status_code, 200, f"Route {route} failed")
             html = resp.get_data(as_text=True)
+            self.assertIn('href="/shop"', html)
             if route != "/admin":
                 self.assertNotIn('href="/admin"', html)
                 self.assertIn("data-admin-tap-trigger", html)

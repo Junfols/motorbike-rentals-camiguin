@@ -43,7 +43,7 @@
         <a href="/" class="nav-link {% if active_nav == 'fleet' %}active{% endif %}">Motorbikes</a>
         <a href="/#tourist-map" class="nav-link">Island Map 🗺️</a>
         <a href="/customer" class="nav-link {% if active_nav in ('bookings', 'customer') %}active{% endif %}">👤 Customer</a>
-        <a href="/rider" class="nav-link {% if active_nav in ('partner', 'rider') %}active{% endif %}">🏍️ Rider Portal</a>
+        <a href="/shop" class="nav-link {% if active_nav in ('partner', 'rider', 'shop') %}active{% endif %}">🏪 Shop Portal</a>
         {% if active_nav == 'admin' %}
         <a href="/admin" class="nav-link active">👑 Admin</a>
         {% endif %}
@@ -79,7 +79,7 @@
         <h4>Platform Hub</h4>
         <p class="footer-line" data-shop-address>{{ shop.address }}</p>
         <p class="footer-line" data-shop-hours>{{ shop.opening_hours }}</p>
-        <p class="footer-line"><a href="/partner" style="color:#fb923c;font-weight:600;">Partner Shop Login / Register &rarr;</a></p>
+        <p class="footer-line"><a href="/shop" style="color:#fb923c;font-weight:600;">Partner Shop Login / Register &rarr;</a></p>
       </div>
       <div>
         <h4>Support &amp; Inquiries</h4>
@@ -124,13 +124,13 @@
       </svg>
       <span>Customer</span>
     </a>
-    <a href="/rider" class="bottom-nav-item {% if active_nav in ('partner', 'rider') %}active{% endif %}">
+    <a href="/shop" class="bottom-nav-item {% if active_nav in ('partner', 'rider', 'shop') %}active{% endif %}">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"/>
         <path d="m3 9 2.45-4.9A2 2 0 0 1 7.24 3h9.52a2 2 0 0 1 1.8 1.1L21 9"/>
         <path d="M12 3v6"/>
       </svg>
-      <span>Rider</span>
+      <span>Shop</span>
     </a>
     {% if active_nav == 'admin' %}
     <a href="/admin" class="bottom-nav-item active">
@@ -181,7 +181,7 @@
     </div>
   </div>
 
-  {% if active_nav in ('partner', 'rider', 'admin') %}
+  {% if active_nav in ('partner', 'rider', 'shop', 'admin') %}
   <!-- Manage Motorbike Availability & Blocked Dates Modal -->
   <div id="bike-schedule-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="sched-modal-title">
     <div class="modal-card modal-lg">
