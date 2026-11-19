@@ -126,6 +126,13 @@ a {
   flex-shrink: 0;
 }
 
+[data-admin-tap-trigger] {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .brand-text {
   display: flex;
   flex-direction: column;
@@ -162,6 +169,7 @@ a {
   font-weight: 600;
   font-size: 0.92rem;
   color: var(--ink-secondary);
+  white-space: nowrap;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
