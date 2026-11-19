@@ -2874,25 +2874,15 @@ def create_app(test_config: dict | None = None) -> Flask:
         if "password" in payload and len(new_password) < 6:
             return jsonify({"error": "New shop password must be at least 6 characters."}), 400
 
-        set_main = payload.get("is_main") in (True, 1, "1", "true", "yes")
-        if set_main:
-            new_status = "approved"
-        else:
-            new_status = (payload.get("status") or existing["status"]).strip().lower()
-            if new_status not in VALID_SHOP_STATUSES:
-                return jsonify({"error": "Invalid shop status."}), 400
-            if existing["is_main"] and new_status != "approved":
-                return jsonify({"error": "The main platform hub cannot be suspended."}), 400
+        new_status = (payload.get("status") or existing["status"]).strip().lower()
+        if new_status not in VALID_SHOP_STATUSES:
+            return jsonify({"error": "Invalid shop status."}), 400
 
         with conn:
-            if set_main:
-                conn.execute("UPDATE shops SET is_main = 0 WHERE is_main != 0")
-                conn.execute(
-                    "UPDATE shops SET is_main = 1, status = 'approved' WHERE id = ?",
-                    (shop_id,),
-                )
-            else:
-                conn.execute("UPDATE shops SET status = ? WHERE id = ?", (new_status, shop_id))
+            conn.execute(
+                "UPDATE shops SET status = ?, is_main = 0 WHERE id = ?",
+                (new_status, shop_id),
+            )
             if new_password:
                 conn.execute(
                     "UPDATE shops SET password_hash = ? WHERE id = ?",
@@ -2911,8 +2901,6 @@ def create_app(test_config: dict | None = None) -> Flask:
         existing = conn.execute("SELECT * FROM shops WHERE id = ?", (shop_id,)).fetchone()
         if not existing:
             return jsonify({"error": "Partner shop not found."}), 404
-        if existing["is_main"]:
-            return jsonify({"error": "Cannot delete the main platform shop."}), 400
 
         old_logo = (existing["logo_url"] if "logo_url" in existing.keys() else "") or ""
         old_cover = (existing["cover_url"] if "cover_url" in existing.keys() else "") or ""
@@ -3119,10 +3107,10 @@ def create_app(test_config: dict | None = None) -> Flask:
 
         raw_shop_id = fields.get("shop_id")
         if not raw_shop_id:
-            main_row = conn.execute(
-                "SELECT id FROM shops WHERE is_main = 1 ORDER BY id ASC LIMIT 1"
+            first_row = conn.execute(
+                "SELECT id FROM shops ORDER BY id ASC LIMIT 1"
             ).fetchone()
-            raw_shop_id = int(main_row["id"]) if main_row else 1
+            raw_shop_id = int(first_row["id"]) if first_row else 1
         try:
             shop_id = int(raw_shop_id)
         except (TypeError, ValueError):

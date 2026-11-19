@@ -2038,37 +2038,29 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         rafols_id = create_rafols.get_json()["shop"]["id"]
         self.assertFalse(create_rafols.get_json()["shop"]["is_main"])
 
-        # Running init_db promotes RAFOLS MOTORBIKE RENTAL to Main Hub (is_main=1) and demotes Camiguin Central Hub
+        # Running init_db clears legacy is_main flags so all shops are equal and resets Rafols password once
         from db import init_db
         init_db(self.db_path)
 
         shops = self.client.get("/api/admin/shops?status=all").get_json()["shops"]
         by_id = {s["id"]: s for s in shops}
-        self.assertTrue(by_id[rafols_id]["is_main"])
+        self.assertFalse(by_id[rafols_id]["is_main"])
         self.assertFalse(by_id[1]["is_main"])
 
-        # Camiguin Central Hub (id=1) can now be suspended since it is no longer Main Hub
+        # Any shop (including id=1 and RAFOLS) can now be suspended, re-approved, or deleted
         susp_old = self.client.patch("/api/admin/shops/1", json={"status": "suspended"})
         self.assertEqual(susp_old.status_code, 200)
         self.assertEqual(susp_old.get_json()["shop"]["status"], "suspended")
 
-        # Main Hub (RAFOLS) cannot be suspended or deleted
-        self.assertEqual(
-            self.client.patch(f"/api/admin/shops/{rafols_id}", json={"status": "suspended"}).status_code,
-            400,
-        )
-        self.assertEqual(self.client.delete(f"/api/admin/shops/{rafols_id}").status_code, 400)
+        susp_rafols = self.client.patch(f"/api/admin/shops/{rafols_id}", json={"status": "suspended"})
+        self.assertEqual(susp_rafols.status_code, 200)
+        self.assertEqual(susp_rafols.get_json()["shop"]["status"], "suspended")
 
-        # Admin can also switch Main Hub explicitly via PATCH {is_main: True}
-        switch_back = self.client.patch("/api/admin/shops/2", json={"is_main": True})
-        self.assertEqual(switch_back.status_code, 200)
-        self.assertTrue(switch_back.get_json()["shop"]["is_main"])
-        self.assertEqual(
-            self.client.patch(f"/api/admin/shops/{rafols_id}", json={"is_main": True}).status_code,
-            200,
-        )
+        approve_rafols = self.client.patch(f"/api/admin/shops/{rafols_id}", json={"status": "approved"})
+        self.assertEqual(approve_rafols.status_code, 200)
+        self.assertEqual(approve_rafols.get_json()["shop"]["status"], "approved")
 
-        # Admin can delete a non-main partner shop even if it has bikes and bookings/blocks
+        # Admin can delete any partner shop even if it has bikes and bookings/blocks
         self.client.post(
             "/api/admin/bikes/1/blocks",
             json={"start_date": "2026-07-01", "end_date": "2026-07-03", "reason": "Walk-in test"},

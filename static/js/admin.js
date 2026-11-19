@@ -270,23 +270,19 @@
         const actions = [
           `<button type="button" class="btn btn-sm btn-outline" data-reset-shop-pw="${s.id}">Reset Password</button>`,
         ];
-        if (!s.is_main) {
-          actions.push(`<button type="button" class="btn btn-sm btn-primary" data-set-main-shop="${s.id}">Set as Main Hub</button>`);
-          if (s.status !== "approved") {
-            actions.push(`<button type="button" class="btn btn-sm btn-success" data-shop-action="approved" data-id="${s.id}">Approve Shop</button>`);
-          }
-          if (s.status !== "suspended") {
-            actions.push(`<button type="button" class="btn btn-sm btn-outline" data-shop-action="suspended" data-id="${s.id}">Suspend</button>`);
-          }
-          actions.push(`<button type="button" class="btn btn-sm btn-danger" data-delete-shop="${s.id}">Delete</button>`);
+        if (s.status !== "approved") {
+          actions.push(`<button type="button" class="btn btn-sm btn-success" data-shop-action="approved" data-id="${s.id}">Approve Shop</button>`);
         }
+        if (s.status !== "suspended") {
+          actions.push(`<button type="button" class="btn btn-sm btn-outline" data-shop-action="suspended" data-id="${s.id}">Suspend</button>`);
+        }
+        actions.push(`<button type="button" class="btn btn-sm btn-danger" data-delete-shop="${s.id}">Delete</button>`);
 
         return `
           <div class="admin-booking-card">
             <div class="admin-booking-top">
               <div>
                 <strong>${escapeHtml(s.shop_name)}</strong>
-                ${s.is_main ? `<span class="badge badge-soft">Main Hub</span>` : ""}
                 <span class="text-muted">&bull; ${escapeHtml(s.municipality)}, Camiguin</span>
               </div>
               <span class="badge badge-${escapeHtml(s.status)}">${escapeHtml(statusLabel(s.status))}</span>
@@ -317,7 +313,6 @@
 
             <div class="admin-booking-actions">
               ${actions.join("")}
-              ${s.is_main ? `<span class="text-muted" style="font-size:0.82rem;align-self:center;">Platform Main Fleet Hub (always active)</span>` : ""}
             </div>
           </div>
         `;
@@ -819,9 +814,8 @@
       document.getElementById("edit-bike-id").value = "";
       if (adminState.fleetShopId) {
         editBikeShopSelect.value = adminState.fleetShopId;
-      } else {
-        const mainShop = (adminState.allShops || []).find((s) => s.is_main);
-        if (mainShop) editBikeShopSelect.value = String(mainShop.id);
+      } else if ((adminState.allShops || []).length) {
+        editBikeShopSelect.value = String(adminState.allShops[0].id);
       }
       document.getElementById("edit-bike-image-url").value = "/static/images/bike-click125.jpg";
     }
@@ -969,25 +963,6 @@
         showToast(err.message, "error");
       } finally {
         resetPwBtn.disabled = false;
-      }
-      return;
-    }
-
-    const mainBtn = event.target.closest("[data-set-main-shop]");
-    if (mainBtn) {
-      const id = mainBtn.getAttribute("data-set-main-shop");
-      mainBtn.disabled = true;
-      try {
-        const res = await apiJson(`/api/admin/shops/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ is_main: true }),
-        });
-        await Promise.all([loadDashboard(), loadPartners(), loadFleet()]);
-        showToast(`${res.shop.shop_name} is now the Main Hub!`, "success");
-      } catch (err) {
-        showToast(err.message, "error");
-        mainBtn.disabled = false;
       }
       return;
     }
