@@ -495,7 +495,14 @@ def create_app(test_config: dict | None = None) -> Flask:
     if not (test_config or {}).get("SKIP_ICONS"):
         ensure_icons(force=False)
 
-    init_db(db_path=db_path, db_url=db_url)
+    seed_demo = bool(
+        (test_config or {}).get(
+            "SEED_DEMO",
+            bool((test_config or {}).get("TESTING"))
+            or os.environ.get("SEED_DEMO_DATA", "").strip().lower() in ("1", "true", "yes"),
+        )
+    )
+    init_db(db_path=db_path, db_url=db_url, seed_demo=seed_demo)
     conn = get_connection(db_path=db_path, db_url=db_url)
     try:
         settings_with_secrets = get_settings(conn, include_secrets=True)
@@ -2912,6 +2919,10 @@ def create_app(test_config: dict | None = None) -> Flask:
         bike_cnt = conn.execute("SELECT COUNT(*) FROM bikes WHERE shop_id = ?", (shop_id,)).fetchone()[0]
         booking_cnt = conn.execute("SELECT COUNT(*) FROM bookings WHERE shop_id = ?", (shop_id,)).fetchone()[0]
         with conn:
+            conn.execute(
+                "DELETE FROM reviews WHERE shop_id = ? OR bike_id IN (SELECT id FROM bikes WHERE shop_id = ?)",
+                (shop_id, shop_id),
+            )
             conn.execute(
                 "DELETE FROM bike_blocks WHERE shop_id = ? OR bike_id IN (SELECT id FROM bikes WHERE shop_id = ?)",
                 (shop_id, shop_id),

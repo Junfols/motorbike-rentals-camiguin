@@ -2078,6 +2078,19 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         pub_settings = self.client.get("/api/settings").get_json()["settings"]
         self.assertEqual(pub_settings["reservation_mode"], "required")
 
+        # Production init_db (seed_demo=False) purges remaining demo starter shops and keeps real shops
+        init_db(self.db_path, seed_demo=False)
+        prod_shops = self.client.get("/api/admin/shops?status=all").get_json()["shops"]
+        self.assertEqual([s["id"] for s in prod_shops], [rafols_id])
+
+        # Deleting the last shop and re-running init_db leaves partner shops completely empty (no re-seeding)
+        self.assertEqual(self.client.delete(f"/api/admin/shops/{rafols_id}").status_code, 200)
+        init_db(self.db_path, seed_demo=True)
+        init_db(self.db_path, seed_demo=False)
+        self.assertEqual(self.client.get("/api/admin/shops?status=all").get_json()["shops"], [])
+        self.assertEqual(self.client.get("/api/shops").get_json()["shops"], [])
+        self.assertEqual(self.client.get("/api/bikes").get_json()["bikes"], [])
+
     def test_partner_profile_picture_cover_photo_and_facebook_share_link(self):
         # Register & approve a partner shop, then add a bike
         reg = self.client.post(
