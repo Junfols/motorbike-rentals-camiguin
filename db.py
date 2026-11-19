@@ -583,7 +583,7 @@ def _create_indexes(conn: DatabaseConnection) -> None:
         conn.execute(idx)
 
 
-def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
+def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bool = True) -> None:
     """Create tables, migrate legacy single-shop schema if needed, and seed defaults."""
     conn = get_connection(db_path=db_path, db_url=db_url)
     try:
@@ -640,8 +640,11 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
                 )
 
             now = datetime.now().isoformat(timespec="seconds")
+            demo_seeded = conn.execute(
+                "SELECT value FROM settings WHERE key = 'demo_seeded_v1'"
+            ).fetchone()
             existing_shops = conn.execute("SELECT COUNT(*) FROM shops").fetchone()[0]
-            if existing_shops == 0:
+            if seed_demo and not demo_seeded and existing_shops == 0:
                 starter_shops = [
                     (
                         "Camiguin Central Hub",
@@ -831,9 +834,9 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
 
             _create_indexes(conn)
 
-            # Seed initial reviews if empty
+            # Seed initial reviews if empty (only on initial demo seed)
             rev_cnt = conn.execute("SELECT COUNT(*) FROM reviews").fetchone()[0]
-            if rev_cnt == 0:
+            if seed_demo and not demo_seeded and rev_cnt == 0:
                 first_bike = conn.execute("SELECT id, shop_id FROM bikes ORDER BY id ASC LIMIT 1").fetchone()
                 if first_bike:
                     fb_id = int(first_bike["id"])
@@ -884,7 +887,7 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
                 )
 
             existing_bikes = conn.execute("SELECT COUNT(*) FROM bikes").fetchone()[0]
-            if existing_bikes == 0:
+            if seed_demo and not demo_seeded and existing_bikes == 0:
                 shop_id_by_slug = {
                     row["slug"]: int(row["id"])
                     for row in conn.execute("SELECT id, slug FROM shops").fetchall()
@@ -1025,6 +1028,48 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
                     """,
                     starter_bikes,
                 )
+
+            if not seed_demo:
+                purge_flag = conn.execute(
+                    "SELECT value FROM settings WHERE key = 'purge_demo_starter_shops_v1'"
+                ).fetchone()
+                if not purge_flag:
+                    demo_shop_rows = conn.execute(
+                        """
+                        SELECT id FROM shops
+                        WHERE slug IN ('camiguin-central-hub', 'yumbing-island-scooters', 'benoni-port-moto-express')
+                           OR email IN ('main@camiguinrentals.ph', 'yumbing@camiguinrentals.ph', 'benoni@camiguinrentals.ph')
+                        """
+                    ).fetchall()
+                    for d_row in demo_shop_rows:
+                        d_id = int(d_row["id"])
+                        conn.execute(
+                            "DELETE FROM reviews WHERE shop_id = ? OR bike_id IN (SELECT id FROM bikes WHERE shop_id = ?)",
+                            (d_id, d_id),
+                        )
+                        conn.execute(
+                            "DELETE FROM bike_blocks WHERE shop_id = ? OR bike_id IN (SELECT id FROM bikes WHERE shop_id = ?)",
+                            (d_id, d_id),
+                        )
+                        conn.execute(
+                            "DELETE FROM bookings WHERE shop_id = ? OR bike_id IN (SELECT id FROM bikes WHERE shop_id = ?)",
+                            (d_id, d_id),
+                        )
+                        conn.execute("DELETE FROM bikes WHERE shop_id = ?", (d_id,))
+                        conn.execute("DELETE FROM shops WHERE id = ?", (d_id,))
+                    conn.execute("DELETE FROM reviews WHERE shop_id NOT IN (SELECT id FROM shops)")
+                    conn.execute("DELETE FROM bike_blocks WHERE shop_id NOT IN (SELECT id FROM shops)")
+                    conn.execute("DELETE FROM bookings WHERE shop_id NOT IN (SELECT id FROM shops)")
+                    conn.execute("DELETE FROM bikes WHERE shop_id NOT IN (SELECT id FROM shops)")
+                    conn.execute(
+                        "INSERT INTO settings (key, value) VALUES ('purge_demo_starter_shops_v1', '1') "
+                        "ON CONFLICT (key) DO NOTHING"
+                    )
+
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES ('demo_seeded_v1', '1') "
+                "ON CONFLICT (key) DO NOTHING"
+            )
     finally:
         conn.close()
 
