@@ -376,6 +376,23 @@ class MotorbikeRentalPWATests(unittest.TestCase):
             json={"email": "elena@guinsilibanrides.ph", "password": "mysecret99"},
         )
         self.assertEqual(relogin.status_code, 200)
+
+        # Admin can reset a partner shop password via PATCH /api/admin/shops/<id>
+        short_pw = self.client.patch(f"/api/admin/shops/{partner_id}", json={"password": "123"})
+        self.assertEqual(short_pw.status_code, 400)
+        reset_pw = self.client.patch(f"/api/admin/shops/{partner_id}", json={"password": "partner1234"})
+        self.assertEqual(reset_pw.status_code, 200)
+        self.client.post("/api/partner/logout")
+        old_login = self.client.post(
+            "/api/partner/login",
+            json={"email": "elena@guinsilibanrides.ph", "password": "mysecret99"},
+        )
+        self.assertEqual(old_login.status_code, 401)
+        new_login = self.client.post(
+            "/api/partner/login",
+            json={"email": "elena@guinsilibanrides.ph", "password": "partner1234"},
+        )
+        self.assertEqual(new_login.status_code, 200)
         confirm = self.client.patch(
             f"/api/partner/bookings/{booked['id']}",
             json={"status": "confirmed", "admin_notes": "Ready for delivery"},

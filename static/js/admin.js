@@ -267,7 +267,9 @@
 
     partnersList.innerHTML = adminState.shops
       .map((s) => {
-        const actions = [];
+        const actions = [
+          `<button type="button" class="btn btn-sm btn-outline" data-reset-shop-pw="${s.id}">Reset Password</button>`,
+        ];
         if (!s.is_main) {
           actions.push(`<button type="button" class="btn btn-sm btn-primary" data-set-main-shop="${s.id}">Set as Main Hub</button>`);
           if (s.status !== "approved") {
@@ -313,11 +315,10 @@
               </div>
             </div>
 
-            ${
-              actions.length
-                ? `<div class="admin-booking-actions">${actions.join("")}</div>`
-                : `<div class="text-muted" style="font-size:0.82rem;">Platform Main Fleet Hub (always active)</div>`
-            }
+            <div class="admin-booking-actions">
+              ${actions.join("")}
+              ${s.is_main ? `<span class="text-muted" style="font-size:0.82rem;align-self:center;">Platform Main Fleet Hub (always active)</span>` : ""}
+            </div>
           </div>
         `;
       })
@@ -945,6 +946,33 @@
   });
 
   partnersList.addEventListener("click", async (event) => {
+    const resetPwBtn = event.target.closest("[data-reset-shop-pw]");
+    if (resetPwBtn) {
+      const id = resetPwBtn.getAttribute("data-reset-shop-pw");
+      const shop = (adminState.allShops || []).find((s) => String(s.id) === String(id));
+      const shopLabel = shop ? `${shop.shop_name} (${shop.email})` : "this partner shop";
+      const newPassword = window.prompt(`Enter new password for ${shopLabel} (min 6 characters):`, "partner1234");
+      if (newPassword === null) return;
+      if (newPassword.trim().length < 6) {
+        showToast("Password must be at least 6 characters.", "error");
+        return;
+      }
+      resetPwBtn.disabled = true;
+      try {
+        await apiJson(`/api/admin/shops/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: newPassword.trim() }),
+        });
+        showToast(`Password updated for ${shop ? shop.shop_name : "partner shop"}!`, "success");
+      } catch (err) {
+        showToast(err.message, "error");
+      } finally {
+        resetPwBtn.disabled = false;
+      }
+      return;
+    }
+
     const mainBtn = event.target.closest("[data-set-main-shop]");
     if (mainBtn) {
       const id = mainBtn.getAttribute("data-set-main-shop");

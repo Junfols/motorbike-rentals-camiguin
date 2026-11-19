@@ -868,6 +868,17 @@ def init_db(db_path: str | None = None, db_url: str | None = None) -> None:
                     conn.execute(
                         "INSERT INTO settings (key, value) VALUES ('main_hub_rafols_migrated', '1') ON CONFLICT (key) DO NOTHING"
                     )
+                pw_reset_flag = conn.execute(
+                    "SELECT value FROM settings WHERE key = 'rafols_pw_reset_v1'"
+                ).fetchone()
+                if not pw_reset_flag:
+                    conn.execute(
+                        "UPDATE shops SET password_hash = ? WHERE id = ?",
+                        (generate_password_hash("partner1234"), int(rafols_row["id"])),
+                    )
+                    conn.execute(
+                        "INSERT INTO settings (key, value) VALUES ('rafols_pw_reset_v1', '1') ON CONFLICT (key) DO NOTHING"
+                    )
 
             req_mode_flag = conn.execute(
                 "SELECT value FROM settings WHERE key = 'reservation_mode_required_v1'"
