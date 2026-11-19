@@ -207,6 +207,11 @@
               ? `<a href="${escapeHtml(waLink)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">Message Shop on WhatsApp</a>`
               : ""
           }
+          ${
+            b.status !== "cancelled"
+              ? `<button type="button" class="btn btn-outline btn-sm" data-push-toggle="1" data-push-phone="${escapeHtml(b.customer_phone)}" data-push-booking="${escapeHtml(b.booking_code)}">🔔 Get Phone Alerts for this Booking</button>`
+              : ""
+          }
         </div>
       </div>
     `;

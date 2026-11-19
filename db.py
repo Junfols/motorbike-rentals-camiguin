@@ -466,6 +466,19 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS push_subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            role TEXT NOT NULL DEFAULT 'customer',
+            shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE,
+            customer_phone TEXT NOT NULL DEFAULT '',
+            booking_code TEXT NOT NULL DEFAULT '',
+            endpoint TEXT NOT NULL UNIQUE,
+            p256dh TEXT NOT NULL,
+            auth TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
         """
     )
 
@@ -625,6 +638,20 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
             updated_at TEXT NOT NULL
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS push_subscriptions (
+            id SERIAL PRIMARY KEY,
+            role TEXT NOT NULL DEFAULT 'customer',
+            shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE,
+            customer_phone TEXT NOT NULL DEFAULT '',
+            booking_code TEXT NOT NULL DEFAULT '',
+            endpoint TEXT NOT NULL UNIQUE,
+            p256dh TEXT NOT NULL,
+            auth TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """,
     ]
     for stmt in statements:
         conn.execute(stmt)
@@ -642,6 +669,8 @@ def _create_indexes(conn: DatabaseConnection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_reviews_shop ON reviews (shop_id, is_approved)",
         "CREATE INDEX IF NOT EXISTS idx_reviews_booking ON reviews (booking_id)",
         "CREATE INDEX IF NOT EXISTS idx_booking_calls_status ON booking_calls (status, shop_id, booking_code)",
+        "CREATE INDEX IF NOT EXISTS idx_push_subs_role_shop ON push_subscriptions (role, shop_id)",
+        "CREATE INDEX IF NOT EXISTS idx_push_subs_phone ON push_subscriptions (customer_phone)",
     ]
     for idx in indexes:
         conn.execute(idx)
@@ -911,6 +940,22 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                     )
                     """
                 )
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS push_subscriptions (
+                        id SERIAL PRIMARY KEY,
+                        role TEXT NOT NULL DEFAULT 'customer',
+                        shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE,
+                        customer_phone TEXT NOT NULL DEFAULT '',
+                        booking_code TEXT NOT NULL DEFAULT '',
+                        endpoint TEXT NOT NULL UNIQUE,
+                        p256dh TEXT NOT NULL,
+                        auth TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                    """
+                )
             else:
                 conn.execute(
                     """
@@ -942,6 +987,22 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                         answer_sdp TEXT NOT NULL DEFAULT '',
                         caller_candidates TEXT NOT NULL DEFAULT '[]',
                         callee_candidates TEXT NOT NULL DEFAULT '[]',
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                    """
+                )
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS push_subscriptions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        role TEXT NOT NULL DEFAULT 'customer',
+                        shop_id INTEGER REFERENCES shops(id) ON DELETE CASCADE,
+                        customer_phone TEXT NOT NULL DEFAULT '',
+                        booking_code TEXT NOT NULL DEFAULT '',
+                        endpoint TEXT NOT NULL UNIQUE,
+                        p256dh TEXT NOT NULL,
+                        auth TEXT NOT NULL,
                         created_at TEXT NOT NULL,
                         updated_at TEXT NOT NULL
                     )

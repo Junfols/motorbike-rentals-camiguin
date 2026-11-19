@@ -11,6 +11,7 @@ const PRECACHE_URLS = [
   "/static/css/style.css?v=18",
   "/static/js/pwa.js?v=18",
   "/static/js/calls.js?v=18",
+  "/static/js/push.js?v=18",
   "/static/js/storefront.js?v=18",
   "/static/js/bookings.js?v=18",
   "/static/js/partner.js?v=18",
@@ -140,4 +141,44 @@ self.addEventListener("fetch", (event) => {
       })
     );
   }
+});
+
+// Web Push Notifications
+self.addEventListener("push", (event) => {
+  let data = {};
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch (_) {
+      data = { title: "Motorbike Rentals Camiguin", body: event.data.text() };
+    }
+  }
+  const title = data.title || "Motorbike Rentals Camiguin";
+  const options = {
+    body: data.body || "",
+    icon: data.icon || "/static/icons/icon-192.png",
+    badge: "/static/icons/icon.svg",
+    tag: data.tag || "motoride-notification",
+    data: { url: data.url || "/" },
+    vibrate: [250, 100, 250, 100, 400],
+    requireInteraction: Boolean(data.requireInteraction),
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url) || "/";
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url && client.url.includes(targetUrl) && "focus" in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    })
+  );
 });
