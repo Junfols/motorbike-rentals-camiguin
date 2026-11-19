@@ -725,6 +725,49 @@
       .join("");
   }
 
+  function renderModalContractTerms(bikeObj) {
+    const headingEl = document.getElementById("contract-terms-heading");
+    const bodyEl = document.getElementById("contract-terms-body");
+    if (headingEl) {
+      const shopTitle = (bikeObj && bikeObj.shop_name ? String(bikeObj.shop_name).trim() : "MOTORBIKE RENTAL").toUpperCase();
+      headingEl.textContent = `📄 ${shopTitle} FORM AGREEMENT`;
+    }
+    if (!bodyEl) return;
+    const rawTerms = (bikeObj && bikeObj.shop_contract_terms ? String(bikeObj.shop_contract_terms).trim() : "");
+    if (!rawTerms) return;
+
+    const lines = rawTerms.split(/\r?\n/);
+    const htmlParts = [];
+    let currentList = [];
+    const flushList = () => {
+      if (currentList.length) {
+        htmlParts.push(`<ul class="contract-terms-list" style="margin:0 0 8px;padding-left:18px;">${currentList.join("")}</ul>`);
+        currentList = [];
+      }
+    };
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) {
+        flushList();
+        continue;
+      }
+      if (/^[•\-*>]\s*/.test(line)) {
+        const cleanItem = line.replace(/^[•\-*>]\s*/, "");
+        currentList.push(`<li>${escapeHtml(cleanItem)}</li>`);
+      } else if (line.endsWith(":") || line.endsWith(";") || (line === line.toUpperCase() && line.length > 4)) {
+        flushList();
+        htmlParts.push(`<div style="font-weight:700;color:#1e293b;margin:8px 0 4px;">${escapeHtml(line)}</div>`);
+      } else {
+        currentList.push(`<li>${escapeHtml(line)}</li>`);
+      }
+    }
+    flushList();
+    if (htmlParts.length) {
+      bodyEl.innerHTML = htmlParts.join("");
+    }
+  }
+
   async function openBikeModal(bikeId) {
     if (!bikeId) return;
     if (bookingFormError) {
@@ -783,6 +826,7 @@
       if (rateEl) rateEl.textContent = `${formatMoney(localBike.daily_rate || 0)} / day`;
       const depEl = document.getElementById("modal-deposit-rate");
       if (depEl) depEl.textContent = formatMoney(localBike.deposit || 0);
+      renderModalContractTerms(localBike);
     }
 
     const modalTodayStr = toIsoLocal(new Date());
@@ -884,6 +928,7 @@
       if (descEl) descEl.textContent = bike.description || "";
       const incEl = document.getElementById("modal-bike-inclusions");
       if (incEl) incEl.textContent = bike.inclusions || "2 Helmets";
+      renderModalContractTerms(bike);
       const rateEl = document.getElementById("modal-daily-rate");
       if (rateEl) rateEl.textContent = `${formatMoney(bike.daily_rate)} / day`;
       const depEl = document.getElementById("modal-deposit-rate");
