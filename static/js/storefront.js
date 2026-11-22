@@ -2116,24 +2116,83 @@
     if (el) el.addEventListener("change", refreshQuote);
   });
 
-  async function copyPaymentText(text, label) {
-    if (!text) return;
+  function syncCopyToClipboard(text) {
     try {
-      await navigator.clipboard.writeText(text);
-      showToast(`${label} copied!`, "success");
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "-9999px";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      return true;
     } catch (_) {
-      showToast(`${label}: ${text}`, "success");
+      return false;
+    }
+  }
+
+  function openOfficialWalletApp(wallet) {
+    const ua = navigator.userAgent || "";
+    const isAndroid = /Android/i.test(ua);
+    const isIos = /iPhone|iPad|iPod/i.test(ua);
+
+    let deepLink = "";
+    if (wallet === "gcash") {
+      if (isAndroid) {
+        deepLink =
+          "intent://#Intent;scheme=gcash;package=com.globe.gcash.android;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dcom.globe.gcash.android;end";
+      } else if (isIos) {
+        deepLink = "gcash://";
+      }
+    } else if (wallet === "maya") {
+      if (isAndroid) {
+        deepLink =
+          "intent://#Intent;scheme=paymaya;package=com.paymaya;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dcom.paymaya;end";
+      } else if (isIos) {
+        deepLink = "paymaya://";
+      }
+    }
+
+    if (!deepLink) return;
+    setTimeout(() => {
+      try {
+        window.location.href = deepLink;
+      } catch (_) {}
+    }, 180);
+  }
+
+  async function copyPaymentText(text, label, walletApp) {
+    const cleanText = (text || "").trim();
+    if (!cleanText) return;
+    const digitsOnly = cleanText.replace(/[^\d+]/g, "") || cleanText;
+    syncCopyToClipboard(digitsOnly);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(digitsOnly);
+      }
+    } catch (_) {}
+    if (walletApp === "gcash") {
+      showToast(`GCash number (${digitsOnly}) copied! Opening GCash app...`, "success");
+      openOfficialWalletApp("gcash");
+    } else if (walletApp === "maya") {
+      showToast(`Maya number (${digitsOnly}) copied! Opening Maya app...`, "success");
+      openOfficialWalletApp("maya");
+    } else {
+      showToast(`${label} copied!`, "success");
     }
   }
 
   if (copyGcashBtn && paymentGcashNumber) {
     copyGcashBtn.addEventListener("click", () => {
-      copyPaymentText(paymentGcashNumber.textContent.trim(), "GCash number");
+      copyPaymentText(paymentGcashNumber.textContent.trim(), "GCash number", "gcash");
     });
   }
   if (copyMayaBtn && paymentMayaNumber) {
     copyMayaBtn.addEventListener("click", () => {
-      copyPaymentText(paymentMayaNumber.textContent.trim(), "Maya number");
+      copyPaymentText(paymentMayaNumber.textContent.trim(), "Maya number", "maya");
     });
   }
   if (bookingForm) {
