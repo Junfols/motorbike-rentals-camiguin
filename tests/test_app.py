@@ -689,6 +689,8 @@ class MotorbikeRentalPWATests(unittest.TestCase):
                         self._wrapper._raw.commit()
                 return False
 
+        from psycopg._queries import _query2pg
+
         class _FakePgConn:
             def __init__(self, path, autocommit=False):
                 self.autocommit = bool(autocommit)
@@ -703,6 +705,8 @@ class MotorbikeRentalPWATests(unittest.TestCase):
                     self._in_implicit_tx = True
 
             def execute(self, sql, params=None):
+                if params is not None:
+                    _query2pg(sql.encode("utf-8"), "utf-8")
                 norm = sql.strip()
                 if norm.startswith("SELECT pg_advisory_"):
                     res = _FakePgCursor(self._raw.execute("SELECT 1"))

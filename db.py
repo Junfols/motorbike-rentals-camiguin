@@ -1230,11 +1230,17 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
 
             # Heal any legacy /static/images/*.jpg references so no 404 errors occur after sample image deletion
             conn.execute(
-                "UPDATE bikes SET image_url = ? WHERE image_url LIKE '/static/images/%' OR TRIM(image_url) = ''",
-                (DEFAULT_BIKE_PLACEHOLDER_URL,),
+                "UPDATE bikes SET image_url = ? WHERE image_url LIKE ? OR TRIM(image_url) = ''",
+                (DEFAULT_BIKE_PLACEHOLDER_URL, "/static/images/%"),
             )
-            conn.execute("UPDATE shops SET cover_url = '' WHERE cover_url LIKE '/static/images/%'")
-            conn.execute("UPDATE shops SET logo_url = '' WHERE logo_url LIKE '/static/images/%'")
+            conn.execute(
+                "UPDATE shops SET cover_url = '' WHERE cover_url LIKE ?",
+                ("/static/images/%",),
+            )
+            conn.execute(
+                "UPDATE shops SET logo_url = '' WHERE logo_url LIKE ?",
+                ("/static/images/%",),
+            )
 
             if not seed_demo:
                 purge_flag = conn.execute(
