@@ -17,8 +17,7 @@ const PRECACHE_URLS = [
   "/static/js/partner.js?v=18",
   "/static/icons/icon-192.png",
   "/static/icons/icon-512.png",
-  "/static/icons/icon.svg",
-  "/static/images/hero-scooter.jpg"
+  "/static/icons/icon.svg"
 ];
 
 self.addEventListener("install", (event) => {

@@ -125,17 +125,36 @@
     return `${window.location.origin}/shop/${encodeURIComponent(slug)}`;
   }
 
+  const DEFAULT_BIKE_PLACEHOLDER = "/static/icons/icon.svg";
+
+  function normalizePartnerBikeImage(url) {
+    const clean = String(url || "").trim();
+    if (!clean || clean.startsWith("/static/images/")) {
+      return DEFAULT_BIKE_PLACEHOLDER;
+    }
+    return clean;
+  }
+
+  function isPlaceholderPartnerBikeImage(bike) {
+    if (!bike) return true;
+    if (bike.is_placeholder_image) return true;
+    return normalizePartnerBikeImage(bike.image_url) === DEFAULT_BIKE_PLACEHOLDER;
+  }
+
   function renderShopHeader(shop) {
     state.shop = shop;
     shopTitle.textContent = shop.shop_name;
-    shopSubtitle.textContent = `${shop.municipality}, Camiguin • ${shop.owner_name} • ${shop.email}`;
+    const payoutSummary = shop.payout_number
+      ? ` • Payout: ${shop.payout_method || "GCash"} ${shop.payout_number}`
+      : "";
+    shopSubtitle.textContent = `${shop.municipality}, Camiguin • ${shop.owner_name} • ${shop.email}${payoutSummary}`;
     shopStatusBadge.className = `badge badge-${escapeHtml(shop.status)}`;
     shopStatusBadge.textContent = statusLabel(shop.status);
 
     const initials = getShopInitials(shop.shop_name);
     const topAvatar = document.getElementById("partner-top-avatar");
     if (topAvatar) {
-      if (shop.logo_url) {
+      if (shop.logo_url && !String(shop.logo_url).startsWith("/static/images/")) {
         topAvatar.innerHTML = `<img src="${escapeHtml(shop.logo_url)}" alt="${escapeHtml(shop.shop_name)}" class="partner-top-avatar-img">`;
       } else {
         topAvatar.textContent = initials;
@@ -168,21 +187,35 @@
         .join(" • ");
     }
 
+    const validCoverUrl =
+      shop.cover_url && !String(shop.cover_url).startsWith("/static/images/")
+        ? shop.cover_url
+        : "";
     const coverImg = document.getElementById("prof-cover-preview-img");
     const clearCoverBtn = document.getElementById("prof-clear-cover-btn");
     if (coverImg) {
-      coverImg.src = shop.cover_url || "/static/images/hero-scooter.jpg";
+      if (validCoverUrl) {
+        coverImg.src = validCoverUrl;
+        coverImg.classList.remove("hidden");
+      } else {
+        coverImg.src = "";
+        coverImg.classList.add("hidden");
+      }
     }
     if (clearCoverBtn) {
-      clearCoverBtn.classList.toggle("hidden", !shop.cover_url);
+      clearCoverBtn.classList.toggle("hidden", !validCoverUrl);
     }
 
+    const validLogoUrl =
+      shop.logo_url && !String(shop.logo_url).startsWith("/static/images/")
+        ? shop.logo_url
+        : "";
     const logoImg = document.getElementById("prof-logo-preview-img");
     const logoFallback = document.getElementById("prof-logo-fallback");
     const clearLogoBtn = document.getElementById("prof-clear-logo-btn");
     if (logoImg && logoFallback) {
-      if (shop.logo_url) {
-        logoImg.src = shop.logo_url;
+      if (validLogoUrl) {
+        logoImg.src = validLogoUrl;
         logoImg.classList.remove("hidden");
         logoFallback.classList.add("hidden");
       } else {
@@ -193,19 +226,25 @@
       }
     }
     if (clearLogoBtn) {
-      clearLogoBtn.classList.toggle("hidden", !shop.logo_url);
+      clearLogoBtn.classList.toggle("hidden", !validLogoUrl);
     }
 
     // Overview Tab Showcase Card Live Sync
     const ovCoverImg = document.getElementById("overview-cover-img");
     if (ovCoverImg) {
-      ovCoverImg.src = shop.cover_url || "/static/images/hero-scooter.jpg";
+      if (validCoverUrl) {
+        ovCoverImg.src = validCoverUrl;
+        ovCoverImg.classList.remove("hidden");
+      } else {
+        ovCoverImg.src = "";
+        ovCoverImg.classList.add("hidden");
+      }
     }
     const ovLogoImg = document.getElementById("overview-logo-img");
     const ovLogoFallback = document.getElementById("overview-logo-fallback");
     if (ovLogoImg && ovLogoFallback) {
-      if (shop.logo_url) {
-        ovLogoImg.src = shop.logo_url;
+      if (validLogoUrl) {
+        ovLogoImg.src = validLogoUrl;
         ovLogoImg.classList.remove("hidden");
         ovLogoFallback.classList.add("hidden");
       } else {
@@ -219,7 +258,13 @@
     if (ovShopName) ovShopName.textContent = shop.shop_name || "Partner Shop";
     const ovShopMeta = document.getElementById("overview-shop-meta");
     if (ovShopMeta) {
-      ovShopMeta.textContent = [shop.address, `${shop.municipality || "Mambajao"}, Camiguin`].filter(Boolean).join(" • ");
+      ovShopMeta.textContent = [
+        shop.address,
+        `${shop.municipality || "Mambajao"}, Camiguin`,
+        shop.payout_number ? `💸 ${shop.payout_method || "GCash"}: ${shop.payout_number}` : "",
+      ]
+        .filter(Boolean)
+        .join(" • ");
     }
     const ovPreviewLink = document.getElementById("overview-preview-shop-link");
     if (ovPreviewLink) ovPreviewLink.href = publicPath;
@@ -248,13 +293,59 @@
     document.getElementById("prof-delivery-fee").value = shop.delivery_fee ?? 250;
     document.getElementById("prof-address").value = shop.address || "";
     document.getElementById("prof-description").value = shop.description || "";
+    const profPayoutMethod = document.getElementById("prof-payout-method");
+    if (profPayoutMethod) profPayoutMethod.value = shop.payout_method || "GCash";
+    const profPayoutNumber = document.getElementById("prof-payout-number");
+    if (profPayoutNumber) profPayoutNumber.value = shop.payout_number || shop.phone || "";
+    const profPayoutAccountName = document.getElementById("prof-payout-account-name");
+    if (profPayoutAccountName) profPayoutAccountName.value = shop.payout_account_name || shop.owner_name || "";
     const profContractEl = document.getElementById("prof-contract-terms");
     if (profContractEl) {
       profContractEl.value = shop.contract_terms || shop.default_contract_terms || "";
     }
   }
 
+  function applyUrlOnboardingParams() {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = (params.get("tab") || "").toLowerCase();
+    const hashParam = (window.location.hash || "").replace("#", "").toLowerCase();
+    if (
+      tabParam === "register" ||
+      hashParam === "register" ||
+      params.has("shop_name") ||
+      params.has("bike_model")
+    ) {
+      switchAuthTab("register");
+    }
+    const shopName = params.get("shop_name");
+    const ownerName = params.get("owner_name");
+    const phone = params.get("phone");
+    const municipality = params.get("municipality");
+    const bikeModel = params.get("bike_model");
+
+    if (shopName && document.getElementById("reg-shop-name")) {
+      document.getElementById("reg-shop-name").value = shopName;
+    }
+    if (ownerName && document.getElementById("reg-owner-name")) {
+      document.getElementById("reg-owner-name").value = ownerName;
+      const payoutName = document.getElementById("reg-payout-account-name");
+      if (payoutName && !payoutName.value) payoutName.value = ownerName;
+    }
+    if (phone && document.getElementById("reg-phone")) {
+      document.getElementById("reg-phone").value = phone;
+      const payoutNum = document.getElementById("reg-payout-number");
+      if (payoutNum && !payoutNum.value) payoutNum.value = phone;
+    }
+    if (municipality && document.getElementById("reg-municipality")) {
+      document.getElementById("reg-municipality").value = municipality;
+    }
+    if (bikeModel && document.getElementById("reg-bike-name")) {
+      document.getElementById("reg-bike-name").value = bikeModel;
+    }
+  }
+
   async function checkSession() {
+    applyUrlOnboardingParams();
     try {
       const data = await apiJson("/api/partner/me");
       if (data.authenticated && data.shop) {
@@ -438,12 +529,14 @@
                 <div class="text-muted" style="margin-top:2px;">${b.rental_days}d &bull; ${escapeHtml(b.pickup_time)} &bull; <span style="font-weight:600;">${
                   b.pickup_method === "benoni_port"
                     ? "🚢 Benoni Port (+₱200)"
+                    : b.pickup_method === "balbagon_port"
+                    ? "⛴️ Balbagon Port (Free)"
                     : b.pickup_method === "airport"
-                    ? "✈️ Airport (Free)"
+                    ? "✈️ Camiguin Airport (Free)"
                     : (b.pickup_method === "around_mambajao" || b.pickup_method === "mambajao")
                     ? "🌴 Around Mambajao (Free)"
                     : b.pickup_method === "delivery"
-                    ? "🚚 Delivery"
+                    ? "🏨 Hotel / Resort Delivery"
                     : "🏪 Shop Pickup"
                 }</span></div>
               </div>
@@ -515,10 +608,18 @@
             : bike.status === "maintenance"
             ? "badge-maintenance"
             : "badge-completed";
+        const isPlaceholder = isPlaceholderPartnerBikeImage(bike);
+        const normalizedImg = normalizePartnerBikeImage(bike.image_url);
+        const mediaHtml = isPlaceholder
+          ? `<div class="bike-photo-placeholder" style="height:160px;">
+               <img src="${escapeHtml(normalizedImg)}" alt="${escapeHtml(bike.name)}" class="bike-placeholder-svg">
+               <span class="photo-coming-soon-text">Photo Coming Soon</span>
+             </div>`
+          : `<img src="${escapeHtml(normalizedImg)}" alt="${escapeHtml(bike.name)}">`;
 
         return `
           <div class="admin-bike-card">
-            <img src="${escapeHtml(bike.image_url)}" alt="${escapeHtml(bike.name)}">
+            ${mediaHtml}
             <div class="admin-bike-body">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
                 <strong>${escapeHtml(bike.name)}</strong>
@@ -549,6 +650,8 @@
   function openBikeEditor(bike) {
     bikeError.classList.add("hidden");
     bikeForm.reset();
+    const previewWrap = document.getElementById("p-bike-photo-preview-wrap");
+    if (previewWrap) previewWrap.classList.add("hidden");
 
     if (bike) {
       bikeModalTitle.textContent = `Edit ${bike.name}`;
@@ -564,15 +667,111 @@
       document.getElementById("p-bike-deposit").value = bike.deposit;
       document.getElementById("p-bike-plate").value = bike.plate_number || "";
       document.getElementById("p-bike-fuel").value = bike.fuel_type || "Gasoline";
-      document.getElementById("p-bike-image-url").value = bike.image_url || "";
+      document.getElementById("p-bike-image-url").value = normalizePartnerBikeImage(bike.image_url);
       document.getElementById("p-bike-inclusions").value = bike.inclusions || "";
       document.getElementById("p-bike-description").value = bike.description || "";
     } else {
       bikeModalTitle.textContent = "Add Motorbike";
       document.getElementById("p-bike-id").value = "";
-      document.getElementById("p-bike-image-url").value = "/static/images/bike-click125.jpg";
+      document.getElementById("p-bike-image-url").value = DEFAULT_BIKE_PLACEHOLDER;
     }
     openModal("partner-bike-modal");
+  }
+
+  // Quick model chips & live camera photo preview in Register and Add Bike forms
+  const regQuickChips = document.getElementById("reg-bike-quick-chips");
+  if (regQuickChips) {
+    regQuickChips.addEventListener("click", (e) => {
+      const chip = e.target.closest(".reg-bike-preset-chip");
+      if (!chip) return;
+      const model = chip.getAttribute("data-model") || "";
+      const category = chip.getAttribute("data-category") || "Scooter";
+      const rate = chip.getAttribute("data-rate") || "500";
+      const nameInput = document.getElementById("reg-bike-name");
+      const catInput = document.getElementById("reg-bike-category");
+      const rateInput = document.getElementById("reg-bike-daily-rate");
+      if (nameInput) nameInput.value = model;
+      if (catInput) catInput.value = category;
+      if (rateInput) rateInput.value = rate;
+    });
+  }
+
+  const modalQuickChips = document.getElementById("p-bike-quick-chips");
+  if (modalQuickChips) {
+    modalQuickChips.addEventListener("click", (e) => {
+      const chip = e.target.closest(".modal-bike-preset-chip");
+      if (!chip) return;
+      const model = chip.getAttribute("data-model") || "";
+      const category = chip.getAttribute("data-category") || "Scooter";
+      const cc = chip.getAttribute("data-cc") || "125";
+      const rate = chip.getAttribute("data-rate") || "450";
+      const nameInput = document.getElementById("p-bike-name");
+      const catInput = document.getElementById("p-bike-category");
+      const ccInput = document.getElementById("p-bike-cc");
+      const rateInput = document.getElementById("p-bike-daily");
+      if (nameInput) nameInput.value = model;
+      if (catInput) catInput.value = category;
+      if (ccInput) ccInput.value = cc;
+      if (rateInput) rateInput.value = rate;
+    });
+  }
+
+  const regBikePhotoInput = document.getElementById("reg-bike-photo");
+  if (regBikePhotoInput) {
+    regBikePhotoInput.addEventListener("change", () => {
+      const file = regBikePhotoInput.files && regBikePhotoInput.files[0];
+      const wrap = document.getElementById("reg-bike-photo-preview-wrap");
+      const img = document.getElementById("reg-bike-photo-preview-img");
+      if (file && wrap && img) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          img.src = ev.target.result;
+          wrap.classList.remove("hidden");
+        };
+        reader.readAsDataURL(file);
+      } else if (wrap) {
+        wrap.classList.add("hidden");
+      }
+    });
+  }
+
+  const modalBikePhotoInput = document.getElementById("p-bike-image-file");
+  if (modalBikePhotoInput) {
+    modalBikePhotoInput.addEventListener("change", () => {
+      const file = modalBikePhotoInput.files && modalBikePhotoInput.files[0];
+      const wrap = document.getElementById("p-bike-photo-preview-wrap");
+      const img = document.getElementById("p-bike-photo-preview-img");
+      if (file && wrap && img) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          img.src = ev.target.result;
+          wrap.classList.remove("hidden");
+        };
+        reader.readAsDataURL(file);
+      } else if (wrap) {
+        wrap.classList.add("hidden");
+      }
+    });
+  }
+
+  const regPhoneInput = document.getElementById("reg-phone");
+  const regPayoutNumberInput = document.getElementById("reg-payout-number");
+  if (regPhoneInput && regPayoutNumberInput) {
+    regPhoneInput.addEventListener("blur", () => {
+      if (!regPayoutNumberInput.value.trim() && regPhoneInput.value.trim()) {
+        regPayoutNumberInput.value = regPhoneInput.value.trim();
+      }
+    });
+  }
+
+  const regOwnerInput = document.getElementById("reg-owner-name");
+  const regPayoutNameInput = document.getElementById("reg-payout-account-name");
+  if (regOwnerInput && regPayoutNameInput) {
+    regOwnerInput.addEventListener("blur", () => {
+      if (!regPayoutNameInput.value.trim() && regOwnerInput.value.trim()) {
+        regPayoutNameInput.value = regOwnerInput.value.trim();
+      }
+    });
   }
 
   // Event Listeners
@@ -609,27 +808,23 @@
     event.preventDefault();
     registerError.classList.add("hidden");
     try {
+      const fd = new FormData(registerForm);
       const data = await apiJson("/api/partner/register", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          shop_name: document.getElementById("reg-shop-name").value.trim(),
-          owner_name: document.getElementById("reg-owner-name").value.trim(),
-          email: document.getElementById("reg-email").value.trim(),
-          phone: document.getElementById("reg-phone").value.trim(),
-          municipality: document.getElementById("reg-municipality").value,
-          delivery_fee: document.getElementById("reg-delivery-fee").value,
-          address: document.getElementById("reg-address").value.trim(),
-          telegram_chat_id: document.getElementById("reg-telegram-chat-id").value.trim(),
-          description: document.getElementById("reg-description").value.trim(),
-          password: document.getElementById("reg-password").value,
-        }),
+        body: fd,
       });
       registerForm.reset();
+      const previewWrap = document.getElementById("reg-bike-photo-preview-wrap");
+      if (previewWrap) previewWrap.classList.add("hidden");
       renderShopHeader(data.shop);
       showDashboard();
       await loadAllPartnerData();
-      showToast("Partner account created! Add your motorbikes while awaiting approval.", "success");
+      showToast(
+        data.first_bike
+          ? `Partner account & ${data.first_bike.name} created!`
+          : "Partner account created! Add your motorbikes while awaiting approval.",
+        "success"
+      );
     } catch (err) {
       registerError.textContent = err.message;
       registerError.classList.remove("hidden");
@@ -938,6 +1133,12 @@
       fd.append("delivery_fee", document.getElementById("prof-delivery-fee").value);
       fd.append("address", document.getElementById("prof-address").value.trim());
       fd.append("description", document.getElementById("prof-description").value.trim());
+      const profPayoutMethod = document.getElementById("prof-payout-method");
+      if (profPayoutMethod) fd.append("payout_method", profPayoutMethod.value);
+      const profPayoutNumber = document.getElementById("prof-payout-number");
+      if (profPayoutNumber) fd.append("payout_number", profPayoutNumber.value.trim());
+      const profPayoutAccountName = document.getElementById("prof-payout-account-name");
+      if (profPayoutAccountName) fd.append("payout_account_name", profPayoutAccountName.value.trim());
       const profContractEl = document.getElementById("prof-contract-terms");
       if (profContractEl) {
         fd.append("contract_terms", profContractEl.value.trim());

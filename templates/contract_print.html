@@ -258,6 +258,32 @@
       text-align: center;
     }
 
+    .policy-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .policy-card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      background: #f8fafc;
+      font-size: 0.78rem;
+      line-height: 1.4;
+    }
+    .policy-card strong {
+      display: block;
+      color: var(--primary);
+      font-size: 0.82rem;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+    }
+    @media (max-width: 680px) {
+      .doc-grid, .proof-grid, .policy-cards-grid, .sign-section {
+        grid-template-columns: 1fr;
+      }
+    }
     @media print {
       body { background: #fff !important; }
       .no-print-bar { display: none !important; }
@@ -279,10 +305,10 @@
 
   <div class="no-print-bar">
     <div>
-      <a href="/customer">&larr; Back to Booking Lookup</a>
+      <a href="/bookings?code={{ b.booking_code }}&amp;phone={{ b.customer_phone }}">&larr; Back to Booking Lookup</a>
     </div>
     <div class="print-actions">
-      <button type="button" class="btn btn-outline" onclick="window.print()">🖨️ Print / Save as PDF</button>
+      <button type="button" class="btn btn-primary" onclick="window.print()">🖨️ Print / Save as PDF</button>
     </div>
   </div>
 
@@ -290,26 +316,30 @@
     <header class="doc-header">
       <div class="doc-brand">
         <h1>Motorbike Rentals Camiguin</h1>
-        <p>Camiguin Island, Philippines &bull; motorbikerentalscamiguin.ph</p>
+        <p>Camiguin Island, Philippines &bull; Digital Rental Contract &amp; Valid ID Verification</p>
       </div>
       <div class="doc-shop-info">
         <strong>{{ b.shop_name or "Official Partner Shop" }}</strong>
         <div>{{ b.shop_address or b.shop_municipality or "Camiguin Island" }}</div>
         {% if b.shop_phone %}<div>📞 {{ b.shop_phone }}</div>{% endif %}
+        {% if b.shop_payout_number %}
+        <div>💸 {{ b.shop_payout_method or "GCash" }}: <strong>{{ b.shop_payout_number }}</strong>{% if b.shop_payout_account_name %} ({{ b.shop_payout_account_name }}){% endif %}</div>
+        {% endif %}
       </div>
     </header>
 
     <div class="doc-title-row">
-      <h2>OFFICIAL RENTAL CONTRACT &amp; PAYMENT RECEIPT</h2>
+      <h2>OFFICIAL RENTAL CONTRACT &amp; PRE-FILLED RENTAL AGREEMENT</h2>
       <div class="doc-ref-badge">#{{ b.booking_code }}</div>
     </div>
 
     <section class="doc-grid">
       <div class="doc-panel">
-        <div class="doc-panel-title">1. Renter (Customer) Information</div>
+        <div class="doc-panel-title">1. Renter &amp; Valid ID Verification</div>
         <div class="doc-kv-row"><span>Full Name:</span> <span>{{ b.customer_name }}</span></div>
         <div class="doc-kv-row"><span>Mobile / WhatsApp:</span> <span>{{ b.customer_phone }}</span></div>
-        <div class="doc-kv-row"><span>Driver's License #:</span> <span>{{ b.license_number }}</span></div>
+        <div class="doc-kv-row"><span>Driver's License / Permit #:</span> <span>{{ b.license_number }}</span></div>
+        <div class="doc-kv-row"><span>Valid ID Photo Status:</span> <span>{% if b.license_photo_url %}✓ Uploaded &amp; On File{% else %}Present Original ID on Handover{% endif %}</span></div>
         {% if b.customer_address %}
         <div class="doc-kv-row"><span>Renter Address:</span> <span>{{ b.customer_address }}</span></div>
         {% endif %}
@@ -319,15 +349,15 @@
       </div>
 
       <div class="doc-panel">
-        <div class="doc-panel-title">2. Motorbike &amp; Rental Schedule</div>
-        <div class="doc-kv-row"><span>Motorbike:</span> <span>{{ b.bike_name }}</span></div>
-        <div class="doc-kv-row"><span>Category:</span> <span>{{ b.bike_category }} ({{ b.bike_transmission }})</span></div>
+        <div class="doc-panel-title">2. Motorbike &amp; Camiguin Handover Details</div>
+        <div class="doc-kv-row"><span>Motorbike Unit:</span> <span>{{ b.bike_name }}</span></div>
+        <div class="doc-kv-row"><span>Category / Transmission:</span> <span>{{ b.bike_category }} ({{ b.bike_transmission }})</span></div>
         {% if b.plate_number %}
-        <div class="doc-kv-row"><span>Plate Number:</span> <span>{{ b.plate_number }}</span></div>
+        <div class="doc-kv-row"><span>Plate / Unit Code:</span> <span>{{ b.plate_number }}</span></div>
         {% endif %}
         <div class="doc-kv-row"><span>Pickup Date &amp; Time:</span> <span>{{ b.pickup_date }} &bull; {{ b.pickup_time }}</span></div>
         <div class="doc-kv-row"><span>Return Date:</span> <span>{{ b.return_date }} ({{ b.rental_days }} day{{ 's' if b.rental_days > 1 else '' }})</span></div>
-        <div class="doc-kv-row"><span>Handover Location:</span> <span>{{ b.delivery_address if b.delivery_address else ('Shop Pickup' if b.pickup_method == 'shop' else (b.pickup_method|replace('_', ' ')|title)) }}</span></div>
+        <div class="doc-kv-row"><span>Pickup / Drop-off Point:</span> <span>{{ b.delivery_address if b.delivery_address else ('Shop Pickup' if b.pickup_method == 'shop' else (b.pickup_method|replace('_', ' ')|title)) }}</span></div>
       </div>
     </section>
 
@@ -336,29 +366,29 @@
         <thead>
           <tr>
             <th>Description</th>
-            <th style="text-align:right;">Amount ({{ b.currency }})</th>
+            <th style="text-align:right;">Amount ({{ b.currency or '₱' }})</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td>Motorbike Rental ({{ b.rental_days }} day{{ 's' if b.rental_days > 1 else '' }} &bull; {{ b.bike_name }})</td>
-            <td style="text-align:right;">{{ b.currency }}{{ "%.2f"|format(b.base_subtotal) }}</td>
+            <td style="text-align:right;">{{ b.currency or '₱' }}{{ "%.2f"|format(b.base_subtotal) }}</td>
           </tr>
           {% if b.addons_total and b.addons_total > 0 %}
           <tr>
-            <td>Add-ons (Helmets / Top Box)</td>
-            <td style="text-align:right;">{{ b.currency }}{{ "%.2f"|format(b.addons_total) }}</td>
+            <td>Add-ons (Extra Helmet / Rear Top Box)</td>
+            <td style="text-align:right;">{{ b.currency or '₱' }}{{ "%.2f"|format(b.addons_total) }}</td>
           </tr>
           {% endif %}
           {% if b.delivery_total and b.delivery_total > 0 %}
           <tr>
-            <td>Island Delivery / Handover Fee</td>
-            <td style="text-align:right;">{{ b.currency }}{{ "%.2f"|format(b.delivery_total) }}</td>
+            <td>Camiguin Port / Resort Delivery Fee</td>
+            <td style="text-align:right;">{{ b.currency or '₱' }}{{ "%.2f"|format(b.delivery_total) }}</td>
           </tr>
           {% endif %}
           <tr class="total-row">
             <td><strong>TOTAL CONTRACT AMOUNT</strong></td>
-            <td style="text-align:right;"><strong>{{ b.currency }}{{ "%.2f"|format(b.total_amount) }}</strong></td>
+            <td style="text-align:right;"><strong>{{ b.currency or '₱' }}{{ "%.2f"|format(b.total_amount) }}</strong></td>
           </tr>
           <tr>
             <td>
@@ -366,68 +396,87 @@
               {% if b.payment_reference %} &bull; Ref #: <code>{{ b.payment_reference }}</code>{% endif %}
               &bull; Status: <strong>{{ b.payment_status or "Submitted" }}</strong>
             </td>
-            <td style="text-align:right;color:#059669;">-{{ b.currency }}{{ "%.2f"|format(b.reservation_fee) }}</td>
+            <td style="text-align:right;color:#059669;">-{{ b.currency or '₱' }}{{ "%.2f"|format(b.reservation_fee) }}</td>
           </tr>
           <tr class="balance-row">
             <td><strong>BALANCE DUE UPON HANDOVER</strong></td>
-            <td style="text-align:right;"><strong>{{ b.currency }}{{ "%.2f"|format(b.balance_due) }}</strong></td>
+            <td style="text-align:right;"><strong>{{ b.currency or '₱' }}{{ "%.2f"|format(b.balance_due) }}</strong></td>
           </tr>
         </tbody>
       </table>
     </section>
 
+    <section class="policy-cards-grid">
+      <div class="policy-card">
+        <strong>🪖 1. Helmet Use &amp; Safety Policy</strong>
+        Rider and backrider MUST wear the provided safety helmets at all times on Camiguin Island roads. Strictly no driving under the influence of alcohol/drugs and no off-island ferry transport.
+      </div>
+      <div class="policy-card">
+        <strong>⛽ 2. Gas / Fuel Policy (Unleaded)</strong>
+        Refuel with <strong>UNLEADED GASOLINE ONLY</strong>. Return the motorbike with the <strong>same fuel gauge level</strong> as received upon handover. Missing fuel is charged at Php 100.00 per fuel bar.
+      </div>
+      <div class="policy-card">
+        <strong>🛡️ 3. Damage &amp; Loss Liability</strong>
+        Renter is liable for any crash damage, scratches, lost helmet (Php 2,000), lost key (Php 2,500), flat tire vulcanizing, and Php 500/day downtime fee while the unit is under repair.
+      </div>
+    </section>
+
     <section class="terms-box">
-      <h4>📄 Rental Agreement Terms &amp; Conditions</h4>
+      <h4>📄 Complete Shop Rental Agreement &amp; Liability Terms</h4>
       {% if b.shop_contract_terms %}
       <div style="white-space: pre-line; line-height: 1.45;">{{ b.shop_contract_terms }}</div>
       {% else %}
       <ul>
-        <li>Renter certifies holding a valid driver's license authorized for motorcycle riding in the Philippines.</li>
+        <li>Renter certifies holding a valid Philippine Driver's License or Foreign Driver's Permit authorized for motorcycle riding.</li>
         <li>Renter and backrider agree to wear approved safety helmets at all times on Camiguin roads.</li>
-        <li>The vehicle shall not be brought outside Camiguin Island.</li>
-        <li>Renter agrees to return the vehicle in the same condition as received, ordinary wear and tear excepted.</li>
-        <li>Loss, damage, and road traffic fines occurring during the rental period are the full responsibility of the renter.</li>
+        <li>Gas Policy: Return the motorbike with the same unleaded fuel level as received at handover (Php 100/bar shortage fee).</li>
+        <li>The motorbike shall not be brought outside Camiguin Island or sub-leased to any unauthorized rider.</li>
+        <li>Damage Liability: Loss, accident damage, parts replacement, and road traffic fines occurring during the rental period are the full financial responsibility of the renter.</li>
       </ul>
       {% endif %}
     </section>
 
-    {% if b.license_photo_url or b.signature_url %}
     <section class="proof-grid">
       <div class="proof-card">
-        <strong style="display:block;margin-bottom:6px;font-size:0.8rem;">Driver's License Photo on File</strong>
+        <strong style="display:block;margin-bottom:6px;font-size:0.8rem;">🪪 Valid Driver's License / Foreign Permit Photo</strong>
         {% if b.license_photo_url %}
-        <img src="{{ b.license_photo_url }}" alt="Driver's License">
+        <img src="{{ b.license_photo_url }}" alt="Valid Driver's License Photo">
+        <div style="font-size:0.75rem;color:#059669;margin-top:4px;font-weight:600;">&#10003; License #{{ b.license_number }} Uploaded</div>
         {% else %}
-        <span class="text-muted">Verified physically upon handover</span>
+        <div style="padding:22px 10px;color:#64748b;font-size:0.8rem;">License #{{ b.license_number }} &mdash; Physical Valid ID verified upon handover</div>
         {% endif %}
       </div>
       <div class="proof-card">
-        <strong style="display:block;margin-bottom:6px;font-size:0.8rem;">Renter Digital Signature</strong>
+        <strong style="display:block;margin-bottom:6px;font-size:0.8rem;">✍️ Renter Digital Signature</strong>
         {% if b.signature_url %}
-        <img src="{{ b.signature_url }}" alt="Renter Signature">
+        <img src="{{ b.signature_url }}" alt="Renter Digital Signature">
         {% if b.contract_signed_at %}
-        <div style="font-size:0.75rem;color:#64748b;margin-top:4px;">Signed: {{ b.contract_signed_at }}</div>
+        <div style="font-size:0.75rem;color:#64748b;margin-top:4px;">Digitally Signed: {{ b.contract_signed_at }}</div>
         {% endif %}
         {% else %}
-        <span class="text-muted">Signed physically upon handover</span>
+        <div style="padding:22px 10px;color:#64748b;font-size:0.8rem;">Signed physically upon motorbike handover</div>
         {% endif %}
       </div>
     </section>
-    {% endif %}
 
     <section class="sign-section">
       <div class="sign-box">
+        {% if b.signature_url %}
+        <div style="height:44px;display:flex;align-items:flex-end;justify-content:center;margin-bottom:-42px;">
+          <img src="{{ b.signature_url }}" alt="Signature" style="max-height:42px;max-width:180px;object-fit:contain;">
+        </div>
+        {% endif %}
         <div class="sign-line">{{ b.customer_name }}</div>
-        <div>Renter (Signature over Printed Name)</div>
+        <div>Renter (Digital / Physical Signature over Printed Name)</div>
       </div>
       <div class="sign-box">
         <div class="sign-line">{{ b.shop_name or "Shop Representative" }}</div>
-        <div>Authorized Shop Representative</div>
+        <div>Authorized Partner Shop Representative</div>
       </div>
     </section>
 
     <footer class="doc-footer">
-      Generated automatically by Motorbike Rentals Camiguin &bull; Booking Ref: {{ b.booking_code }} &bull; Print Date: {{ b.created_at or '' }}
+      Generated automatically by Motorbike Rentals Camiguin &bull; Booking Ref: {{ b.booking_code }} &bull; Created: {{ b.created_at or '' }}
     </footer>
   </main>
 

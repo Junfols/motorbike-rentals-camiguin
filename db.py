@@ -16,6 +16,7 @@ VALID_PAYMENT_STATUSES = ("unpaid", "submitted", "verified", "rejected", "refund
 VALID_CATEGORIES = ("Scooter", "Maxi Scooter", "Adventure", "Big Bike")
 VALID_TRANSMISSIONS = ("Automatic", "Manual")
 CAMIGUIN_MUNICIPALITIES = ("Mambajao", "Catarman", "Sagay", "Guinsiliban", "Mahinog")
+DEFAULT_BIKE_PLACEHOLDER_URL = "/static/icons/icon.svg"
 
 DEFAULT_CONTRACT_TERMS = """RESPONSIBILITIES & LIABILITY:
 • I am responsible for any damages caused by myself or members of my party against people, equipment, and property. I understand that loss or damage to any part of the motor vehicle will require payment for replacement or repair fees.
@@ -340,6 +341,9 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             description TEXT NOT NULL DEFAULT '',
             delivery_fee REAL NOT NULL DEFAULT 250,
             telegram_chat_id TEXT NOT NULL DEFAULT '',
+            payout_method TEXT NOT NULL DEFAULT 'GCash',
+            payout_number TEXT NOT NULL DEFAULT '',
+            payout_account_name TEXT NOT NULL DEFAULT '',
             logo_url TEXT NOT NULL DEFAULT '',
             cover_url TEXT NOT NULL DEFAULT '',
             contract_terms TEXT NOT NULL DEFAULT '',
@@ -365,7 +369,7 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             plate_number TEXT NOT NULL DEFAULT '',
             inclusions TEXT NOT NULL DEFAULT '2 Helmets, Phone Mount, Rain Poncho',
             description TEXT NOT NULL DEFAULT '',
-            image_url TEXT NOT NULL DEFAULT '/static/images/bike-click125.jpg',
+            image_url TEXT NOT NULL DEFAULT '/static/icons/icon.svg',
             status TEXT NOT NULL DEFAULT 'available',
             featured INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL
@@ -505,6 +509,9 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
             description TEXT NOT NULL DEFAULT '',
             delivery_fee DOUBLE PRECISION NOT NULL DEFAULT 250,
             telegram_chat_id TEXT NOT NULL DEFAULT '',
+            payout_method TEXT NOT NULL DEFAULT 'GCash',
+            payout_number TEXT NOT NULL DEFAULT '',
+            payout_account_name TEXT NOT NULL DEFAULT '',
             logo_url TEXT NOT NULL DEFAULT '',
             cover_url TEXT NOT NULL DEFAULT '',
             contract_terms TEXT NOT NULL DEFAULT '',
@@ -531,7 +538,7 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
             plate_number TEXT NOT NULL DEFAULT '',
             inclusions TEXT NOT NULL DEFAULT '2 Helmets, Phone Mount, Rain Poncho',
             description TEXT NOT NULL DEFAULT '',
-            image_url TEXT NOT NULL DEFAULT '/static/images/bike-click125.jpg',
+            image_url TEXT NOT NULL DEFAULT '/static/icons/icon.svg',
             status TEXT NOT NULL DEFAULT 'available',
             featured INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL
@@ -803,6 +810,12 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
             shop_cols = _table_columns(conn, "shops")
             if "telegram_chat_id" not in shop_cols:
                 conn.execute("ALTER TABLE shops ADD COLUMN telegram_chat_id TEXT NOT NULL DEFAULT ''")
+            if "payout_method" not in shop_cols:
+                conn.execute("ALTER TABLE shops ADD COLUMN payout_method TEXT NOT NULL DEFAULT 'GCash'")
+            if "payout_number" not in shop_cols:
+                conn.execute("ALTER TABLE shops ADD COLUMN payout_number TEXT NOT NULL DEFAULT ''")
+            if "payout_account_name" not in shop_cols:
+                conn.execute("ALTER TABLE shops ADD COLUMN payout_account_name TEXT NOT NULL DEFAULT ''")
             if "logo_url" not in shop_cols:
                 conn.execute("ALTER TABLE shops ADD COLUMN logo_url TEXT NOT NULL DEFAULT ''")
             if "cover_url" not in shop_cols:
@@ -1102,7 +1115,7 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                         "GA-1251",
                         "2 Helmets, Phone Mount, Rain Poncho",
                         "Agile, fuel-efficient city scooter ideal for Camiguin circumference loop rides and waterfalls.",
-                        "/static/images/bike-click125.jpg",
+                        DEFAULT_BIKE_PLACEHOLDER_URL,
                         "available",
                         1,
                         now,
@@ -1122,7 +1135,7 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                         "GA-1552",
                         "2 Helmets, Phone Mount, USB Charger",
                         "Comfortable maxi scooter with ABS brakes and spacious under-seat storage for two-up island touring.",
-                        "/static/images/bike-nmax155.jpg",
+                        DEFAULT_BIKE_PLACEHOLDER_URL,
                         "available",
                         1,
                         now,
@@ -1142,7 +1155,7 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                         "GA-1603",
                         "2 Helmets, Phone Mount, USB-C Port",
                         "Smooth, quiet 160cc touring scooter built for effortless coastal highway cruising.",
-                        "/static/images/bike-pcx160.jpg",
+                        DEFAULT_BIKE_PLACEHOLDER_URL,
                         "available",
                         0,
                         now,
@@ -1162,7 +1175,7 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                         "GA-1554",
                         "2 Helmets, Phone Mount, Disc Lock",
                         "Sporty, responsive 155cc scooter ready for immediate pickup near Benoni Port.",
-                        "/static/images/bike-aerox155.jpg",
+                        DEFAULT_BIKE_PLACEHOLDER_URL,
                         "available",
                         0,
                         now,
@@ -1182,7 +1195,7 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                         "GA-1605",
                         "2 Helmets, Phone Mount, Windscreen, USB Port",
                         "Adventure-ready scooter with tall ground clearance for mountain climbs up Hibok-Hibok roads.",
-                        "/static/images/bike-adv160.jpg",
+                        DEFAULT_BIKE_PLACEHOLDER_URL,
                         "available",
                         1,
                         now,
@@ -1202,7 +1215,7 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                         "MC-4006",
                         "2 Full-Face Helmets, Phone Mount, Disc Lock",
                         "400cc sport-touring motorcycle with 6-speed gearbox and confident power for long highway runs.",
-                        "/static/images/bike-dominar400.jpg",
+                        DEFAULT_BIKE_PLACEHOLDER_URL,
                         "available",
                         1,
                         now,
@@ -1218,6 +1231,14 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                     """,
                     starter_bikes,
                 )
+
+            # Heal any legacy /static/images/*.jpg references so no 404 errors occur after sample image deletion
+            conn.execute(
+                "UPDATE bikes SET image_url = ? WHERE image_url LIKE '/static/images/%' OR TRIM(image_url) = ''",
+                (DEFAULT_BIKE_PLACEHOLDER_URL,),
+            )
+            conn.execute("UPDATE shops SET cover_url = '' WHERE cover_url LIKE '/static/images/%'")
+            conn.execute("UPDATE shops SET logo_url = '' WHERE logo_url LIKE '/static/images/%'")
 
             if not seed_demo:
                 purge_flag = conn.execute(
@@ -1362,10 +1383,10 @@ def calculate_quote(
     if pickup_method_clean == "benoni_port":
         delivery_fee_rate = 200.0
         delivery_total = 200.0
-    elif pickup_method_clean in ("airport", "around_mambajao", "mambajao", "shop"):
+    elif pickup_method_clean in ("balbagon_port", "airport", "around_mambajao", "mambajao", "hotel_mambajao", "shop"):
         delivery_fee_rate = 0.0
         delivery_total = 0.0
-    elif pickup_method_clean == "delivery":
+    elif pickup_method_clean in ("delivery", "hotel_delivery", "hotel_catarman", "hotel_sagay", "hotel_guinsiliban", "hotel_mahinog"):
         delivery_fee_rate = delivery_fee
         delivery_total = delivery_fee
     else:

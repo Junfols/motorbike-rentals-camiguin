@@ -258,6 +258,16 @@
     renderPartners();
   }
 
+  const DEFAULT_BIKE_PLACEHOLDER = "/static/icons/icon.svg";
+
+  function normalizeAdminBikeImage(url) {
+    const clean = String(url || "").trim();
+    if (!clean || clean.startsWith("/static/images/")) {
+      return DEFAULT_BIKE_PLACEHOLDER;
+    }
+    return clean;
+  }
+
   function renderPartners() {
     if (!adminState.shops.length) {
       partnersList.innerHTML = `<div class="empty-state">No partner shops match this filter.</div>`;
@@ -299,13 +309,14 @@
                 <div class="text-muted">${escapeHtml(s.address || s.municipality)}</div>
               </div>
               <div>
-                <span class="trip-detail-label">Fleet / Bookings</span>
-                <strong>${s.bike_count || 0} model(s)</strong>
-                <div class="text-muted">${s.booking_count || 0} booking(s)</div>
+                <span class="trip-detail-label">Preferred Payout (${escapeHtml(s.payout_method || "GCash")})</span>
+                <strong>${escapeHtml(s.payout_number || s.phone || "Not set")}</strong>
+                <div class="text-muted">${escapeHtml(s.payout_account_name || s.owner_name || "")}</div>
               </div>
               <div>
-                <span class="trip-detail-label">Gross Bookings</span>
-                <strong>${escapeHtml(formatMoney(s.gross_revenue || 0))}</strong>
+                <span class="trip-detail-label">Fleet / Bookings</span>
+                <strong>${s.bike_count || 0} model(s)</strong>
+                <div class="text-muted">${s.booking_count || 0} booking(s) &bull; ${escapeHtml(formatMoney(s.gross_revenue || 0))}</div>
               </div>
             </div>
 
@@ -414,12 +425,14 @@
                 <div class="text-muted" style="margin-top:2px;">${b.rental_days}d &bull; ${escapeHtml(b.pickup_time)} &bull; <span style="font-weight:600;">${
                   b.pickup_method === "benoni_port"
                     ? "🚢 Benoni Port (+₱200)"
+                    : b.pickup_method === "balbagon_port"
+                    ? "⛴️ Balbagon Port (Free)"
                     : b.pickup_method === "airport"
-                    ? "✈️ Airport (Free)"
+                    ? "✈️ Camiguin Airport (Free)"
                     : (b.pickup_method === "around_mambajao" || b.pickup_method === "mambajao")
                     ? "🌴 Around Mambajao (Free)"
                     : b.pickup_method === "delivery"
-                    ? "🚚 Delivery"
+                    ? "🏨 Hotel / Resort Delivery"
                     : "🏪 Shop Pickup"
                 }</span></div>
               </div>
@@ -496,10 +509,18 @@
             : bike.status === "maintenance"
             ? "badge-maintenance"
             : "badge-completed";
+        const normalizedImg = normalizeAdminBikeImage(bike.image_url);
+        const isPlaceholder = bike.is_placeholder_image || normalizedImg === DEFAULT_BIKE_PLACEHOLDER;
+        const mediaHtml = isPlaceholder
+          ? `<div class="bike-photo-placeholder" style="height:160px;">
+               <img src="${escapeHtml(normalizedImg)}" alt="${escapeHtml(bike.name)}" class="bike-placeholder-svg">
+               <span class="photo-coming-soon-text">Photo Coming Soon</span>
+             </div>`
+          : `<img src="${escapeHtml(normalizedImg)}" alt="${escapeHtml(bike.name)}">`;
 
         return `
           <div class="admin-bike-card">
-            <img src="${escapeHtml(bike.image_url)}" alt="${escapeHtml(bike.name)}">
+            ${mediaHtml}
             <div class="admin-bike-body">
               <div class="shop-pill-line" style="margin-bottom:6px;">
                 ${escapeHtml(bike.shop_name || "Shop")} (${escapeHtml(bike.shop_municipality || "")})
@@ -821,7 +842,7 @@
       document.getElementById("edit-bike-deposit").value = bike.deposit;
       document.getElementById("edit-bike-plate").value = bike.plate_number || "";
       document.getElementById("edit-bike-fuel").value = bike.fuel_type || "Gasoline";
-      document.getElementById("edit-bike-image-url").value = bike.image_url || "";
+      document.getElementById("edit-bike-image-url").value = normalizeAdminBikeImage(bike.image_url);
       document.getElementById("edit-bike-inclusions").value = bike.inclusions || "";
       document.getElementById("edit-bike-description").value = bike.description || "";
       document.getElementById("edit-bike-featured").checked = Boolean(bike.featured);
@@ -833,7 +854,7 @@
       } else if ((adminState.allShops || []).length) {
         editBikeShopSelect.value = String(adminState.allShops[0].id);
       }
-      document.getElementById("edit-bike-image-url").value = "/static/images/bike-click125.jpg";
+      document.getElementById("edit-bike-image-url").value = DEFAULT_BIKE_PLACEHOLDER;
     }
     openModal("bike-editor-modal");
   }

@@ -560,11 +560,11 @@
       <div class="form-grid-2">
         <div class="form-group">
           <label for="edit-bike-image-file">Upload Photo (PNG/JPG/WEBP)</label>
-          <input type="file" id="edit-bike-image-file" name="image" accept="image/png,image/jpeg,image/webp">
+          <input type="file" id="edit-bike-image-file" name="image" accept="image/*" capture="environment">
         </div>
         <div class="form-group">
           <label for="edit-bike-image-url">Or Photo Path / URL</label>
-          <input type="text" id="edit-bike-image-url" name="image_url" placeholder="/static/images/bike-click125.jpg">
+          <input type="text" id="edit-bike-image-url" name="image_url" placeholder="/static/icons/icon.svg">
         </div>
       </div>
 

@@ -2797,6 +2797,198 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertEqual(m_data["total_amount"], 450.0)
         self.assertEqual(m_data["delivery_address"], "Paras Beach Resort, Yumbing")
 
+    def test_default_bikes_use_svg_placeholder_and_photo_coming_soon(self):
+        bikes_res = self.client.get("/api/bikes")
+        self.assertEqual(bikes_res.status_code, 200)
+        bikes = bikes_res.get_json()["bikes"]
+        self.assertGreaterEqual(len(bikes), 6)
+        for bike in bikes:
+            self.assertEqual(bike["image_url"], "/static/icons/icon.svg")
+            self.assertTrue(bike["is_placeholder_image"])
+            self.assertNotIn("/static/images/", bike["image_url"])
+
+        index_html = self.client.get("/").get_data(as_text=True)
+        self.assertNotIn("/static/images/", index_html)
+        self.assertIn("Photo Coming Soon", index_html)
+        self.assertIn("bike-photo-placeholder", index_html)
+
+    def test_partner_onboarding_mobile_camera_upload_and_payout_details(self):
+        index_html = self.client.get("/").get_data(as_text=True)
+        self.assertIn("landing-partner-onboard-form", index_html)
+        self.assertIn("Ilista Imong Motor", index_html)
+
+        partner_html = self.client.get("/partner").get_data(as_text=True)
+        self.assertNotIn("/static/images/", partner_html)
+        self.assertIn('id="reg-payout-method"', partner_html)
+        self.assertIn('id="reg-payout-number"', partner_html)
+        self.assertIn('id="reg-bike-photo"', partner_html)
+        self.assertIn('capture="environment"', partner_html)
+
+        # Register a new partner shop with direct mobile photo upload and GCash payout info
+        png_bytes = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+            b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+            b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        reg_res = self.client.post(
+            "/api/partner/register",
+            data={
+                "shop_name": "Catarman Island Riders",
+                "owner_name": "Ramon Reyes",
+                "email": "ramon@catarmanriders.ph",
+                "phone": "09171112233",
+                "municipality": "Catarman",
+                "address": "Bonbon Road near Sunken Cemetery",
+                "delivery_fee": "250",
+                "password": "password123",
+                "payout_method": "Maya",
+                "payout_number": "09189998877",
+                "payout_account_name": "Ramon C. Reyes",
+                "first_bike_name": "Yamaha NMAX 155",
+                "first_bike_category": "Maxi Scooter",
+                "first_bike_daily_rate": "750",
+                "bike_photo": (io.BytesIO(png_bytes), "nmax155_phone.png"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(reg_res.status_code, 201)
+        reg_json = reg_res.get_json()
+        shop = reg_json["shop"]
+        self.assertEqual(shop["payout_method"], "Maya")
+        self.assertEqual(shop["payout_number"], "09189998877")
+        self.assertEqual(shop["payout_account_name"], "Ramon C. Reyes")
+        self.assertIsNotNone(reg_json.get("first_bike"))
+        self.assertEqual(reg_json["first_bike"]["name"], "Yamaha NMAX 155")
+        self.assertTrue(reg_json["first_bike"]["image_url"].startswith("/uploads/"))
+        self.assertFalse(reg_json["first_bike"]["is_placeholder_image"])
+
+        # Update payout details via partner profile
+        upd_res = self.client.put(
+            "/api/partner/profile",
+            json={
+                "shop_name": "Catarman Island Riders",
+                "owner_name": "Ramon Reyes",
+                "phone": "09171112233",
+                "municipality": "Catarman",
+                "delivery_fee": 250,
+                "address": "Bonbon Road near Sunken Cemetery",
+                "payout_method": "GCash & Maya",
+                "payout_number": "09171112233",
+                "payout_account_name": "Ramon Reyes Official",
+            },
+        )
+        self.assertEqual(upd_res.status_code, 200)
+        upd_shop = upd_res.get_json()["shop"]
+        self.assertEqual(upd_shop["payout_method"], "GCash & Maya")
+        self.assertEqual(upd_shop["payout_number"], "09171112233")
+        self.assertEqual(upd_shop["payout_account_name"], "Ramon Reyes Official")
+
+    def test_camiguin_preset_pickup_points_balbagon_and_hotel_delivery(self):
+        index_html = self.client.get("/").get_data(as_text=True)
+        self.assertIn("Benoni Port (Mahinog)", index_html)
+        self.assertIn("Balbagon Port (Mambajao)", index_html)
+        self.assertIn("Camiguin Airport (Mambajao)", index_html)
+        self.assertIn("Hotel / Resort Delivery (Mambajao, Catarman, Sagay, Guinsiliban)", index_html)
+
+        click_bike = self.client.get("/api/bikes?category=Scooter").get_json()["bikes"][0]
+        p = self._future_str(20)
+        r = self._future_str(21)
+
+        q_balbagon = self.client.get(
+            f"/api/quote?bike_id={click_bike['id']}&pickup_date={p}&return_date={r}&pickup_method=balbagon_port"
+        ).get_json()["quote"]
+        self.assertEqual(q_balbagon["delivery_total"], 0.0)
+        self.assertEqual(q_balbagon["total_amount"], 450.0)
+
+        b_res = self.client.post(
+            "/api/bookings",
+            json={
+                "bike_id": click_bike["id"],
+                "pickup_date": p,
+                "return_date": r,
+                "customer_name": "Bohol Ferry Tourist",
+                "customer_phone": "09173334455",
+                "license_number": "G01-24-112233",
+                "pickup_method": "balbagon_port",
+            },
+        )
+        self.assertEqual(b_res.status_code, 201)
+        b_data = b_res.get_json()["booking"]
+        self.assertEqual(b_data["pickup_method"], "balbagon_port")
+        self.assertEqual(b_data["delivery_total"], 0.0)
+        self.assertEqual(b_data["delivery_address"], "Balbagon Port (Mambajao)")
+        self.assertEqual(b_data["delivery_lat"], 9.2561)
+        self.assertEqual(b_data["delivery_lng"], 124.7175)
+
+    def test_license_photo_requirement_and_prefilled_rental_contract(self):
+        click_bike = self.client.get("/api/bikes?category=Scooter").get_json()["bikes"][0]
+        p = self._future_str(22)
+        r = self._future_str(24)
+
+        # Storefront submission with require_license_photo=1 and no license_photo fails with 400
+        missing_lic = self.client.post(
+            "/api/bookings",
+            data={
+                "bike_id": str(click_bike["id"]),
+                "pickup_date": p,
+                "return_date": r,
+                "pickup_time": "09:00",
+                "pickup_method": "shop",
+                "customer_name": "Carlos Rider",
+                "customer_phone": "09174445566",
+                "license_number": "N01-23-987654",
+                "require_license_photo": "1",
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(missing_lic.status_code, 400)
+        self.assertIn("Driver's License", missing_lic.get_json()["error"])
+
+        # Uploading valid license photo + digital signature succeeds and populates printable contract
+        png_bytes = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+            b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+            b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        sig_data_uri = "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
+        ok_res = self.client.post(
+            "/api/bookings",
+            data={
+                "bike_id": str(click_bike["id"]),
+                "pickup_date": p,
+                "return_date": r,
+                "pickup_time": "09:00",
+                "pickup_method": "balbagon_port",
+                "customer_name": "Carlos Rider",
+                "customer_phone": "09174445566",
+                "customer_address": "Balyali Resort, Agoho, Mambajao",
+                "license_number": "N01-23-987654",
+                "require_license_photo": "1",
+                "contract_agreed": "1",
+                "signature_data": sig_data_uri,
+                "license_photo": (io.BytesIO(png_bytes), "ph_drivers_license.png"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(ok_res.status_code, 201)
+        booking = ok_res.get_json()["booking"]
+        self.assertTrue(booking["license_photo_url"].startswith("/uploads/"))
+        self.assertTrue(booking["signature_url"].startswith("/uploads/"))
+
+        contract_res = self.client.get(
+            f"/bookings/{booking['booking_code']}/contract?phone=09174445566"
+        )
+        self.assertEqual(contract_res.status_code, 200)
+        contract_html = contract_res.get_data(as_text=True)
+        self.assertIn(booking["booking_code"], contract_html)
+        self.assertIn("Carlos Rider", contract_html)
+        self.assertIn("N01-23-987654", contract_html)
+        self.assertIn(booking["license_photo_url"], contract_html)
+        self.assertIn(booking["signature_url"], contract_html)
+        self.assertIn("Helmet Use &amp; Safety Policy", contract_html)
+        self.assertIn("Gas / Fuel Policy (Unleaded)", contract_html)
+        self.assertIn("Damage &amp; Loss Liability", contract_html)
+
 
 if __name__ == "__main__":
     unittest.main()

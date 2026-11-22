@@ -5,13 +5,13 @@
 {% block head_extra %}
   {% set base_origin = request.url_root.rstrip('/') %}
   {% if featured_shop %}
-    {% set raw_og_img = featured_shop.cover_url or featured_shop.logo_url or '/static/images/hero-scooter.jpg' %}
+    {% set raw_og_img = featured_shop.cover_url or featured_shop.logo_url or '/static/icons/icon-512.png' %}
     {% set og_img_abs = raw_og_img if raw_og_img.startswith('http') else (base_origin ~ raw_og_img) %}
     {% set og_title = featured_shop.shop_name ~ ' — Motorbike Rental in ' ~ featured_shop.municipality ~ ', Camiguin' %}
     {% set og_desc = featured_shop.description or ('Book verified motorbikes directly from ' ~ featured_shop.shop_name ~ ' in ' ~ featured_shop.municipality ~ ', Camiguin Island.') %}
     {% set og_url = base_origin ~ '/shop/' ~ featured_shop.slug %}
   {% else %}
-    {% set og_img_abs = base_origin ~ '/static/images/hero-scooter.jpg' %}
+    {% set og_img_abs = base_origin ~ '/static/icons/icon-512.png' %}
     {% set og_title = shop.shop_name ~ ' — Island Motorbike Marketplace' %}
     {% set og_desc = shop.tagline %}
     {% set og_url = base_origin ~ '/' %}
@@ -31,7 +31,6 @@
 {% block content %}
 <section class="hero-section">
   <div class="hero-bg">
-    <img src="/static/images/hero-scooter.jpg" alt="Motorbike parked along tropical coastal road" class="hero-img">
     <div class="hero-overlay"></div>
   </div>
 
@@ -99,7 +98,6 @@
       {% if storefront_bootstrap and storefront_bootstrap.shops %}
         {% for s in storefront_bootstrap.shops %}
         {% set is_active = featured_shop and (featured_shop.id|string == s.id|string) %}
-        {% set cover_bg = s.cover_url or '/static/images/hero-scooter.jpg' %}
         <button
           type="button"
           role="listitem"
@@ -108,7 +106,7 @@
           aria-pressed="{% if is_active %}true{% else %}false{% endif %}"
           title="View {{ s.shop_name }} Profile &amp; Fleet"
         >
-          <div class="shop-strip-cover" style="background-image: linear-gradient(180deg, rgba(15,23,42,0.28), rgba(15,23,42,0.78)), url('{{ cover_bg }}');">
+          <div class="shop-strip-cover" {% if s.cover_url %}style="background-image: linear-gradient(180deg, rgba(15,23,42,0.28), rgba(15,23,42,0.78)), url('{{ s.cover_url }}');"{% endif %}>
             <span class="shop-strip-hub-tag verified">Verified</span>
           </div>
           <div class="shop-strip-body">
@@ -133,13 +131,14 @@
   <!-- Featured / Selected Partner Shop Profile Banner (Facebook Page Style) -->
   <div id="shop-profile-banner" class="shop-profile-banner {% if not featured_shop %}hidden{% endif %}" aria-live="polite">
     {% if featured_shop %}
-      {% set s_cover = featured_shop.cover_url or '/static/images/hero-scooter.jpg' %}
       {% set s_share_url = request.url_root.rstrip('/') ~ '/shop/' ~ featured_shop.slug %}
       {% set fb_share = 'https://www.facebook.com/sharer/sharer.php?u=' ~ s_share_url|urlencode %}
       {% set wa_clean = (featured_shop.whatsapp_number or featured_shop.phone or '')|replace('-', '')|replace(' ', '')|replace('+', '') %}
       {% if wa_clean.startswith('0') %}{% set wa_clean = '63' ~ wa_clean[1:] %}{% endif %}
       <div class="shop-banner-cover">
-        <img src="{{ s_cover }}" alt="{{ featured_shop.shop_name }} Cover Photo" class="shop-banner-cover-img">
+        {% if featured_shop.cover_url %}
+          <img src="{{ featured_shop.cover_url }}" alt="{{ featured_shop.shop_name }} Cover Photo" class="shop-banner-cover-img">
+        {% endif %}
         <div class="shop-banner-cover-overlay"></div>
         <div class="shop-banner-top-bar">
           <span class="shop-banner-verified-pill">
@@ -245,8 +244,15 @@
     {% if storefront_bootstrap and storefront_bootstrap.bikes %}
       {% for bike in storefront_bootstrap.bikes %}
       <article class="bike-card" data-bike-id="{{ bike.id }}">
-        <div class="bike-card-media">
-          <img src="{{ bike.image_url }}" alt="{{ bike.name }}" loading="lazy">
+        <div class="bike-card-media {% if bike.is_placeholder_image or not bike.image_url or bike.image_url == '/static/icons/icon.svg' %}is-placeholder{% endif %}">
+          {% if bike.is_placeholder_image or not bike.image_url or bike.image_url == '/static/icons/icon.svg' %}
+            <div class="bike-photo-placeholder">
+              <img src="/static/icons/icon.svg" alt="{{ bike.name }}" class="bike-placeholder-svg" loading="lazy">
+              <span class="photo-coming-soon-text">Photo Coming Soon</span>
+            </div>
+          {% else %}
+            <img src="{{ bike.image_url }}" alt="{{ bike.name }}" loading="lazy">
+          {% endif %}
           <div class="bike-card-top-badges">
             <span class="badge badge-dark">{{ bike.category }}</span>
             {% if bike.status == 'maintenance' %}
@@ -455,14 +461,56 @@
       </div>
     </div>
 
-    <div class="partner-cta-banner">
-      <div>
-        <h3>Have Motorbikes for Rent in Camiguin?</h3>
-        <p class="text-muted">Register your shop for free, list your units from your phone, and manage all bookings in one centralized portal.</p>
+    <!-- Partner With Us / Ilista Imong Motor Self-Registration Onboarding Card -->
+    <div id="partner-with-us" class="partner-cta-banner partner-onboard-banner">
+      <div class="partner-onboard-info">
+        <span class="badge badge-soft" style="margin-bottom:8px;">🏪 Camiguin Rental Shop Partners &bull; 100% Free Listing</span>
+        <h3>Partner With Us / Ilista Imong Motor sa Camiguin</h3>
+        <p class="text-muted">Naa kay paabangan nga NMAX, Click, Aerox, o ADV? I-rehistro imong shop gamit lang ang cellphone, kuhaa og picture imong motor diretso sa camera, ug dawata ang bayad via GCash o Maya.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+          <a href="/partner?tab=register" class="btn btn-primary">📲 Ilista Imong Motor (Register Shop)</a>
+          <a href="/partner" class="btn btn-outline" style="background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.28);">Partner Sign In</a>
+        </div>
       </div>
-      <div class="partner-cta-actions">
-        <a href="/partner" class="btn btn-primary">Partner Login / Register</a>
-      </div>
+
+      <form id="landing-partner-onboard-form" class="partner-quick-onboard-form" action="/partner" method="get">
+        <input type="hidden" name="tab" value="register">
+        <div class="partner-quick-form-head">
+          <strong>🚀 Quick Partner Self-Registration</strong>
+          <small>Fill in below to jump straight to mobile onboarding:</small>
+        </div>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="landing-reg-shop">Shop / Rental Name *</label>
+            <input type="text" id="landing-reg-shop" name="shop_name" required placeholder="e.g., Hibok Scooters">
+          </div>
+          <div class="form-group">
+            <label for="landing-reg-owner">Owner Full Name *</label>
+            <input type="text" id="landing-reg-owner" name="owner_name" required placeholder="Juan Dela Cruz">
+          </div>
+        </div>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="landing-reg-phone">Mobile / GCash Number *</label>
+            <input type="tel" id="landing-reg-phone" name="phone" required placeholder="0917 123 4567">
+          </div>
+          <div class="form-group">
+            <label for="landing-reg-municipality">Municipality *</label>
+            <select id="landing-reg-municipality" name="municipality">
+              {% for m in municipalities %}
+              <option value="{{ m }}">{{ m }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="landing-reg-bike">Motorbike Model to List (e.g. NMAX, Click 125i, Aerox)</label>
+          <input type="text" id="landing-reg-bike" name="bike_model" placeholder="e.g., Yamaha NMAX 155 / Honda Click 125i">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">
+          Continue to Partner Onboarding &amp; Upload Photos &rarr;
+        </button>
+      </form>
     </div>
   </div>
 </section>
@@ -537,8 +585,9 @@
     <div class="modal-body booking-modal-grid">
       <!-- Left Column: Specs & Owning Shop -->
       <div class="booking-bike-summary">
-        <div class="modal-bike-img-wrap">
-          <img id="modal-bike-img" src="" alt="">
+        <div id="modal-bike-img-wrap" class="modal-bike-img-wrap">
+          <img id="modal-bike-img" src="/static/icons/icon.svg" alt="">
+          <span id="modal-photo-coming-soon" class="photo-coming-soon-text hidden">Photo Coming Soon</span>
         </div>
 
         <div class="info-box shop-highlight-box">
@@ -587,7 +636,7 @@
       <form id="booking-form" class="booking-form">
         <input type="hidden" id="booking-bike-id" name="bike_id">
 
-        <div class="form-section-title">1. Rental Schedule</div>
+        <div class="form-section-title">1. Rental Schedule &amp; Camiguin Pickup / Drop-off</div>
         <div class="form-grid-2">
           <div class="form-group">
             <label for="booking-pickup-date">Pickup Date *</label>
@@ -630,12 +679,42 @@
             </select>
           </div>
           <div class="form-group">
-            <label for="booking-pickup-method">Pickup Method *</label>
+            <label for="booking-pickup-method">Pickup Point / Method *</label>
             <select id="booking-pickup-method" name="pickup_method">
               <option value="shop">Shop Pickup (Free)</option>
               <option id="delivery-option-benoni" value="benoni_port">Benoni Port (+₱200)</option>
+              <option id="delivery-option-balbagon" value="balbagon_port">Balbagon Port (Mambajao) (Free)</option>
               <option id="delivery-option-airport" value="airport">Camiguin Airport (Free)</option>
               <option id="delivery-option-mambajao" value="around_mambajao">Around Mambajao (Free)</option>
+              <option id="delivery-option-label" value="delivery">Hotel / Resort Delivery (Mambajao, Catarman, Sagay, Guinsiliban)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="booking-pickup-location-preset">Camiguin Pickup Location (Preset Dropdown) *</label>
+            <select id="booking-pickup-location-preset">
+              <option value="shop" data-method="shop" data-address="Shop Pickup">🏪 Shop Pickup (At Partner Rental Shop)</option>
+              <option value="Benoni Port (Mahinog)" data-method="benoni_port" data-lat="9.1306" data-lng="124.7937" data-address="Benoni Port (Mahinog)">🚢 Benoni Port (Mahinog) (+₱200)</option>
+              <option value="Balbagon Port (Mambajao)" data-method="balbagon_port" data-lat="9.2561" data-lng="124.7175" data-address="Balbagon Port (Mambajao)">⛴️ Balbagon Port (Mambajao) (Free)</option>
+              <option value="Camiguin Airport (Mambajao)" data-method="airport" data-lat="9.2530" data-lng="124.7061" data-address="Camiguin Airport (Mambajao)">✈️ Camiguin Airport (Mambajao) (Free)</option>
+              <option value="Hotel / Resort Delivery (Mambajao)" data-method="around_mambajao" data-lat="9.2553" data-lng="124.6468" data-address="Hotel / Resort Delivery (Mambajao)">🌴 Hotel / Resort Delivery (Mambajao) (Free)</option>
+              <option value="Hotel / Resort Delivery (Catarman)" data-method="delivery" data-lat="9.2010" data-lng="124.6320" data-address="Hotel / Resort Delivery (Catarman)">🏖️ Hotel / Resort Delivery (Catarman)</option>
+              <option value="Hotel / Resort Delivery (Sagay)" data-method="delivery" data-lat="9.1410" data-lng="124.7210" data-address="Hotel / Resort Delivery (Sagay)">🌊 Hotel / Resort Delivery (Sagay)</option>
+              <option value="Hotel / Resort Delivery (Guinsiliban)" data-method="delivery" data-lat="9.1005" data-lng="124.7840" data-address="Hotel / Resort Delivery (Guinsiliban)">🏝️ Hotel / Resort Delivery (Guinsiliban)</option>
+              <option value="Hotel / Resort Delivery (Mahinog)" data-method="delivery" data-lat="9.1552" data-lng="124.7891" data-address="Hotel / Resort Delivery (Mahinog)">✨ Hotel / Resort Delivery (Mahinog)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="booking-dropoff-location-preset">Drop-off / Return Point *</label>
+            <select id="booking-dropoff-location-preset">
+              <option value="Same as Pickup Location">🔄 Same as Pickup Location</option>
+              <option value="Benoni Port (Mahinog)">🚢 Benoni Port (Mahinog)</option>
+              <option value="Balbagon Port (Mambajao)">⛴️ Balbagon Port (Mambajao)</option>
+              <option value="Camiguin Airport (Mambajao)">✈️ Camiguin Airport (Mambajao)</option>
+              <option value="Hotel / Resort Delivery (Mambajao, Catarman, Sagay, Guinsiliban)">🏨 Hotel / Resort Pickup (Mambajao, Catarman, Sagay, Guinsiliban)</option>
+              <option value="Partner Rental Shop">🏪 Return at Partner Rental Shop</option>
             </select>
           </div>
         </div>
@@ -727,7 +806,7 @@
           <textarea id="booking-notes" name="notes" rows="2" placeholder="Helmet size (M/L), ferry arrival time, etc."></textarea>
         </div>
 
-        <div class="form-section-title">3. Digital Rental Agreement &amp; ID Upload 📝</div>
+        <div class="form-section-title">3. Digital Rental Agreement &amp; Valid ID Verification 📝</div>
         <div class="contract-box" style="padding:14px;background:#f8fafc;border:1px solid var(--border,#e2e8f0);border-radius:12px;margin-bottom:16px;">
           <div class="contract-terms-box" style="background:#ffffff;padding:12px;border-radius:8px;border:1px solid #e2e8f0;font-size:0.82rem;max-height:240px;overflow-y:auto;">
             <h5 id="contract-terms-heading" style="margin:0 0 8px;font-size:0.9rem;color:var(--text,#1e293b);text-transform:uppercase;letter-spacing:0.02em;">📄 MOTORBIKE RENTAL FORM AGREEMENT</h5>
@@ -764,13 +843,13 @@
           </div>
 
           <div class="form-group" style="margin-top:12px;">
-            <label for="booking-license-photo"><strong>Valid ID / Driver's License Photo *</strong> <small class="text-muted">(Camera shot or upload)</small></label>
-            <input type="file" id="booking-license-photo" name="license_photo" accept="image/*" capture="environment">
+            <label for="booking-license-photo"><strong>Valid Philippine Driver's License or Foreign Driver's Permit Photo *</strong> <small class="text-muted">(Direct camera shot or upload)</small></label>
+            <input type="file" id="booking-license-photo" name="license_photo" accept="image/*" capture="environment" required>
             <div id="license-preview-container" class="license-preview-container hidden" style="margin-top:8px;display:flex;align-items:center;gap:10px;">
               <img id="license-preview-img" src="" alt="Driver's License Preview" class="license-preview-thumb" style="width:100px;height:65px;object-fit:cover;border-radius:6px;border:1px solid #cbd5e1;">
               <button type="button" id="remove-license-photo-btn" class="btn btn-sm btn-outline">Change Photo</button>
             </div>
-            <small class="field-hint">Required so the shop can prepare your motorbike and key before you arrive.</small>
+            <small class="field-hint">Required for valid ID verification &amp; pre-filled digital rental contract before key handover.</small>
           </div>
 
           <div class="form-group" style="margin-top:12px;">
@@ -897,6 +976,7 @@
       <div id="confirm-summary" class="confirm-summary-card"></div>
       <div class="confirm-actions">
         <a id="confirm-track-link" href="/bookings" class="btn btn-primary">Track My Booking</a>
+        <a id="confirm-contract-link" href="#" target="_blank" rel="noopener" class="btn btn-outline">📄 View / Print Rental Contract</a>
         <a id="confirm-whatsapp-link" href="#" target="_blank" rel="noopener" class="btn btn-outline">Message Shop on WhatsApp</a>
       </div>
     </div>

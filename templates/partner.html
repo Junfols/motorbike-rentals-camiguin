@@ -35,33 +35,33 @@
       </form>
 
       <!-- Register Form -->
-      <form id="partner-register-form" class="hidden">
+      <form id="partner-register-form" class="hidden" enctype="multipart/form-data">
         <div class="form-grid-2">
           <div class="form-group">
             <label for="reg-shop-name">Rental Shop Name *</label>
-            <input type="text" id="reg-shop-name" required placeholder="e.g., Hibok Scooters Camiguin">
+            <input type="text" id="reg-shop-name" name="shop_name" required placeholder="e.g., Hibok Scooters Camiguin">
           </div>
           <div class="form-group">
             <label for="reg-owner-name">Owner Full Name *</label>
-            <input type="text" id="reg-owner-name" required placeholder="Juan Dela Cruz">
+            <input type="text" id="reg-owner-name" name="owner_name" required placeholder="Juan Dela Cruz">
           </div>
         </div>
 
         <div class="form-grid-2">
           <div class="form-group">
             <label for="reg-email">Email Address *</label>
-            <input type="email" id="reg-email" required autocomplete="email" placeholder="owner@shop.ph">
+            <input type="email" id="reg-email" name="email" required autocomplete="email" placeholder="owner@shop.ph">
           </div>
           <div class="form-group">
             <label for="reg-phone">Mobile / WhatsApp Number *</label>
-            <input type="tel" id="reg-phone" required placeholder="0917 123 4567">
+            <input type="tel" id="reg-phone" name="phone" required placeholder="0917 123 4567">
           </div>
         </div>
 
         <div class="form-grid-2">
           <div class="form-group">
             <label for="reg-municipality">Municipality *</label>
-            <select id="reg-municipality" required>
+            <select id="reg-municipality" name="municipality" required>
               {% for m in municipalities %}
               <option value="{{ m }}">{{ m }}</option>
               {% endfor %}
@@ -69,28 +69,96 @@
           </div>
           <div class="form-group">
             <label for="reg-delivery-fee">Delivery Fee ({{ shop.currency }})</label>
-            <input type="number" id="reg-delivery-fee" min="0" step="1" value="200">
+            <input type="number" id="reg-delivery-fee" name="delivery_fee" min="0" step="1" value="200">
           </div>
         </div>
 
         <div class="form-group">
           <label for="reg-address">Shop Pickup Address *</label>
-          <input type="text" id="reg-address" required placeholder="e.g., Yumbing Road near White Island Boat Terminal">
+          <input type="text" id="reg-address" name="address" required placeholder="e.g., Yumbing Road near White Island Boat Terminal">
+        </div>
+
+        <!-- GCash / Maya Payout Details -->
+        <div class="card" style="padding:14px;margin:12px 0;background:#f8fafc;border:1px solid #cbd5e1;border-radius:12px;">
+          <div style="margin-bottom:8px;">
+            <strong style="font-size:0.95rem;">💸 GCash / Maya Payout Details (Unsaon Pagdawat sa Abang sa Motor)</strong>
+            <p class="field-hint" style="margin:2px 0 0;">Ibutang ang imong preferred GCash o Maya number aron transparent ug diretso nimo madawat ang bayad sa abang.</p>
+          </div>
+          <div class="form-grid-3">
+            <div class="form-group">
+              <label for="reg-payout-method">Preferred Payout Wallet *</label>
+              <select id="reg-payout-method" name="payout_method">
+                <option value="GCash">GCash</option>
+                <option value="Maya">Maya</option>
+                <option value="GCash & Maya">GCash &amp; Maya</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="reg-payout-number">Preferred Payout Number (GCash / Maya) *</label>
+              <input type="tel" id="reg-payout-number" name="payout_number" required placeholder="0917 123 4567">
+            </div>
+            <div class="form-group">
+              <label for="reg-payout-account-name">Account Holder Name *</label>
+              <input type="text" id="reg-payout-account-name" name="payout_account_name" placeholder="Juan Dela Cruz">
+            </div>
+          </div>
+        </div>
+
+        <!-- Direct Mobile Photo Upload & First Motorbike Listing -->
+        <div class="card" style="padding:14px;margin:12px 0;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;">
+          <div style="margin-bottom:8px;">
+            <strong style="font-size:0.95rem;">📸 Ilista Dayon Imong Unang Motor (Direct Mobile Camera Upload)</strong>
+            <p class="field-hint" style="margin:2px 0 0;">Kuhaa og litrato gamit imong cellphone camera ang imong NMAX, Click, o Aerox aron ma-display dayon sa storefront.</p>
+          </div>
+          <div id="reg-bike-quick-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+            <button type="button" class="btn btn-sm btn-outline reg-bike-preset-chip" data-model="Honda Click 125i" data-category="Scooter" data-cc="125" data-rate="450">🛵 Honda Click 125i</button>
+            <button type="button" class="btn btn-sm btn-outline reg-bike-preset-chip" data-model="Yamaha NMAX 155" data-category="Maxi Scooter" data-cc="155" data-rate="700">🏍️ Yamaha NMAX 155</button>
+            <button type="button" class="btn btn-sm btn-outline reg-bike-preset-chip" data-model="Yamaha Mio Aerox 155" data-category="Scooter" data-cc="155" data-rate="650">⚡ Yamaha Aerox 155</button>
+            <button type="button" class="btn btn-sm btn-outline reg-bike-preset-chip" data-model="Honda ADV 160" data-category="Adventure" data-cc="160" data-rate="850">⛰️ Honda ADV 160</button>
+            <button type="button" class="btn btn-sm btn-outline reg-bike-preset-chip" data-model="Honda PCX 160" data-category="Maxi Scooter" data-cc="160" data-rate="700">✨ Honda PCX 160</button>
+          </div>
+          <div class="form-grid-3">
+            <div class="form-group">
+              <label for="reg-bike-name">Unang Motor Model (Optional)</label>
+              <input type="text" id="reg-bike-name" name="first_bike_name" placeholder="e.g., Yamaha NMAX 155 / Honda Click 125i">
+            </div>
+            <div class="form-group">
+              <label for="reg-bike-category">Category</label>
+              <select id="reg-bike-category" name="first_bike_category">
+                <option value="Scooter">Scooter</option>
+                <option value="Maxi Scooter">Maxi Scooter</option>
+                <option value="Adventure">Adventure</option>
+                <option value="Big Bike">Big Bike</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="reg-bike-daily-rate">Daily Rate ({{ shop.currency }})</label>
+              <input type="number" id="reg-bike-daily-rate" name="first_bike_daily_rate" min="100" step="10" value="500">
+            </div>
+          </div>
+          <div class="form-group" style="margin-top:6px;">
+            <label for="reg-bike-photo">📷 Direct Mobile Camera Photo Upload (NMAX / Click / Aerox)</label>
+            <input type="file" id="reg-bike-photo" name="bike_photo" accept="image/*" capture="environment">
+            <small class="field-hint">Tip: Sa cellphone, pindota aron mo-abli diretso ang imong camera o gallery.</small>
+            <div id="reg-bike-photo-preview-wrap" class="hidden" style="margin-top:8px;">
+              <img id="reg-bike-photo-preview-img" src="" alt="Motorbike Photo Preview" style="max-height:140px;border-radius:10px;border:1px solid #86efac;object-fit:cover;">
+            </div>
+          </div>
         </div>
 
         <div class="form-group">
           <label for="reg-telegram-chat-id">Telegram Chat ID (Optional &mdash; for instant CP booking alerts)</label>
-          <input type="text" id="reg-telegram-chat-id" placeholder="e.g., 123456789 (get yours from @userinfobot on Telegram)">
+          <input type="text" id="reg-telegram-chat-id" name="telegram_chat_id" placeholder="e.g., 123456789 (get yours from @userinfobot on Telegram)">
         </div>
 
         <div class="form-group">
           <label for="reg-description">Short Shop Description</label>
-          <textarea id="reg-description" rows="2" placeholder="Well-maintained scooters, free helmets, fast pickup..."></textarea>
+          <textarea id="reg-description" name="description" rows="2" placeholder="Well-maintained scooters, free helmets, fast pickup..."></textarea>
         </div>
 
         <div class="form-group">
           <label for="reg-password">Create Password (min 6 characters) *</label>
-          <input type="password" id="reg-password" required minlength="6" autocomplete="new-password" placeholder="At least 6 characters">
+          <input type="password" id="reg-password" name="password" required minlength="6" autocomplete="new-password" placeholder="At least 6 characters">
         </div>
 
         <div id="partner-register-error" class="alert-error hidden"></div>
@@ -137,8 +205,8 @@
     <div id="ptab-overview" class="partner-tab-panel">
       <!-- Partner Live Profile & Cover Photo Showcase -->
       <div class="card partner-branding-showcase-card" style="margin-bottom:20px;overflow:hidden;padding:0;border:1px solid var(--border-color);border-radius:14px;background:var(--card-bg);">
-        <div id="overview-cover-preview" class="partner-cover-preview" style="height:150px;position:relative;background:#1e293b;overflow:hidden;">
-          <img id="overview-cover-img" src="/static/images/hero-scooter.jpg" alt="Shop Cover Photo" class="partner-cover-preview-img" style="width:100%;height:100%;object-fit:cover;display:block;">
+        <div id="overview-cover-preview" class="partner-cover-preview" style="height:150px;position:relative;background:linear-gradient(135deg,#0f172a 0%,#0f766e 100%);overflow:hidden;">
+          <img id="overview-cover-img" src="" alt="Shop Cover Photo" class="partner-cover-preview-img hidden" style="width:100%;height:100%;object-fit:cover;display:block;">
           <div class="partner-cover-preview-overlay" style="position:absolute;inset:0;background:linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.65) 100%);"></div>
           <div style="position:absolute;top:12px;right:12px;display:flex;gap:8px;">
             <button type="button" class="btn btn-sm partner-upload-pill" data-jump-tab="profile" style="background:rgba(15,23,42,0.85);color:#fff;backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.25);">
@@ -221,8 +289,8 @@
     <!-- Tab 4: Shop Profile -->
     <div id="ptab-profile" class="partner-tab-panel hidden">
       <div class="card partner-branding-card">
-        <div id="prof-cover-preview" class="partner-cover-preview">
-          <img id="prof-cover-preview-img" src="/static/images/hero-scooter.jpg" alt="Shop Cover Photo" class="partner-cover-preview-img">
+        <div id="prof-cover-preview" class="partner-cover-preview" style="background:linear-gradient(135deg,#0f172a 0%,#0f766e 100%);">
+          <img id="prof-cover-preview-img" src="" alt="Shop Cover Photo" class="partner-cover-preview-img hidden">
           <div class="partner-cover-preview-overlay"></div>
           <div class="partner-cover-actions">
             <label for="prof-cover-file" class="btn btn-sm partner-upload-pill">
@@ -279,8 +347,8 @@
       </div>
 
       <form id="partner-profile-form" class="card settings-form" enctype="multipart/form-data">
-        <input type="file" id="prof-logo-file" name="logo_image" accept="image/png,image/jpeg,image/webp" class="sr-only-file">
-        <input type="file" id="prof-cover-file" name="cover_image" accept="image/png,image/jpeg,image/webp" class="sr-only-file">
+        <input type="file" id="prof-logo-file" name="logo_image" accept="image/*" capture="environment" class="sr-only-file">
+        <input type="file" id="prof-cover-file" name="cover_image" accept="image/*" capture="environment" class="sr-only-file">
         <h3>Shop Information</h3>
         <div class="form-grid-2">
           <div class="form-group">
@@ -323,6 +391,32 @@
         <div class="form-group">
           <label for="prof-description">Shop Description</label>
           <textarea id="prof-description" rows="2"></textarea>
+        </div>
+
+        <hr class="form-divider">
+        <div class="alert-config-header">
+          <div>
+            <h3>💸 GCash / Maya Payout Details (Preferred Payout Number)</h3>
+            <p class="field-hint">Set your shop's preferred GCash or Maya payout number and account name so customers and platform payouts know exactly where your rental earnings are remitted.</p>
+          </div>
+        </div>
+        <div class="form-grid-3">
+          <div class="form-group">
+            <label for="prof-payout-method">Preferred Payout Method *</label>
+            <select id="prof-payout-method">
+              <option value="GCash">GCash</option>
+              <option value="Maya">Maya</option>
+              <option value="GCash & Maya">GCash &amp; Maya</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="prof-payout-number">Preferred Payout Number (GCash / Maya) *</label>
+            <input type="tel" id="prof-payout-number" placeholder="0917 123 4567">
+          </div>
+          <div class="form-group">
+            <label for="prof-payout-account-name">Payout Account Holder Name *</label>
+            <input type="text" id="prof-payout-account-name" placeholder="e.g., Juan Dela Cruz">
+          </div>
         </div>
 
         <hr class="form-divider">
@@ -395,6 +489,17 @@
     <form id="partner-bike-form" class="modal-body" enctype="multipart/form-data">
       <input type="hidden" id="p-bike-id" name="id">
 
+      <div class="form-group">
+        <label>Quick Select Popular Camiguin Models</label>
+        <div id="p-bike-quick-chips" style="display:flex;flex-wrap:wrap;gap:6px;">
+          <button type="button" class="btn btn-sm btn-outline modal-bike-preset-chip" data-model="Honda Click 125i" data-category="Scooter" data-cc="125" data-rate="450">🛵 Honda Click 125i</button>
+          <button type="button" class="btn btn-sm btn-outline modal-bike-preset-chip" data-model="Yamaha NMAX 155" data-category="Maxi Scooter" data-cc="155" data-rate="700">🏍️ Yamaha NMAX 155</button>
+          <button type="button" class="btn btn-sm btn-outline modal-bike-preset-chip" data-model="Yamaha Mio Aerox 155" data-category="Scooter" data-cc="155" data-rate="650">⚡ Yamaha Aerox 155</button>
+          <button type="button" class="btn btn-sm btn-outline modal-bike-preset-chip" data-model="Honda ADV 160" data-category="Adventure" data-cc="160" data-rate="850">⛰️ Honda ADV 160</button>
+          <button type="button" class="btn btn-sm btn-outline modal-bike-preset-chip" data-model="Honda PCX 160" data-category="Maxi Scooter" data-cc="160" data-rate="700">✨ Honda PCX 160</button>
+        </div>
+      </div>
+
       <div class="form-grid-2">
         <div class="form-group">
           <label for="p-bike-name">Model Name *</label>
@@ -457,12 +562,15 @@
 
       <div class="form-grid-2">
         <div class="form-group">
-          <label for="p-bike-image-file">Upload Photo (Phone Camera / Gallery)</label>
-          <input type="file" id="p-bike-image-file" name="image" accept="image/png,image/jpeg,image/webp">
+          <label for="p-bike-image-file">📷 Direct Mobile Camera / Gallery Photo Upload</label>
+          <input type="file" id="p-bike-image-file" name="image" accept="image/*" capture="environment">
+          <div id="p-bike-photo-preview-wrap" class="hidden" style="margin-top:8px;">
+            <img id="p-bike-photo-preview-img" src="" alt="Motorbike Preview" style="max-height:130px;border-radius:10px;border:1px solid #cbd5e1;object-fit:cover;">
+          </div>
         </div>
         <div class="form-group">
           <label for="p-bike-image-url">Or Default / Photo URL</label>
-          <input type="text" id="p-bike-image-url" name="image_url" placeholder="/static/images/bike-click125.jpg">
+          <input type="text" id="p-bike-image-url" name="image_url" placeholder="/static/icons/icon.svg">
         </div>
       </div>
 

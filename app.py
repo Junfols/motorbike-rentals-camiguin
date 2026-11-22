@@ -27,6 +27,7 @@ from db import (
     BASE_DIR,
     BLOCKING_STATUSES,
     CAMIGUIN_MUNICIPALITIES,
+    DEFAULT_BIKE_PLACEHOLDER_URL,
     DEFAULT_CONTRACT_TERMS,
     DEFAULT_DB_PATH,
     VALID_BIKE_STATUSES,
@@ -88,6 +89,13 @@ from paymongo import (
 )
 
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "jfif", "webp"}
+
+
+def _normalize_bike_image_url(raw_url: str | None) -> str:
+    url = (raw_url or "").strip()
+    if not url or url.startswith("/static/images/"):
+        return DEFAULT_BIKE_PLACEHOLDER_URL
+    return url
 
 
 def _normalize_phone(phone: str) -> str:
@@ -165,6 +173,8 @@ def _serialize_shop(row, include_private: bool = False, rating_stats: dict | Non
     raw_contract = (row["contract_terms"] if "contract_terms" in keys else "") or ""
     r_avg = float(rating_stats.get("avg_rating", 5.0)) if rating_stats else (float(row["rating_avg"]) if "rating_avg" in keys and row["rating_avg"] is not None else 5.0)
     r_cnt = int(rating_stats.get("review_count", 0)) if rating_stats else (int(row["review_count"]) if "review_count" in keys and row["review_count"] is not None else 0)
+    raw_logo = (row["logo_url"] if "logo_url" in keys else "") or ""
+    raw_cover = (row["cover_url"] if "cover_url" in keys else "") or ""
     data = {
         "id": row["id"],
         "shop_name": row["shop_name"],
@@ -175,8 +185,11 @@ def _serialize_shop(row, include_private: bool = False, rating_stats: dict | Non
         "delivery_fee": float(row["delivery_fee"] or 0),
         "phone": row["phone"],
         "whatsapp_number": row["whatsapp_number"],
-        "logo_url": (row["logo_url"] if "logo_url" in keys else "") or "",
-        "cover_url": (row["cover_url"] if "cover_url" in keys else "") or "",
+        "payout_method": (row["payout_method"] if "payout_method" in keys else "GCash") or "GCash",
+        "payout_number": (row["payout_number"] if "payout_number" in keys else "") or "",
+        "payout_account_name": (row["payout_account_name"] if "payout_account_name" in keys else "") or "",
+        "logo_url": "" if raw_logo.startswith("/static/images/") else raw_logo,
+        "cover_url": "" if raw_cover.startswith("/static/images/") else raw_cover,
         "contract_terms": raw_contract.strip() or DEFAULT_CONTRACT_TERMS,
         "custom_contract_terms": raw_contract.strip(),
         "default_contract_terms": DEFAULT_CONTRACT_TERMS,
@@ -211,6 +224,7 @@ def _serialize_bike(row, booked_units: int = 0, schedule: dict | None = None, ra
     r_avg = float(rating_stats.get("avg_rating", 5.0)) if rating_stats else (float(row["rating_avg"]) if "rating_avg" in keys and row["rating_avg"] is not None else 5.0)
     r_cnt = int(rating_stats.get("review_count", 0)) if rating_stats else (int(row["rating_count"]) if "rating_count" in keys and row["rating_count"] is not None else 0)
     raw_shop_contract = (row["shop_contract_terms"] if "shop_contract_terms" in keys else "") or ""
+    norm_image = _normalize_bike_image_url(row["image_url"])
     data = {
         "id": row["id"],
         "shop_id": int(row["shop_id"]),
@@ -245,7 +259,8 @@ def _serialize_bike(row, booked_units: int = 0, schedule: dict | None = None, ra
         "plate_number": row["plate_number"],
         "inclusions": row["inclusions"],
         "description": row["description"],
-        "image_url": row["image_url"],
+        "image_url": norm_image,
+        "is_placeholder_image": norm_image == DEFAULT_BIKE_PLACEHOLDER_URL,
         "status": row["status"],
         "featured": bool(row["featured"]),
         "created_at": row["created_at"],
@@ -386,11 +401,13 @@ def _delete_bike_block_entry(conn, bike_row, block_id: int) -> tuple[dict | None
 
 def _serialize_booking(row) -> dict:
     keys = row.keys()
+    raw_shop_contract = (row["shop_contract_terms"] if "shop_contract_terms" in keys else "") or ""
     return {
         "id": row["id"],
         "booking_code": row["booking_code"],
         "bike_id": row["bike_id"],
         "shop_id": int(row["shop_id"]),
+        "currency": (row["currency"] if "currency" in keys and row["currency"] else "₱"),
         "shop_name": row["shop_name"] if "shop_name" in keys else None,
         "shop_slug": row["shop_slug"] if "shop_slug" in keys else None,
         "shop_logo_url": (row["shop_logo_url"] if "shop_logo_url" in keys else "") or "",
@@ -399,8 +416,12 @@ def _serialize_booking(row) -> dict:
         "shop_address": row["shop_address"] if "shop_address" in keys else None,
         "shop_phone": row["shop_phone"] if "shop_phone" in keys else None,
         "shop_whatsapp": row["shop_whatsapp"] if "shop_whatsapp" in keys else None,
+        "shop_payout_method": (row["shop_payout_method"] if "shop_payout_method" in keys else "GCash") or "GCash",
+        "shop_payout_number": (row["shop_payout_number"] if "shop_payout_number" in keys else "") or "",
+        "shop_payout_account_name": (row["shop_payout_account_name"] if "shop_payout_account_name" in keys else "") or "",
+        "shop_contract_terms": raw_shop_contract.strip() or DEFAULT_CONTRACT_TERMS,
         "bike_name": row["bike_name"] if "bike_name" in keys else None,
-        "bike_image": row["bike_image"] if "bike_image" in keys else None,
+        "bike_image": _normalize_bike_image_url(row["bike_image"]) if "bike_image" in keys else DEFAULT_BIKE_PLACEHOLDER_URL,
         "bike_category": row["bike_category"] if "bike_category" in keys else None,
         "bike_transmission": row["bike_transmission"] if "bike_transmission" in keys else None,
         "plate_number": row["plate_number"] if "plate_number" in keys else None,
@@ -745,6 +766,9 @@ def create_app(test_config: dict | None = None) -> Flask:
                    s.shop_name AS shop_name, s.municipality AS shop_municipality,
                    s.address AS shop_address, s.phone AS shop_phone,
                    s.whatsapp_number AS shop_whatsapp,
+                   s.payout_method AS shop_payout_method,
+                   s.payout_number AS shop_payout_number,
+                   s.payout_account_name AS shop_payout_account_name,
                    s.contract_terms AS shop_contract_terms
             FROM bookings b
             JOIN bikes k ON k.id = b.bike_id
@@ -1126,7 +1150,21 @@ def create_app(test_config: dict | None = None) -> Flask:
 
         if not bike_id or not pickup_date or not return_date:
             return jsonify({"error": "bike_id, pickup_date, and return_date are required."}), 400
-        valid_pickup_methods = ("shop", "delivery", "benoni_port", "airport", "around_mambajao", "mambajao")
+        valid_pickup_methods = (
+            "shop",
+            "delivery",
+            "hotel_delivery",
+            "benoni_port",
+            "balbagon_port",
+            "airport",
+            "around_mambajao",
+            "mambajao",
+            "hotel_mambajao",
+            "hotel_catarman",
+            "hotel_sagay",
+            "hotel_guinsiliban",
+            "hotel_mahinog",
+        )
         if pickup_method not in valid_pickup_methods:
             return jsonify({"error": "pickup_method must be one of: " + ", ".join(valid_pickup_methods)}), 400
 
@@ -1181,6 +1219,7 @@ def create_app(test_config: dict | None = None) -> Flask:
 
         signature_data = (payload.get("signature_data") or "").strip()
         contract_agreed = _as_bool(payload.get("contract_agreed"), default=False)
+        require_license_photo = _as_bool(payload.get("require_license_photo"), default=False)
 
         bike_id = payload.get("bike_id")
         customer_name = (payload.get("customer_name") or "").strip()
@@ -1225,7 +1264,21 @@ def create_app(test_config: dict | None = None) -> Flask:
             return jsonify({"error": "Please provide a valid mobile or WhatsApp number."}), 400
         if not license_number:
             return jsonify({"error": "Driver's license number is required."}), 400
-        valid_pickup_methods = ("shop", "delivery", "benoni_port", "airport", "around_mambajao", "mambajao")
+        valid_pickup_methods = (
+            "shop",
+            "delivery",
+            "hotel_delivery",
+            "benoni_port",
+            "balbagon_port",
+            "airport",
+            "around_mambajao",
+            "mambajao",
+            "hotel_mambajao",
+            "hotel_catarman",
+            "hotel_sagay",
+            "hotel_guinsiliban",
+            "hotel_mahinog",
+        )
         if pickup_method not in valid_pickup_methods:
             return jsonify({"error": "Invalid pickup method."}), 400
         if pickup_method in ("delivery", "around_mambajao", "mambajao") and not delivery_address:
@@ -1236,12 +1289,30 @@ def create_app(test_config: dict | None = None) -> Flask:
             if not delivery_lat or not delivery_lng:
                 delivery_lat = 9.1306
                 delivery_lng = 124.7937
+        elif pickup_method == "balbagon_port":
+            if not delivery_address:
+                delivery_address = "Balbagon Port (Mambajao)"
+            if not delivery_lat or not delivery_lng:
+                delivery_lat = 9.2561
+                delivery_lng = 124.7175
         elif pickup_method == "airport":
             if not delivery_address:
                 delivery_address = "Camiguin Airport, Mambajao"
             if not delivery_lat or not delivery_lng:
                 delivery_lat = 9.2530
                 delivery_lng = 124.7061
+        elif pickup_method == "hotel_mambajao" and not delivery_address:
+            delivery_address = "Hotel / Resort Delivery (Mambajao)"
+        elif pickup_method == "hotel_catarman" and not delivery_address:
+            delivery_address = "Hotel / Resort Delivery (Catarman)"
+        elif pickup_method == "hotel_sagay" and not delivery_address:
+            delivery_address = "Hotel / Resort Delivery (Sagay)"
+        elif pickup_method == "hotel_guinsiliban" and not delivery_address:
+            delivery_address = "Hotel / Resort Delivery (Guinsiliban)"
+        elif pickup_method == "hotel_mahinog" and not delivery_address:
+            delivery_address = "Hotel / Resort Delivery (Mahinog)"
+        elif pickup_method == "hotel_delivery" and not delivery_address:
+            delivery_address = "Hotel / Resort Delivery (Mambajao, Catarman, Sagay, Guinsiliban)"
         if payment_channel not in ("pay_at_shop", "gcash", "maya", "paymongo"):
             return jsonify({"error": "Invalid payment method selected."}), 400
         try:
@@ -1255,6 +1326,18 @@ def create_app(test_config: dict | None = None) -> Flask:
                 validated_license = _validate_image_upload(license_file, prefix="license")
             except ValueError as exc:
                 return jsonify({"error": f"Driver's License upload: {exc}"}), 400
+        if require_license_photo and validated_license is None:
+            return (
+                jsonify(
+                    {
+                        "error": (
+                            "Please upload a photo of your valid Philippine Driver's License "
+                            "or Foreign Driver's Permit."
+                        )
+                    }
+                ),
+                400,
+            )
 
         validated_signature = None
         if signature_data:
@@ -1530,7 +1613,11 @@ def create_app(test_config: dict | None = None) -> Flask:
                    k.plate_number AS plate_number,
                    s.shop_name AS shop_name, s.municipality AS shop_municipality,
                    s.address AS shop_address, s.phone AS shop_phone,
-                   s.whatsapp_number AS shop_whatsapp
+                   s.whatsapp_number AS shop_whatsapp,
+                   s.payout_method AS shop_payout_method,
+                   s.payout_number AS shop_payout_number,
+                   s.payout_account_name AS shop_payout_account_name,
+                   s.contract_terms AS shop_contract_terms
             FROM bookings b
             JOIN bikes k ON k.id = b.bike_id
             JOIN shops s ON s.id = b.shop_id
@@ -1562,7 +1649,11 @@ def create_app(test_config: dict | None = None) -> Flask:
                    k.plate_number AS plate_number,
                    s.shop_name AS shop_name, s.municipality AS shop_municipality,
                    s.address AS shop_address, s.phone AS shop_phone,
-                   s.whatsapp_number AS shop_whatsapp
+                   s.whatsapp_number AS shop_whatsapp,
+                   s.payout_method AS shop_payout_method,
+                   s.payout_number AS shop_payout_number,
+                   s.payout_account_name AS shop_payout_account_name,
+                   s.contract_terms AS shop_contract_terms
             FROM bookings b
             JOIN bikes k ON k.id = b.bike_id
             JOIN shops s ON s.id = b.shop_id
@@ -1979,8 +2070,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         validated_image = _validate_image_upload(image_file)
         if validated_image is not None:
             image_url = _save_validated_image(get_db(), validated_image)
-        elif not image_url:
-            image_url = "/static/images/bike-click125.jpg"
+        elif not image_url or image_url.startswith("/static/images/"):
+            image_url = DEFAULT_BIKE_PLACEHOLDER_URL
         elif image_url.startswith("/"):
             pass
         else:
@@ -2042,17 +2133,42 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     @app.post("/api/partner/register")
     def partner_register():
-        payload = request.get_json(silent=True) or {}
+        if request.content_type and "multipart/form-data" in request.content_type:
+            payload = request.form
+            bike_photo_file = request.files.get("bike_photo") or request.files.get("image")
+        else:
+            payload = request.get_json(silent=True) or {}
+            bike_photo_file = None
+
         shop_name = (payload.get("shop_name") or "").strip()
         owner_name = (payload.get("owner_name") or "").strip()
         email = (payload.get("email") or "").strip().lower()
         phone = (payload.get("phone") or "").strip()
         whatsapp_number = _normalize_phone(payload.get("whatsapp_number") or phone)
         telegram_chat_id = (payload.get("telegram_chat_id") or "").strip()
+        payout_method = (payload.get("payout_method") or "GCash").strip() or "GCash"
+        payout_number = (payload.get("payout_number") or "").strip()
+        payout_account_name = (payload.get("payout_account_name") or "").strip()
         municipality = (payload.get("municipality") or "Mambajao").strip()
         address = (payload.get("address") or "").strip()
         description = (payload.get("description") or "").strip()
         password = payload.get("password") or ""
+        first_bike_name = (payload.get("first_bike_name") or "").strip()
+        first_bike_category = (payload.get("first_bike_category") or "Scooter").strip()
+        if first_bike_category not in VALID_CATEGORIES:
+            first_bike_category = "Scooter"
+        try:
+            first_bike_daily_rate = float(payload.get("first_bike_daily_rate") or 450)
+            if first_bike_daily_rate <= 0:
+                first_bike_daily_rate = 450.0
+        except (TypeError, ValueError):
+            first_bike_daily_rate = 450.0
+        try:
+            first_bike_cc = int(payload.get("first_bike_cc") or 125)
+            if first_bike_cc <= 0:
+                first_bike_cc = 125
+        except (TypeError, ValueError):
+            first_bike_cc = 125
 
         if not shop_name:
             return jsonify({"error": "Rental shop name is required."}), 400
@@ -2074,6 +2190,13 @@ def create_app(test_config: dict | None = None) -> Flask:
         except (TypeError, ValueError):
             return jsonify({"error": "Delivery fee must be a valid number."}), 400
 
+        validated_bike_photo = None
+        if bike_photo_file:
+            try:
+                validated_bike_photo = _validate_image_upload(bike_photo_file, prefix="partner_bike")
+            except ValueError as exc:
+                return jsonify({"error": str(exc)}), 400
+
         conn = get_db()
         existing = conn.execute(
             "SELECT 1 FROM shops WHERE LOWER(email) = ?", (email,)
@@ -2083,14 +2206,16 @@ def create_app(test_config: dict | None = None) -> Flask:
 
         slug = slugify_shop_name(shop_name, conn)
         now = datetime.now().isoformat(timespec="seconds")
+        starter_bike_row = None
         with conn:
             shop_id = conn.insert_returning_id(
                 """
                 INSERT INTO shops (
                     shop_name, slug, owner_name, email, phone, whatsapp_number,
-                    telegram_chat_id, municipality, address, description, delivery_fee, password_hash,
+                    telegram_chat_id, payout_method, payout_number, payout_account_name,
+                    municipality, address, description, delivery_fee, password_hash,
                     status, is_main, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?)
                 """,
                 (
                     shop_name,
@@ -2100,6 +2225,9 @@ def create_app(test_config: dict | None = None) -> Flask:
                     phone,
                     whatsapp_number,
                     telegram_chat_id,
+                    payout_method,
+                    payout_number,
+                    payout_account_name,
                     municipality,
                     address,
                     description,
@@ -2108,18 +2236,49 @@ def create_app(test_config: dict | None = None) -> Flask:
                     now,
                 ),
             )
+            if first_bike_name or validated_bike_photo is not None:
+                bike_img_url = (
+                    _save_validated_image(conn, validated_bike_photo, use_tx=False)
+                    if validated_bike_photo is not None
+                    else DEFAULT_BIKE_PLACEHOLDER_URL
+                )
+                b_name = first_bike_name or "Honda Click 125i"
+                b_slug = slugify_name(b_name, conn)
+                bike_id = conn.insert_returning_id(
+                    """
+                    INSERT INTO bikes (
+                        shop_id, name, slug, category, engine_cc, transmission, fuel_type,
+                        daily_rate, weekly_rate, deposit, units_count, plate_number,
+                        inclusions, description, image_url, status, featured, created_at
+                    ) VALUES (?, ?, ?, ?, ?, 'Automatic', 'Gasoline', ?, 0, 1500, 1, '', '2 Helmets, Phone Mount, Rain Poncho', '', ?, 'available', 0, ?)
+                    """,
+                    (
+                        shop_id,
+                        b_name,
+                        b_slug,
+                        first_bike_category,
+                        first_bike_cc,
+                        first_bike_daily_rate,
+                        bike_img_url,
+                        now,
+                    ),
+                )
+                starter_bike_row = conn.execute("SELECT * FROM bikes WHERE id = ?", (bike_id,)).fetchone()
 
         session["partner_shop_id"] = shop_id
         created = conn.execute("SELECT * FROM shops WHERE id = ?", (shop_id,)).fetchone()
         secret_settings = get_settings(conn, include_secrets=True)
         _dispatch_alert(notify_new_partner_registration, secret_settings, dict(created))
-        return jsonify(
-            {
-                "authenticated": True,
-                "shop": _serialize_shop(created, include_private=True),
-                **_platform_alert_flags(conn),
-            }
-        ), 201
+        resp_payload = {
+            "authenticated": True,
+            "shop": _serialize_shop(created, include_private=True),
+            **_platform_alert_flags(conn),
+        }
+        if starter_bike_row is not None:
+            serialized_starter = _serialize_bike(starter_bike_row)
+            resp_payload["starter_bike"] = serialized_starter
+            resp_payload["first_bike"] = serialized_starter
+        return jsonify(resp_payload), 201
 
     @app.post("/api/partner/login")
     def partner_login():
@@ -2583,6 +2742,18 @@ def create_app(test_config: dict | None = None) -> Flask:
         telegram_chat_id = (
             (payload.get("telegram_chat_id") if "telegram_chat_id" in payload else shop["telegram_chat_id"]) or ""
         ).strip()
+        existing_payout_method = (shop["payout_method"] if "payout_method" in shop.keys() else "GCash") or "GCash"
+        existing_payout_number = (shop["payout_number"] if "payout_number" in shop.keys() else "") or ""
+        existing_payout_name = (shop["payout_account_name"] if "payout_account_name" in shop.keys() else "") or ""
+        payout_method = (
+            (payload.get("payout_method") if "payout_method" in payload else existing_payout_method) or "GCash"
+        ).strip() or "GCash"
+        payout_number = (
+            (payload.get("payout_number") if "payout_number" in payload else existing_payout_number) or ""
+        ).strip()
+        payout_account_name = (
+            (payload.get("payout_account_name") if "payout_account_name" in payload else existing_payout_name) or ""
+        ).strip()
         municipality = (payload.get("municipality") or shop["municipality"]).strip()
         address = (payload.get("address") if "address" in payload else shop["address"]).strip()
         description = (
@@ -2650,7 +2821,8 @@ def create_app(test_config: dict | None = None) -> Flask:
                 """
                 UPDATE shops SET
                     shop_name = ?, slug = ?, owner_name = ?, phone = ?, whatsapp_number = ?,
-                    telegram_chat_id = ?, municipality = ?, address = ?, description = ?, delivery_fee = ?,
+                    telegram_chat_id = ?, payout_method = ?, payout_number = ?, payout_account_name = ?,
+                    municipality = ?, address = ?, description = ?, delivery_fee = ?,
                     logo_url = ?, cover_url = ?, contract_terms = ?, password_hash = ?
                 WHERE id = ?
                 """,
@@ -2661,6 +2833,9 @@ def create_app(test_config: dict | None = None) -> Flask:
                     phone,
                     whatsapp_number,
                     telegram_chat_id,
+                    payout_method,
+                    payout_number,
+                    payout_account_name,
                     municipality,
                     address,
                     description,

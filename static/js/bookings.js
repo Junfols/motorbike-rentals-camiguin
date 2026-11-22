@@ -129,7 +129,11 @@
         </div>
 
         <div class="trip-bike-row">
-          <img src="${escapeHtml(b.bike_image || "/static/images/bike-click125.jpg")}" alt="${escapeHtml(b.bike_name)}" class="trip-bike-thumb" style="border-radius:14px;border:1px solid var(--border-soft);box-shadow:var(--shadow-xs);">
+          <img src="${escapeHtml(
+            !b.bike_image || String(b.bike_image).startsWith("/static/images/")
+              ? "/static/icons/icon.svg"
+              : b.bike_image
+          )}" alt="${escapeHtml(b.bike_name)}" class="trip-bike-thumb" style="border-radius:14px;border:1px solid var(--border-soft);box-shadow:var(--shadow-xs);background:#0f172a;padding:4px;">
           <div>
             <strong style="font-size:1.05rem;color:var(--ink);">${escapeHtml(b.bike_name)}</strong>
             <div class="text-muted" style="margin-top:2px;">${escapeHtml(b.bike_category || "")} &bull; ${escapeHtml(b.bike_transmission || "")}</div>
@@ -151,13 +155,15 @@
             <span class="trip-detail-label">Pickup</span>
             <strong>${escapeHtml(b.pickup_time)} &bull; ${
               b.pickup_method === "benoni_port"
-                ? "Benoni Port (+₱200)"
+                ? "Benoni Port (Mahinog) (+₱200)"
+                : b.pickup_method === "balbagon_port"
+                ? "Balbagon Port (Mambajao) (Free)"
                 : b.pickup_method === "airport"
-                ? "Airport (Free)"
+                ? "Camiguin Airport (Mambajao) (Free)"
                 : (b.pickup_method === "around_mambajao" || b.pickup_method === "mambajao")
                 ? "Around Mambajao (Free)"
                 : b.pickup_method === "delivery"
-                ? "Delivery"
+                ? "Hotel / Resort Delivery"
                 : "Shop Pickup"
             }</strong>
           </div>
@@ -189,10 +195,10 @@
         <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;">
           ${
             b.contract_agreed || b.signature_url || b.license_photo_url
-              ? `<button type="button" class="btn btn-outline btn-sm" id="view-contract-btn">📝 View Rental Contract &amp; ID</button>
-                 <a href="/bookings/${encodeURIComponent(b.booking_code)}/contract?phone=${encodeURIComponent(b.customer_phone)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">🖨️ Print / Save PDF Contract</a>`
+              ? `<button type="button" class="btn btn-outline btn-sm" id="view-contract-btn">📝 View Rental Contract &amp; ID</button>`
               : ""
           }
+          <a href="/bookings/${encodeURIComponent(b.booking_code)}/contract?phone=${encodeURIComponent(b.customer_phone)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">🖨️ Print / Save PDF Contract</a>
           ${
             ["confirmed", "active", "completed"].includes(b.status)
               ? `<button type="button" class="btn btn-primary btn-sm" id="leave-review-btn">⭐ Leave Review</button>`

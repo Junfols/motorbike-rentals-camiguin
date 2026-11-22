@@ -391,6 +391,18 @@
     return `${window.location.origin}/shop/${encodeURIComponent(slug)}`;
   }
 
+  const DEFAULT_BIKE_PLACEHOLDER = "/static/icons/icon.svg";
+
+  function normalizeBikeImageUrl(rawUrl) {
+    const s = String(rawUrl || "").trim();
+    if (!s || s.startsWith("/static/images/")) return DEFAULT_BIKE_PLACEHOLDER;
+    return s;
+  }
+
+  function isPlaceholderBikeImage(rawUrl) {
+    return normalizeBikeImageUrl(rawUrl) === DEFAULT_BIKE_PLACEHOLDER;
+  }
+
   function renderPartnerShopsStrip() {
     if (!partnerShopsStripWrap || !partnerShopsStrip) return;
     if (!state.shops || !state.shops.length) {
@@ -408,8 +420,10 @@
         const avatarHtml = s.logo_url
           ? `<img src="${escapeHtml(s.logo_url)}" alt="${escapeHtml(s.shop_name)}" class="shop-strip-avatar-img" loading="lazy">`
           : `<span class="shop-strip-avatar-fallback">${escapeHtml(getShopInitials(s.shop_name))}</span>`;
-        const coverImgUrl = s.cover_url || "/static/images/hero-scooter.jpg";
-        const coverStyle = `style="background-image: linear-gradient(180deg, rgba(15,23,42,0.28), rgba(15,23,42,0.78)), url('${escapeHtml(coverImgUrl)}');"`;
+        const coverImgUrl = (s.cover_url && !String(s.cover_url).startsWith("/static/images/")) ? s.cover_url : "";
+        const coverStyle = coverImgUrl
+          ? `style="background-image: linear-gradient(180deg, rgba(15,23,42,0.28), rgba(15,23,42,0.78)), url('${escapeHtml(coverImgUrl)}');"`
+          : "";
         const unitCount = Number(s.bike_count || 0);
         return `
           <button
@@ -447,7 +461,9 @@
 
     const shareUrl = getShopShareUrl(activeShop);
     const fbShareHref = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
-    const coverImg = activeShop.cover_url || "/static/images/hero-scooter.jpg";
+    const coverImg = (activeShop.cover_url && !String(activeShop.cover_url).startsWith("/static/images/"))
+      ? activeShop.cover_url
+      : "";
     const avatarHtml = activeShop.logo_url
       ? `<img src="${escapeHtml(activeShop.logo_url)}" alt="${escapeHtml(activeShop.shop_name)}" class="shop-banner-avatar-img">`
       : `<div class="shop-banner-avatar-fallback">${escapeHtml(getShopInitials(activeShop.shop_name))}</div>`;
@@ -466,7 +482,7 @@
     shopProfileBanner.classList.remove("hidden");
     shopProfileBanner.innerHTML = `
       <div class="shop-banner-cover">
-        <img src="${escapeHtml(coverImg)}" alt="${escapeHtml(activeShop.shop_name)} Cover Photo" class="shop-banner-cover-img">
+        ${coverImg ? `<img src="${escapeHtml(coverImg)}" alt="${escapeHtml(activeShop.shop_name)} Cover Photo" class="shop-banner-cover-img">` : ""}
         <div class="shop-banner-cover-overlay"></div>
         <div class="shop-banner-top-bar">
           <span class="shop-banner-verified-pill">
@@ -701,10 +717,21 @@
           }
         }
 
+        const normImg = normalizeBikeImageUrl(bike.image_url);
+        const isPlaceholder = isPlaceholderBikeImage(bike.image_url);
+        const mediaInnerHtml = isPlaceholder
+          ? `
+            <div class="bike-photo-placeholder">
+              <img src="${escapeHtml(normImg)}" alt="${escapeHtml(bike.name)}" class="bike-placeholder-svg" loading="lazy">
+              <span class="photo-coming-soon-text">Photo Coming Soon</span>
+            </div>
+          `
+          : `<img src="${escapeHtml(normImg)}" alt="${escapeHtml(bike.name)}" loading="lazy">`;
+
         return `
           <article class="bike-card" data-bike-id="${bike.id}">
-            <div class="bike-card-media">
-              <img src="${escapeHtml(bike.image_url)}" alt="${escapeHtml(bike.name)}" loading="lazy">
+            <div class="bike-card-media ${isPlaceholder ? "is-placeholder" : ""}">
+              ${mediaInnerHtml}
               <div class="bike-card-top-badges">
                 <span class="badge badge-dark">${escapeHtml(bike.category)}</span>
                 ${statusBadge}
@@ -801,6 +828,25 @@
     }
   }
 
+  function applyModalBikeImage(bikeObj) {
+    const img = document.getElementById("modal-bike-img");
+    const wrap = document.getElementById("modal-bike-img-wrap");
+    const comingSoon = document.getElementById("modal-photo-coming-soon");
+    const normImg = normalizeBikeImageUrl(bikeObj && bikeObj.image_url);
+    const isPh = isPlaceholderBikeImage(bikeObj && bikeObj.image_url);
+    if (img) {
+      img.src = normImg;
+      img.alt = (bikeObj && bikeObj.name) || "";
+      img.classList.toggle("bike-placeholder-svg", isPh);
+    }
+    if (wrap) {
+      wrap.classList.toggle("is-placeholder", isPh);
+    }
+    if (comingSoon) {
+      comingSoon.classList.toggle("hidden", !isPh);
+    }
+  }
+
   async function openBikeModal(bikeId) {
     if (!bikeId) return;
     if (bookingFormError) {
@@ -823,11 +869,7 @@
       if (catEl) catEl.textContent = localBike.category || "Scooter";
       const nameEl = document.getElementById("modal-bike-name");
       if (nameEl) nameEl.textContent = localBike.name || "Motorbike";
-      const img = document.getElementById("modal-bike-img");
-      if (img) {
-        img.src = localBike.image_url || "/static/images/hero-scooter.jpg";
-        img.alt = localBike.name || "";
-      }
+      applyModalBikeImage(localBike);
       const shopNameEl = document.getElementById("modal-shop-name");
       if (shopNameEl) shopNameEl.textContent = localBike.shop_name || "Verified Partner Shop";
       const shopLocEl = document.getElementById("modal-shop-location");
@@ -840,7 +882,7 @@
       }
       if (deliveryOptionLabel) {
         const fee = localBike.shop_delivery_fee ?? shop.delivery_fee ?? 250;
-        deliveryOptionLabel.textContent = `Resort / Port Delivery (+${formatMoney(fee)})`;
+        deliveryOptionLabel.textContent = `Hotel / Resort Delivery (Mambajao, Catarman, Sagay, Guinsiliban) (+${formatMoney(fee)})`;
       }
       const specsEl = document.getElementById("modal-bike-specs");
       if (specsEl) {
@@ -922,11 +964,7 @@
       if (catEl) catEl.textContent = bike.category;
       const nameEl = document.getElementById("modal-bike-name");
       if (nameEl) nameEl.textContent = bike.name;
-      const img = document.getElementById("modal-bike-img");
-      if (img) {
-        img.src = bike.image_url;
-        img.alt = bike.name;
-      }
+      applyModalBikeImage(bike);
 
       const shopNameEl = document.getElementById("modal-shop-name");
       if (shopNameEl) shopNameEl.textContent = bike.shop_name || "Verified Partner Shop";
@@ -941,7 +979,7 @@
 
       if (deliveryOptionLabel) {
         const fee = bike.shop_delivery_fee ?? shop.delivery_fee ?? 250;
-        deliveryOptionLabel.textContent = `Resort / Port Delivery (+${formatMoney(fee)})`;
+        deliveryOptionLabel.textContent = `Hotel / Resort Delivery (Mambajao, Catarman, Sagay, Guinsiliban) (+${formatMoney(fee)})`;
       }
 
       const specsEl = document.getElementById("modal-bike-specs");
@@ -1092,25 +1130,32 @@
       }
       if (q.delivery_total > 0) {
         const dLabel = q.pickup_method === "benoni_port"
-          ? "Benoni Port Delivery (+₱200)"
-          : "Resort / Port Delivery";
+          ? "Benoni Port (Mahinog) Delivery (+₱200)"
+          : "Hotel / Resort Delivery";
         linesHtml += `
           <div class="quote-line">
             <span>${escapeHtml(dLabel)}</span>
             <span>${escapeHtml(formatMoney(q.delivery_total))}</span>
           </div>
         `;
+      } else if (q.pickup_method === "balbagon_port") {
+        linesHtml += `
+          <div class="quote-line">
+            <span>Balbagon Port (Mambajao) Delivery</span>
+            <span style="color:var(--success,#059669);font-weight:700;">FREE</span>
+          </div>
+        `;
       } else if (q.pickup_method === "airport") {
         linesHtml += `
           <div class="quote-line">
-            <span>Camiguin Airport Delivery</span>
+            <span>Camiguin Airport (Mambajao) Delivery</span>
             <span style="color:var(--success,#059669);font-weight:700;">FREE</span>
           </div>
         `;
       } else if (q.pickup_method === "around_mambajao" || q.pickup_method === "mambajao") {
         linesHtml += `
           <div class="quote-line">
-            <span>Around Mambajao Delivery</span>
+            <span>Hotel / Resort Delivery (Mambajao)</span>
             <span style="color:var(--success,#059669);font-weight:700;">FREE</span>
           </div>
         `;
@@ -1448,6 +1493,19 @@
     }
   }
 
+  const pickupLocationPreset = document.getElementById("booking-pickup-location-preset");
+  const dropoffLocationPreset = document.getElementById("booking-dropoff-location-preset");
+
+  function buildPresetDeliveryAddress(baseAddress) {
+    const cleanBase = (baseAddress || "").trim();
+    const dropoffVal = dropoffLocationPreset ? dropoffLocationPreset.value : "Same as Pickup Location";
+    if (!cleanBase) return "";
+    if (dropoffVal && dropoffVal !== "Same as Pickup Location") {
+      return `${cleanBase} (Drop-off: ${dropoffVal})`;
+    }
+    return cleanBase;
+  }
+
   function syncPickupMethodUi() {
     if (!bookingPickupMethod) return;
     const method = bookingPickupMethod.value;
@@ -1459,39 +1517,91 @@
       if (labelEl) labelEl.textContent = "Arrival Details / Pier (Benoni Port, Mahinog) *";
       if (deliveryAddressInput) {
         deliveryAddressInput.required = true;
-        deliveryAddressInput.placeholder = "e.g., Benoni Port — Ferry name / Arrival time";
-        if (!deliveryAddressInput.value || deliveryAddressInput.value.includes("Airport") || deliveryAddressInput.value === "Shop Pickup") {
-          deliveryAddressInput.value = "Benoni Port, Mahinog";
+        deliveryAddressInput.placeholder = "e.g., Benoni Port (Mahinog) — Ferry name / Arrival time";
+        if (
+          !deliveryAddressInput.value ||
+          deliveryAddressInput.value.includes("Airport") ||
+          deliveryAddressInput.value.includes("Balbagon") ||
+          deliveryAddressInput.value === "Shop Pickup"
+        ) {
+          deliveryAddressInput.value = buildPresetDeliveryAddress("Benoni Port (Mahinog)");
         }
       }
+      if (pickupLocationPreset && pickupLocationPreset.value !== "Benoni Port (Mahinog)") {
+        pickupLocationPreset.value = "Benoni Port (Mahinog)";
+      }
       initOrUpdateDeliveryMap(9.1306, 124.7937);
-      setDeliveryCoordinates(9.1306, 124.7937, "Benoni Port, Mahinog");
+      setDeliveryCoordinates(9.1306, 124.7937, deliveryAddressInput ? deliveryAddressInput.value : "Benoni Port (Mahinog)");
+    } else if (method === "balbagon_port") {
+      if (labelEl) labelEl.textContent = "Arrival Details / Pier (Balbagon Port, Mambajao) *";
+      if (deliveryAddressInput) {
+        deliveryAddressInput.required = true;
+        deliveryAddressInput.placeholder = "e.g., Balbagon Port (Mambajao) — Bohol Ferry / Arrival time";
+        if (
+          !deliveryAddressInput.value ||
+          deliveryAddressInput.value.includes("Benoni") ||
+          deliveryAddressInput.value.includes("Airport") ||
+          deliveryAddressInput.value === "Shop Pickup"
+        ) {
+          deliveryAddressInput.value = buildPresetDeliveryAddress("Balbagon Port (Mambajao)");
+        }
+      }
+      if (pickupLocationPreset && pickupLocationPreset.value !== "Balbagon Port (Mambajao)") {
+        pickupLocationPreset.value = "Balbagon Port (Mambajao)";
+      }
+      initOrUpdateDeliveryMap(9.2561, 124.7175);
+      setDeliveryCoordinates(9.2561, 124.7175, deliveryAddressInput ? deliveryAddressInput.value : "Balbagon Port (Mambajao)");
     } else if (method === "airport") {
       if (labelEl) labelEl.textContent = "Flight / Arrival Details (Camiguin Airport, Mambajao) *";
       if (deliveryAddressInput) {
         deliveryAddressInput.required = true;
-        deliveryAddressInput.placeholder = "e.g., Camiguin Airport — Flight number / ETA";
-        if (!deliveryAddressInput.value || deliveryAddressInput.value.includes("Benoni") || deliveryAddressInput.value === "Shop Pickup") {
-          deliveryAddressInput.value = "Camiguin Airport, Mambajao";
+        deliveryAddressInput.placeholder = "e.g., Camiguin Airport (Mambajao) — Flight number / ETA";
+        if (
+          !deliveryAddressInput.value ||
+          deliveryAddressInput.value.includes("Benoni") ||
+          deliveryAddressInput.value.includes("Balbagon") ||
+          deliveryAddressInput.value === "Shop Pickup"
+        ) {
+          deliveryAddressInput.value = buildPresetDeliveryAddress("Camiguin Airport (Mambajao)");
         }
       }
+      if (pickupLocationPreset && pickupLocationPreset.value !== "Camiguin Airport (Mambajao)") {
+        pickupLocationPreset.value = "Camiguin Airport (Mambajao)";
+      }
       initOrUpdateDeliveryMap(9.2530, 124.7061);
-      setDeliveryCoordinates(9.2530, 124.7061, "Camiguin Airport, Mambajao");
+      setDeliveryCoordinates(9.2530, 124.7061, deliveryAddressInput ? deliveryAddressInput.value : "Camiguin Airport (Mambajao)");
     } else if (method === "around_mambajao" || method === "mambajao" || method === "delivery") {
-      if (labelEl) labelEl.textContent = "Delivery Address (Resort / Hotel / Location in Mambajao) *";
+      if (labelEl) {
+        labelEl.textContent =
+          method === "delivery"
+            ? "Hotel / Resort Delivery Address (Mambajao, Catarman, Sagay, Guinsiliban) *"
+            : "Delivery Address (Resort / Hotel / Location in Mambajao) *";
+      }
       if (deliveryAddressInput) {
         deliveryAddressInput.required = true;
-        deliveryAddressInput.placeholder = "e.g., Paras Beach Resort / Balyali / Tongatok Cliff / Yumbing";
-        if (deliveryAddressInput.value === "Benoni Port, Mahinog" || deliveryAddressInput.value === "Camiguin Airport, Mambajao" || deliveryAddressInput.value === "Shop Pickup") {
+        deliveryAddressInput.placeholder = "e.g., Paras Beach Resort / Balyali / Nouveau Resort / Catarman / Sagay";
+        if (
+          deliveryAddressInput.value.startsWith("Benoni Port") ||
+          deliveryAddressInput.value.startsWith("Balbagon Port") ||
+          deliveryAddressInput.value.startsWith("Camiguin Airport") ||
+          deliveryAddressInput.value === "Shop Pickup"
+        ) {
           deliveryAddressInput.value = "";
         }
       }
       initOrUpdateDeliveryMap();
     } else {
       // shop
+      if (pickupLocationPreset && pickupLocationPreset.value !== "shop") {
+        pickupLocationPreset.value = "shop";
+      }
       if (deliveryAddressInput) {
         deliveryAddressInput.required = false;
-        if (deliveryAddressInput.value === "Benoni Port, Mahinog" || deliveryAddressInput.value === "Camiguin Airport, Mambajao") {
+        if (
+          deliveryAddressInput.value.startsWith("Benoni Port") ||
+          deliveryAddressInput.value.startsWith("Balbagon Port") ||
+          deliveryAddressInput.value.startsWith("Camiguin Airport")
+        ) {
           deliveryAddressInput.value = "";
         }
       }
@@ -1502,6 +1612,43 @@
     bookingPickupMethod.addEventListener("change", () => {
       syncPickupMethodUi();
       refreshQuote();
+    });
+  }
+
+  if (pickupLocationPreset) {
+    pickupLocationPreset.addEventListener("change", () => {
+      const selectedOpt = pickupLocationPreset.options[pickupLocationPreset.selectedIndex];
+      if (!selectedOpt) return;
+      const targetMethod = selectedOpt.getAttribute("data-method") || "shop";
+      const presetAddress = selectedOpt.getAttribute("data-address") || pickupLocationPreset.value;
+      const lat = parseFloat(selectedOpt.getAttribute("data-lat") || "");
+      const lng = parseFloat(selectedOpt.getAttribute("data-lng") || "");
+
+      if (bookingPickupMethod) {
+        bookingPickupMethod.value = targetMethod;
+      }
+      syncPickupMethodUi();
+      if (targetMethod !== "shop") {
+        const fullAddr = buildPresetDeliveryAddress(presetAddress);
+        if (deliveryAddressInput) {
+          deliveryAddressInput.value = fullAddr;
+        }
+        if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
+          initOrUpdateDeliveryMap(lat, lng);
+          setDeliveryCoordinates(lat, lng, fullAddr);
+        }
+      }
+      refreshQuote();
+    });
+  }
+
+  if (dropoffLocationPreset) {
+    dropoffLocationPreset.addEventListener("change", () => {
+      if (!deliveryAddressInput || !bookingPickupMethod) return;
+      const currentVal = (deliveryAddressInput.value || "").replace(/\s*\(Drop-off:.*\)$/i, "").trim();
+      if (currentVal && bookingPickupMethod.value !== "shop") {
+        deliveryAddressInput.value = buildPresetDeliveryAddress(currentVal);
+      }
     });
   }
 
@@ -1517,15 +1664,27 @@
       if (bookingPickupMethod) {
         if (name.includes("Benoni")) {
           bookingPickupMethod.value = "benoni_port";
+        } else if (name.includes("Balbagon")) {
+          bookingPickupMethod.value = "balbagon_port";
         } else if (name.includes("Airport")) {
           bookingPickupMethod.value = "airport";
+        } else if (
+          name.includes("Catarman") ||
+          name.includes("Sagay") ||
+          name.includes("Guinsiliban") ||
+          name.includes("Mahinog") ||
+          name.includes("Nouveau") ||
+          name.includes("Mantigue")
+        ) {
+          bookingPickupMethod.value = "delivery";
         } else {
           bookingPickupMethod.value = "around_mambajao";
         }
         syncPickupMethodUi();
       }
+      const fullAddr = buildPresetDeliveryAddress(name);
       initOrUpdateDeliveryMap(lat, lng);
-      setDeliveryCoordinates(lat, lng, name);
+      setDeliveryCoordinates(lat, lng, fullAddr);
       refreshQuote();
     });
   }
@@ -1569,7 +1728,7 @@
       lat: 9.1672,
       lng: 124.8028,
       desc: "Main gateway port to Camiguin from Balingoan, Misamis Oriental / CDO. Fastcraft and RoRo dock here.",
-      address: "Benoni Port, Mahinog, Camiguin"
+      address: "Benoni Port (Mahinog)"
     },
     {
       id: "balbagon-port",
@@ -1580,7 +1739,7 @@
       lat: 9.2530,
       lng: 124.7170,
       desc: "Ferry terminal connecting Camiguin to Jagna, Bohol (Super Shuttle Ferry).",
-      address: "Balbagon Port, Mambajao, Camiguin"
+      address: "Balbagon Port (Mambajao)"
     },
     {
       id: "camiguin-airport",
@@ -1591,7 +1750,7 @@
       lat: 9.2520,
       lng: 124.7060,
       desc: "Camiguin domestic commercial airport in Mambajao with flights from Cebu / Manila.",
-      address: "Camiguin Airport, Mambajao, Camiguin"
+      address: "Camiguin Airport (Mambajao)"
     },
     {
       id: "white-island",
@@ -1764,11 +1923,21 @@
   function applyPendingDeliverySpot() {
     if (!pendingDeliverySpot) return;
     if (bookingPickupMethod) {
-      const spotName = pendingDeliverySpot.name || pendingDeliverySpot.address || "";
+      const spotName = `${pendingDeliverySpot.name || ""} ${pendingDeliverySpot.address || ""}`;
       if (spotName.includes("Benoni")) {
         bookingPickupMethod.value = "benoni_port";
+      } else if (spotName.includes("Balbagon")) {
+        bookingPickupMethod.value = "balbagon_port";
       } else if (spotName.includes("Airport")) {
         bookingPickupMethod.value = "airport";
+      } else if (
+        spotName.includes("Catarman") ||
+        spotName.includes("Sagay") ||
+        spotName.includes("Guinsiliban") ||
+        spotName.includes("Mahinog") ||
+        spotName.includes("Nouveau")
+      ) {
+        bookingPickupMethod.value = "delivery";
       } else {
         bookingPickupMethod.value = "around_mambajao";
       }
@@ -2207,6 +2376,25 @@
         return;
       }
 
+      const licenseFile = licenseInput && licenseInput.files ? licenseInput.files[0] : null;
+      if (!licenseFile) {
+        const msg = "Please upload a photo of your valid Philippine Driver's License or Foreign Driver's Permit.";
+        bookingFormError.textContent = msg;
+        bookingFormError.classList.remove("hidden");
+        showToast(msg, "error");
+        licenseInput?.focus();
+        return;
+      }
+
+      if (sigCanvas && !hasSigned) {
+        const msg = "Please sign your digital signature on the Rental Agreement pad before submitting.";
+        bookingFormError.textContent = msg;
+        bookingFormError.classList.remove("hidden");
+        showToast(msg, "error");
+        sigCanvas.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+
       const contractAgree = document.getElementById("booking-contract-agree");
       if (contractAgree && !contractAgree.checked) {
         const msg = "Please agree to the Digital Rental Agreement before submitting.";
@@ -2295,7 +2483,6 @@
 
       try {
         let fetchOpts;
-        const licenseFile = licenseInput && licenseInput.files ? licenseInput.files[0] : null;
         if ((proofFile && paymentActive && selectedChannel !== "pay_at_shop") || licenseFile || sigData) {
           const fd = new FormData();
           Object.entries(payload).forEach(([k, v]) => {
@@ -2307,6 +2494,7 @@
           if (licenseFile) fd.append("license_photo", licenseFile);
           if (sigData) fd.append("signature_data", sigData);
           fd.append("contract_agreed", "1");
+          fd.append("require_license_photo", "1");
           fetchOpts = { method: "POST", body: fd };
         } else {
           fetchOpts = {
@@ -2318,6 +2506,7 @@
               payment_reference: selectedChannel === "pay_at_shop" ? "" : paymentReference,
               signature_data: sigData,
               contract_agreed: true,
+              require_license_photo: true,
             }),
           };
         }
@@ -2353,16 +2542,19 @@
 
   function formatStorefrontPickupLabel(method, address) {
     if (method === "benoni_port") {
-      return `Benoni Port (+₱200)${address ? ` — ${escapeHtml(address)}` : ""}`;
+      return `Benoni Port (Mahinog) (+₱200)${address ? ` — ${escapeHtml(address)}` : ""}`;
+    }
+    if (method === "balbagon_port") {
+      return `Balbagon Port (Mambajao) (Free)${address ? ` — ${escapeHtml(address)}` : ""}`;
     }
     if (method === "airport") {
-      return `Airport Delivery (Free)${address ? ` — ${escapeHtml(address)}` : ""}`;
+      return `Camiguin Airport (Mambajao) (Free)${address ? ` — ${escapeHtml(address)}` : ""}`;
     }
     if (method === "around_mambajao" || method === "mambajao") {
       return `Around Mambajao Delivery (Free)${address ? ` — ${escapeHtml(address)}` : ""}`;
     }
     if (method === "delivery") {
-      return `Delivery${address ? ` (${escapeHtml(address)})` : ""}`;
+      return `Hotel / Resort Delivery${address ? ` (${escapeHtml(address)})` : ""}`;
     }
     return "Shop Pickup (Free)";
   }
@@ -2395,6 +2587,12 @@
 
     const trackLink = document.getElementById("confirm-track-link");
     trackLink.href = `/bookings?code=${encodeURIComponent(booking.booking_code)}&phone=${encodeURIComponent(booking.customer_phone)}`;
+
+    const contractLink = document.getElementById("confirm-contract-link");
+    if (contractLink) {
+      contractLink.href = `/bookings/${encodeURIComponent(booking.booking_code)}/contract?phone=${encodeURIComponent(booking.customer_phone)}`;
+      contractLink.classList.remove("hidden");
+    }
 
     const waBtn = document.getElementById("confirm-whatsapp-link");
     const waDigits = (booking.shop_whatsapp || shop.whatsapp_number || "").replace(/\D+/g, "");
