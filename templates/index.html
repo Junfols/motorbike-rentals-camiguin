@@ -194,6 +194,11 @@
                 WhatsApp Shop
               </a>
             {% endif %}
+            {% if featured_shop.messenger_url %}
+              <a href="{{ featured_shop.messenger_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline">
+                💬 Messenger
+              </a>
+            {% endif %}
           </div>
         </div>
       </div>
@@ -288,6 +293,19 @@
             <span class="spec-pill">{{ bike.transmission }}</span>
             <span class="spec-pill">{{ bike.fuel_type }}</span>
           </div>
+          {% if (bike.half_day_rate and bike.half_day_rate > 0) or (bike.discount_3day_pct and bike.discount_3day_pct > 0) or (bike.discount_7day_pct and bike.discount_7day_pct > 0) %}
+          <div class="bike-specs-row" style="margin-top:4px;">
+            {% if bike.half_day_rate and bike.half_day_rate > 0 %}
+              <span class="spec-pill" style="background:#fef3c7;color:#92400e;border-color:#fde68a;">⏱️ 6h: &#8369;{{ '{:,.0f}'.format(bike.half_day_rate) }}</span>
+            {% endif %}
+            {% if bike.discount_3day_pct and bike.discount_3day_pct > 0 %}
+              <span class="spec-pill" style="background:#dcfce7;color:#166534;border-color:#86efac;">🏷️ 3+ Days: {{ '%g'|format(bike.discount_3day_pct) }}% OFF</span>
+            {% endif %}
+            {% if bike.discount_7day_pct and bike.discount_7day_pct > 0 %}
+              <span class="spec-pill" style="background:#dbeafe;color:#1e40af;border-color:#93c5fd;">🏷️ 7+ Days: {{ '%g'|format(bike.discount_7day_pct) }}% OFF</span>
+            {% endif %}
+          </div>
+          {% endif %}
           <p class="bike-card-inclusions">{{ bike.inclusions or bike.description }}</p>
           <div class="bike-card-footer">
             <div>
@@ -586,9 +604,10 @@
         <div class="info-box">
           <h4>Rental Rate</h4>
           <div class="rate-summary-row">
-            <span>Daily Rate:</span>
+            <span>Daily Rate (24h):</span>
             <strong id="modal-daily-rate"></strong>
           </div>
+          <div id="modal-promo-rates" class="hidden" style="margin-top:6px;display:flex;flex-direction:column;gap:4px;font-size:0.84rem;"></div>
         </div>
 
         <div class="info-box">
@@ -614,6 +633,13 @@
         <input type="hidden" id="booking-bike-id" name="bike_id">
 
         <div class="form-section-title">1. Rental Schedule &amp; Camiguin Pickup / Drop-off</div>
+        <div id="booking-rental-type-wrap" class="form-group hidden" style="margin-bottom:10px;">
+          <label for="booking-rental-type">Rental Duration Option</label>
+          <select id="booking-rental-type" name="rental_type">
+            <option value="full_day">🗓️ Full Day (24 Hours / Multi-Day)</option>
+            <option value="half_day">⏱️ Half-Day Express (6 Hours &bull; Same-Day Return)</option>
+          </select>
+        </div>
         <div class="form-grid-2">
           <div class="form-group">
             <label for="booking-pickup-date">Pickup Date *</label>
@@ -935,6 +961,7 @@
         <a id="confirm-track-link" href="/bookings" class="btn btn-primary">Track My Booking</a>
         <a id="confirm-contract-link" href="#" target="_blank" rel="noopener" class="btn btn-outline">📄 View / Print Rental Contract</a>
         <a id="confirm-whatsapp-link" href="#" target="_blank" rel="noopener" class="btn btn-outline">Message Shop on WhatsApp</a>
+        <a id="confirm-messenger-link" href="#" target="_blank" rel="noopener" class="btn btn-outline hidden">💬 Message Shop on Messenger</a>
       </div>
     </div>
   </div>
@@ -946,5 +973,5 @@
   window.INITIAL_FEATURED_SHOP = {{ (featured_shop or None) | tojson }};
   window.INITIAL_STOREFRONT_BOOTSTRAP = {{ (storefront_bootstrap or None) | tojson }};
 </script>
-<script src="/static/js/storefront.js?v=18"></script>
+<script src="/static/js/storefront.js?v=19"></script>
 {% endblock %}

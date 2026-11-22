@@ -5,7 +5,7 @@ import re
 import secrets
 from datetime import date, datetime
 from functools import wraps
-from urllib.parse import urlparse
+from urllib.parse import quote as url_quote, urlparse
 
 from flask import (
     Flask,
@@ -48,8 +48,10 @@ from db import (
     get_all_shop_rating_stats,
     get_bike_rating_stats,
     get_bike_reviews,
+    get_booking_inspections,
     get_connection,
     get_database_url,
+    get_inspections_for_bookings,
     get_recent_reviews,
     get_settings,
     get_shop_rating_stats,
@@ -62,23 +64,27 @@ from db import (
     save_uploaded_media,
     slugify_name,
     slugify_shop_name,
+    upsert_booking_inspection,
     verify_admin_password,
     verify_shop_password,
 )
 from calls import register_call_routes
 from push_notifications import (
     notify_customer_booking_confirmed,
+    notify_customer_return_reminder,
     notify_shop_new_booking,
     register_push_routes,
 )
 from icons import ensure_icons
 from notifications import (
+    build_return_reminder_text,
     dispatch_background,
     notify_booking_cancelled_by_customer,
     notify_new_booking,
     notify_new_partner_registration,
     notify_partner_status_change,
     notify_payment_verified,
+    notify_return_reminder,
     send_test_alert,
 )
 from paymongo import (
@@ -185,6 +191,7 @@ def _serialize_shop(row, include_private: bool = False, rating_stats: dict | Non
         "delivery_fee": float(row["delivery_fee"] or 0),
         "phone": row["phone"],
         "whatsapp_number": row["whatsapp_number"],
+        "messenger_url": (row["messenger_url"] if "messenger_url" in keys else "") or "",
         "payout_method": (row["payout_method"] if "payout_method" in keys else "GCash") or "GCash",
         "payout_number": (row["payout_number"] if "payout_number" in keys else "") or "",
         "payout_account_name": (row["payout_account_name"] if "payout_account_name" in keys else "") or "",
@@ -236,6 +243,7 @@ def _serialize_bike(row, booked_units: int = 0, schedule: dict | None = None, ra
         "shop_address": row["shop_address"] if "shop_address" in keys else None,
         "shop_phone": row["shop_phone"] if "shop_phone" in keys else None,
         "shop_whatsapp": row["shop_whatsapp"] if "shop_whatsapp" in keys else None,
+        "shop_messenger_url": (row["shop_messenger_url"] if "shop_messenger_url" in keys else "") or "",
         "shop_delivery_fee": (
             float(row["shop_delivery_fee"] or 0) if "shop_delivery_fee" in keys else None
         ),
@@ -248,6 +256,9 @@ def _serialize_bike(row, booked_units: int = 0, schedule: dict | None = None, ra
         "transmission": row["transmission"],
         "fuel_type": row["fuel_type"],
         "daily_rate": float(row["daily_rate"]),
+        "half_day_rate": float(row["half_day_rate"] or 0) if "half_day_rate" in keys else 0.0,
+        "discount_3day_pct": float(row["discount_3day_pct"] or 0) if "discount_3day_pct" in keys else 0.0,
+        "discount_7day_pct": float(row["discount_7day_pct"] or 0) if "discount_7day_pct" in keys else 0.0,
         "weekly_rate": float(row["weekly_rate"] or 0),
         "deposit": float(row["deposit"] or 0),
         "units_count": units_count,
@@ -273,7 +284,8 @@ def _serialize_bike(row, booked_units: int = 0, schedule: dict | None = None, ra
 def _fetch_bike_with_shop(conn, bike_id: int):
     return conn.execute(
         "SELECT b.*, s.shop_name AS shop_name, s.slug AS shop_slug, s.logo_url AS shop_logo_url, "
-        "s.cover_url AS shop_cover_url, s.contract_terms AS shop_contract_terms, "
+        "s.cover_url AS shop_cover_url, s.messenger_url AS shop_messenger_url, "
+        "s.contract_terms AS shop_contract_terms, "
         "s.municipality AS shop_municipality, s.status AS shop_status "
         "FROM bikes b JOIN shops s ON s.id = b.shop_id WHERE b.id = ?",
         (bike_id,),
@@ -399,10 +411,45 @@ def _delete_bike_block_entry(conn, bike_row, block_id: int) -> tuple[dict | None
     return {"bike": _serialize_bike_with_schedule(conn, fresh, include_calendar=True)}, None, 200
 
 
-def _serialize_booking(row) -> dict:
+def _build_reminder_links(booking_dict: dict, fallback_messenger_url: str = "") -> dict:
+    """Build 1-tap SMS, WhatsApp, and Messenger return reminder links for a booking."""
+    shop_stub = {
+        "shop_name": booking_dict.get("shop_name") or "Motorbike Rentals Camiguin",
+        "address": booking_dict.get("shop_address") or "",
+        "municipality": booking_dict.get("shop_municipality") or "Camiguin",
+    }
+    msg = build_return_reminder_text(shop_stub, booking_dict)
+    raw_phone = str(booking_dict.get("customer_phone") or "").strip()
+    digits = _normalize_phone(raw_phone)
+    wa_digits = f"63{digits[1:]}" if digits.startswith("0") and len(digits) == 11 else digits
+    encoded = url_quote(msg, safe="")
+    messenger = (booking_dict.get("shop_messenger_url") or fallback_messenger_url or "").strip()
+    return {
+        "message": msg,
+        "sms_url": f"sms:{raw_phone}?body={encoded}" if raw_phone else "",
+        "whatsapp_url": f"https://wa.me/{wa_digits}?text={encoded}" if wa_digits else "",
+        "messenger_url": messenger,
+    }
+
+
+def _is_return_due_soon(row) -> bool:
+    """True when an active/confirmed rental is scheduled to return today or earlier."""
+    status = str(row["status"] or "").lower()
+    if status not in ("active", "confirmed"):
+        return False
+    ret_str = str(row["return_date"] or "").strip()
+    if not ret_str:
+        return False
+    return ret_str <= date.today().isoformat()
+
+
+def _serialize_booking(row, inspections: dict | None = None) -> dict:
     keys = row.keys()
     raw_shop_contract = (row["shop_contract_terms"] if "shop_contract_terms" in keys else "") or ""
-    return {
+    rental_type = (row["rental_type"] if "rental_type" in keys else "full_day") or "full_day"
+    discount_saved = float(row["discount_saved"] or 0) if "discount_saved" in keys else 0.0
+    reminder_sent_at = (row["return_reminder_sent_at"] if "return_reminder_sent_at" in keys else "") or ""
+    booking_dict = {
         "id": row["id"],
         "booking_code": row["booking_code"],
         "bike_id": row["bike_id"],
@@ -416,6 +463,7 @@ def _serialize_booking(row) -> dict:
         "shop_address": row["shop_address"] if "shop_address" in keys else None,
         "shop_phone": row["shop_phone"] if "shop_phone" in keys else None,
         "shop_whatsapp": row["shop_whatsapp"] if "shop_whatsapp" in keys else None,
+        "shop_messenger_url": (row["shop_messenger_url"] if "shop_messenger_url" in keys else "") or "",
         "shop_payout_method": (row["shop_payout_method"] if "shop_payout_method" in keys else "GCash") or "GCash",
         "shop_payout_number": (row["shop_payout_number"] if "shop_payout_number" in keys else "") or "",
         "shop_payout_account_name": (row["shop_payout_account_name"] if "shop_payout_account_name" in keys else "") or "",
@@ -438,7 +486,10 @@ def _serialize_booking(row) -> dict:
         "extra_helmet": bool(row["extra_helmet"]),
         "top_box": bool(row["top_box"]),
         "rental_days": int(row["rental_days"]),
+        "rental_type": rental_type,
+        "duration_label": "Half-Day (6 hrs)" if rental_type == "half_day" else (f"{int(row['rental_days'])} day" if int(row["rental_days"]) == 1 else f"{int(row['rental_days'])} days"),
         "base_subtotal": float(row["base_subtotal"]),
+        "discount_saved": discount_saved,
         "addons_total": float(row["addons_total"]),
         "delivery_total": float(row["delivery_total"]),
         "total_amount": float(row["total_amount"]),
@@ -471,6 +522,9 @@ def _serialize_booking(row) -> dict:
         "signature_url": (row["signature_url"] if "signature_url" in row.keys() else "") or "",
         "contract_agreed": bool(row["contract_agreed"]) if "contract_agreed" in row.keys() else False,
         "contract_signed_at": (row["contract_signed_at"] if "contract_signed_at" in row.keys() else "") or "",
+        "return_reminder_sent_at": reminder_sent_at,
+        "is_return_due_soon": _is_return_due_soon(row),
+        "inspections": inspections if inspections is not None else {"pickup": None, "return": None},
         "google_maps_url": (
             f"https://www.google.com/maps/dir/?api=1&destination={row['delivery_lat']},{row['delivery_lng']}"
             if "delivery_lat" in row.keys()
@@ -487,6 +541,8 @@ def _serialize_booking(row) -> dict:
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+    booking_dict["reminder_links"] = _build_reminder_links(booking_dict)
+    return booking_dict
 
 
 def _row_balance_paid(row) -> bool:
@@ -677,6 +733,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                    s.address AS shop_address,
                    s.phone AS shop_phone,
                    s.whatsapp_number AS shop_whatsapp,
+                   s.messenger_url AS shop_messenger_url,
                    s.delivery_fee AS shop_delivery_fee,
                    s.contract_terms AS shop_contract_terms,
                    s.status AS shop_status
@@ -766,6 +823,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                    s.shop_name AS shop_name, s.municipality AS shop_municipality,
                    s.address AS shop_address, s.phone AS shop_phone,
                    s.whatsapp_number AS shop_whatsapp,
+                   s.messenger_url AS shop_messenger_url,
                    s.payout_method AS shop_payout_method,
                    s.payout_number AS shop_payout_number,
                    s.payout_account_name AS shop_payout_account_name,
@@ -790,7 +848,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         if not (is_admin or is_shop or is_customer):
             return redirect(f"/customer?code={code}")
 
-        booking_data = _serialize_booking(row)
+        inspections = get_booking_inspections(conn, row["id"])
+        booking_data = _serialize_booking(row, inspections=inspections)
         return render_template(
             "contract_print.html",
             b=booking_data,
@@ -1005,6 +1064,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                    s.address AS shop_address,
                    s.phone AS shop_phone,
                    s.whatsapp_number AS shop_whatsapp,
+                   s.messenger_url AS shop_messenger_url,
                    s.delivery_fee AS shop_delivery_fee,
                    s.contract_terms AS shop_contract_terms,
                    s.status AS shop_status
@@ -1100,6 +1160,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                    s.address AS shop_address,
                    s.phone AS shop_phone,
                    s.whatsapp_number AS shop_whatsapp,
+                   s.messenger_url AS shop_messenger_url,
                    s.delivery_fee AS shop_delivery_fee,
                    s.contract_terms AS shop_contract_terms,
                    s.status AS shop_status
@@ -1145,6 +1206,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         pickup_date = (request.args.get("pickup_date") or "").strip()
         return_date = (request.args.get("return_date") or "").strip()
         pickup_method = (request.args.get("pickup_method") or "shop").strip().lower()
+        rental_type = (request.args.get("rental_type") or "full_day").strip().lower()
         extra_helmet = (request.args.get("extra_helmet") or "").lower() in ("1", "true", "yes")
         top_box = (request.args.get("top_box") or "").lower() in ("1", "true", "yes")
 
@@ -1192,6 +1254,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                 extra_helmet=extra_helmet,
                 top_box=top_box,
                 shop=shop_row,
+                rental_type=rental_type,
             )
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
@@ -1231,6 +1294,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         return_date = (payload.get("return_date") or "").strip()
         pickup_time = (payload.get("pickup_time") or "09:00").strip()
         pickup_method = (payload.get("pickup_method") or "shop").strip().lower()
+        rental_type = (payload.get("rental_type") or "full_day").strip().lower()
         delivery_address = (payload.get("delivery_address") or "").strip()
         delivery_lat_raw = payload.get("delivery_lat")
         delivery_lng_raw = payload.get("delivery_lng")
@@ -1403,6 +1467,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                 extra_helmet=extra_helmet,
                 top_box=top_box,
                 shop=shop_row,
+                rental_type=rental_type,
             )
 
             payment_active = (
@@ -1497,12 +1562,13 @@ def create_app(test_config: dict | None = None) -> Flask:
                 INSERT INTO bookings (
                     booking_code, bike_id, shop_id, customer_name, customer_phone, customer_email,
                     customer_address, license_number, pickup_date, return_date, pickup_time, pickup_method,
-                    delivery_address, delivery_lat, delivery_lng, extra_helmet, top_box, rental_days, base_subtotal,
+                    delivery_address, delivery_lat, delivery_lng, extra_helmet, top_box, rental_days,
+                    rental_type, base_subtotal, discount_saved,
                     addons_total, delivery_total, total_amount, commission_rate, platform_fee,
                     shop_payout, reservation_fee, balance_due, payment_channel, payment_reference,
                     payment_proof_url, payment_status, deposit_amount, notes, admin_notes, status,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'pending', ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 'pending', ?, ?)
                 """,
                 (
                     booking_code,
@@ -1523,7 +1589,9 @@ def create_app(test_config: dict | None = None) -> Flask:
                     1 if extra_helmet else 0,
                     1 if top_box else 0,
                     quote["rental_days"],
+                    quote["rental_type"],
                     quote["base_subtotal"],
+                    quote["discount_saved"],
                     quote["addons_total"],
                     quote["delivery_total"],
                     quote["total_amount"],
@@ -1563,7 +1631,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             raise
 
         created = _fetch_booking_by_id(conn, booking_id)
-        booking_data = _serialize_booking(created)
+        booking_data = _serialize_booking(created, inspections=get_booking_inspections(conn, booking_id))
 
         checkout_url = ""
         if stored_channel == "paymongo":
@@ -1586,7 +1654,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                             (link_id, checkout_url, booking_id),
                         )
                     created = _fetch_booking_by_id(conn, booking_id)
-                    booking_data = _serialize_booking(created)
+                    booking_data = _serialize_booking(created, inspections=get_booking_inspections(conn, booking_id))
 
         _dispatch_alert(
             notify_new_booking,
@@ -1614,6 +1682,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                    s.shop_name AS shop_name, s.municipality AS shop_municipality,
                    s.address AS shop_address, s.phone AS shop_phone,
                    s.whatsapp_number AS shop_whatsapp,
+                   s.messenger_url AS shop_messenger_url,
                    s.payout_method AS shop_payout_method,
                    s.payout_number AS shop_payout_number,
                    s.payout_account_name AS shop_payout_account_name,
@@ -1650,6 +1719,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                    s.shop_name AS shop_name, s.municipality AS shop_municipality,
                    s.address AS shop_address, s.phone AS shop_phone,
                    s.whatsapp_number AS shop_whatsapp,
+                   s.messenger_url AS shop_messenger_url,
                    s.payout_method AS shop_payout_method,
                    s.payout_number AS shop_payout_number,
                    s.payout_account_name AS shop_payout_account_name,
@@ -1668,7 +1738,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         if not _phones_match(row["customer_phone"], request.args.get("phone") or ""):
             return jsonify({"error": "Phone number does not match this booking reference."}), 403
 
-        return jsonify({"booking": _serialize_booking(row)})
+        inspections = get_booking_inspections(conn, row["id"])
+        return jsonify({"booking": _serialize_booking(row, inspections=inspections)})
 
     @app.post("/api/bookings/cancel")
     def customer_cancel_booking():
@@ -2049,17 +2120,33 @@ def create_app(test_config: dict | None = None) -> Flask:
         if status not in VALID_BIKE_STATUSES:
             raise ValueError("Invalid bike status.")
 
+        def _existing_num(col, default=0.0):
+            if existing is not None and col in existing.keys() and existing[col] is not None:
+                return existing[col]
+            return default
+
+        def _parse_optional_float(key, default=0.0):
+            raw = data.get(key)
+            if raw is None or (isinstance(raw, str) and not raw.strip()):
+                return float(default)
+            return float(raw)
+
         try:
             engine_cc = int(data.get("engine_cc", existing["engine_cc"] if existing else 125))
             daily_rate = float(data.get("daily_rate", existing["daily_rate"] if existing else 0))
+            half_day_rate = _parse_optional_float("half_day_rate", _existing_num("half_day_rate", 0.0))
+            discount_3day_pct = _parse_optional_float("discount_3day_pct", _existing_num("discount_3day_pct", 0.0))
+            discount_7day_pct = _parse_optional_float("discount_7day_pct", _existing_num("discount_7day_pct", 0.0))
             weekly_rate = float(data.get("weekly_rate", existing["weekly_rate"] if existing else 0))
             deposit = float(data.get("deposit", existing["deposit"] if existing else 0))
             units_count = int(data.get("units_count", existing["units_count"] if existing else 1))
         except (TypeError, ValueError):
-            raise ValueError("Engine CC, rates, deposit, and units must be valid numbers.")
+            raise ValueError("Engine CC, rates, discounts, deposit, and units must be valid numbers.")
 
-        if engine_cc <= 0 or daily_rate <= 0 or weekly_rate < 0 or deposit < 0 or units_count < 1:
+        if engine_cc <= 0 or daily_rate <= 0 or half_day_rate < 0 or weekly_rate < 0 or deposit < 0 or units_count < 1:
             raise ValueError("Engine CC, daily rate, and units count must be positive.")
+        if discount_3day_pct < 0 or discount_3day_pct > 70 or discount_7day_pct < 0 or discount_7day_pct > 70:
+            raise ValueError("Multi-day discounts must be between 0% and 70%.")
 
         featured_raw = data.get("featured", existing["featured"] if existing else False)
         if isinstance(featured_raw, str):
@@ -2086,6 +2173,9 @@ def create_app(test_config: dict | None = None) -> Flask:
             "transmission": transmission,
             "fuel_type": fuel_type or "Gasoline",
             "daily_rate": daily_rate,
+            "half_day_rate": round(half_day_rate, 2),
+            "discount_3day_pct": round(discount_3day_pct, 2),
+            "discount_7day_pct": round(discount_7day_pct, 2),
             "weekly_rate": weekly_rate,
             "deposit": deposit,
             "units_count": units_count,
@@ -2097,6 +2187,178 @@ def create_app(test_config: dict | None = None) -> Flask:
             "featured": 1 if featured else 0,
             "shop_id": data.get("shop_id"),
         }
+
+    # ------------------------------------------------------------------
+    # Shared Walkaround Inspection & Return Reminder Helpers
+    # ------------------------------------------------------------------
+    def _save_booking_inspection(conn, booking_row, recorded_by: str) -> tuple[dict | None, str | None, int]:
+        if request.content_type and "multipart/form-data" in request.content_type:
+            data = request.form
+            incoming_files = list(request.files.getlist("photos"))
+            for slot_key in (
+                "photo_front",
+                "photo_left",
+                "photo_right",
+                "photo_fuel",
+                "photo_1",
+                "photo_2",
+                "photo_3",
+                "photo_4",
+            ):
+                f = request.files.get(slot_key)
+                if f and f.filename:
+                    incoming_files.append(f)
+            incoming_files = [f for f in incoming_files if f and f.filename]
+        else:
+            data = request.get_json(silent=True) or {}
+            incoming_files = []
+
+        stage = str(data.get("stage") or "pickup").strip().lower()
+        if stage not in ("pickup", "return"):
+            return None, "Inspection stage must be 'pickup' or 'return'.", 400
+
+        fuel_level = str(data.get("fuel_level") or "Full (8/8)").strip()[:60] or "Full (8/8)"
+        odometer_km = str(data.get("odometer_km") or "").strip()[:40]
+        condition_notes = str(data.get("condition_notes") or "").strip()[:1000]
+        try:
+            helmets_count = int(data.get("helmets_count", 2) if str(data.get("helmets_count", "")).strip() != "" else 2)
+        except (TypeError, ValueError):
+            return None, "Helmets count must be a whole number.", 400
+        if helmets_count < 0 or helmets_count > 6:
+            return None, "Helmets count must be between 0 and 6.", 400
+
+        if len(incoming_files) > 4:
+            return None, "You can upload up to 4 walkaround photos per checklist.", 400
+
+        validated_photos = []
+        try:
+            for f in incoming_files:
+                v = _validate_image_upload(f, prefix=f"inspect_{stage}")
+                if v is not None:
+                    validated_photos.append(v)
+        except ValueError as exc:
+            return None, str(exc), 400
+
+        existing_map = get_booking_inspections(conn, booking_row["id"])
+        existing_insp = existing_map.get(stage)
+        existing_urls = list(existing_insp.get("photo_urls") or []) if existing_insp else []
+        clear_photos = _as_bool(data.get("clear_photos"))
+        kept_urls = [] if clear_photos else list(existing_urls)
+
+        now = datetime.now().isoformat(timespec="seconds")
+        advance_status = _as_bool(data.get("advance_status"))
+        new_urls = []
+        with conn:
+            for v in validated_photos:
+                new_urls.append(_save_validated_image(conn, v, use_tx=False))
+            final_urls = (kept_urls + new_urls)[-4:]
+            upsert_booking_inspection(
+                conn,
+                booking_id=int(booking_row["id"]),
+                shop_id=int(booking_row["shop_id"]),
+                stage=stage,
+                fuel_level=fuel_level,
+                odometer_km=odometer_km,
+                helmets_count=helmets_count,
+                condition_notes=condition_notes,
+                photo_urls=final_urls,
+                recorded_by=recorded_by,
+            )
+            if advance_status:
+                current_status = str(booking_row["status"] or "").lower()
+                if stage == "pickup" and current_status in ("pending", "confirmed"):
+                    conn.execute(
+                        "UPDATE bookings SET status = 'active', updated_at = ? WHERE id = ?",
+                        (now, booking_row["id"]),
+                    )
+                elif stage == "return" and current_status in ("confirmed", "active"):
+                    conn.execute(
+                        "UPDATE bookings SET status = 'completed', updated_at = ? WHERE id = ?",
+                        (now, booking_row["id"]),
+                    )
+
+        removed_urls = [u for u in existing_urls if u not in final_urls]
+        for old_u in removed_urls:
+            delete_unused_uploaded_media(conn, old_u)
+
+        updated_row = _fetch_booking_by_id(conn, booking_row["id"])
+        inspections = get_booking_inspections(conn, booking_row["id"])
+        booking_data = _serialize_booking(updated_row, inspections=inspections)
+        return (
+            {
+                "ok": True,
+                "inspection": inspections.get(stage),
+                "inspections": inspections,
+                "booking": booking_data,
+            },
+            None,
+            200,
+        )
+
+    def _trigger_booking_return_reminder(conn, booking_row) -> tuple[dict | None, str | None, int]:
+        status = str(booking_row["status"] or "").lower()
+        if status in ("cancelled", "completed"):
+            return None, f"Cannot send return reminder for a {status} booking.", 400
+
+        now = datetime.now().isoformat(timespec="seconds")
+        with conn:
+            conn.execute(
+                "UPDATE bookings SET return_reminder_sent_at = ?, updated_at = ? WHERE id = ?",
+                (now, now, booking_row["id"]),
+            )
+        updated_row = _fetch_booking_by_id(conn, booking_row["id"])
+        inspections = get_booking_inspections(conn, booking_row["id"])
+        booking_data = _serialize_booking(updated_row, inspections=inspections)
+
+        push_sent = 0
+        try:
+            push_sent = int(notify_customer_return_reminder(conn, booking_data) or 0)
+        except Exception:
+            push_sent = 0
+
+        shop_row = conn.execute("SELECT * FROM shops WHERE id = ?", (booking_row["shop_id"],)).fetchone()
+        shop_data = _serialize_shop(shop_row, include_private=True) if shop_row else {}
+        _dispatch_alert(
+            notify_return_reminder,
+            get_settings(conn, include_secrets=True),
+            shop_data,
+            booking_data,
+        )
+        return (
+            {
+                "ok": True,
+                "booking": booking_data,
+                "push_sent": push_sent,
+                "reminder_links": booking_data["reminder_links"],
+            },
+            None,
+            200,
+        )
+
+    def _fetch_due_return_reminders(conn, shop_id: int | None = None) -> list[dict]:
+        today_str = date.today().isoformat()
+        sql = """
+            SELECT b.*, k.name AS bike_name, k.image_url AS bike_image,
+                   k.category AS bike_category, k.transmission AS bike_transmission,
+                   k.plate_number AS plate_number,
+                   s.shop_name AS shop_name, s.municipality AS shop_municipality,
+                   s.address AS shop_address, s.phone AS shop_phone,
+                   s.whatsapp_number AS shop_whatsapp,
+                   s.messenger_url AS shop_messenger_url
+            FROM bookings b
+            JOIN bikes k ON k.id = b.bike_id
+            JOIN shops s ON s.id = b.shop_id
+            WHERE b.status IN ('active', 'confirmed')
+              AND b.return_date <= ?
+        """
+        params: list = [today_str]
+        if shop_id is not None:
+            sql += " AND b.shop_id = ?"
+            params.append(shop_id)
+        sql += " ORDER BY b.return_date ASC, b.pickup_time ASC LIMIT 15"
+        rows = conn.execute(sql, params).fetchall()
+        insp_map = get_inspections_for_bookings(conn, [int(r["id"]) for r in rows])
+        return [_serialize_booking(r, inspections=insp_map.get(int(r["id"]))) for r in rows]
 
     # ------------------------------------------------------------------
     # Partner Portal Auth & APIs (/api/partner/...)
@@ -2346,7 +2608,8 @@ def create_app(test_config: dict | None = None) -> Flask:
                    k.plate_number AS plate_number,
                    s.shop_name AS shop_name, s.municipality AS shop_municipality,
                    s.address AS shop_address, s.phone AS shop_phone,
-                   s.whatsapp_number AS shop_whatsapp
+                   s.whatsapp_number AS shop_whatsapp,
+                   s.messenger_url AS shop_messenger_url
             FROM bookings b
             JOIN bikes k ON k.id = b.bike_id
             JOIN shops s ON s.id = b.shop_id
@@ -2359,6 +2622,8 @@ def create_app(test_config: dict | None = None) -> Flask:
             (shop_id, today_str),
         ).fetchall()
 
+        upcoming_insp = get_inspections_for_bookings(conn, [int(r["id"]) for r in upcoming_rows])
+        due_reminders = _fetch_due_return_reminders(conn, shop_id=shop_id)
         shop_rating = get_shop_rating_stats(conn, shop_id)
         settings = get_settings(conn)
         return jsonify(
@@ -2382,8 +2647,13 @@ def create_app(test_config: dict | None = None) -> Flask:
                     "month_payout": float(revenue_row["month_payout"]),
                     "rating_avg": shop_rating["avg_rating"],
                     "review_count": shop_rating["review_count"],
+                    "due_return_count": len(due_reminders),
                 },
-                "upcoming": [_serialize_booking(r) for r in upcoming_rows],
+                "due_return_reminders": due_reminders,
+                "upcoming": [
+                    _serialize_booking(r, inspections=upcoming_insp.get(int(r["id"])))
+                    for r in upcoming_rows
+                ],
                 "reviews": get_shop_reviews(conn, shop_id, limit=8),
             }
         )
@@ -2402,7 +2672,8 @@ def create_app(test_config: dict | None = None) -> Flask:
                    k.plate_number AS plate_number,
                    s.shop_name AS shop_name, s.municipality AS shop_municipality,
                    s.address AS shop_address, s.phone AS shop_phone,
-                   s.whatsapp_number AS shop_whatsapp
+                   s.whatsapp_number AS shop_whatsapp,
+                   s.messenger_url AS shop_messenger_url
             FROM bookings b
             JOIN bikes k ON k.id = b.bike_id
             JOIN shops s ON s.id = b.shop_id
@@ -2426,7 +2697,15 @@ def create_app(test_config: dict | None = None) -> Flask:
 
         sql += " ORDER BY CASE b.status WHEN 'pending' THEN 0 WHEN 'active' THEN 1 WHEN 'confirmed' THEN 2 WHEN 'completed' THEN 3 ELSE 4 END, b.pickup_date ASC, b.id DESC"
         rows = conn.execute(sql, params).fetchall()
-        return jsonify({"bookings": [_serialize_booking(r) for r in rows]})
+        insp_map = get_inspections_for_bookings(conn, [int(r["id"]) for r in rows])
+        return jsonify(
+            {
+                "bookings": [
+                    _serialize_booking(r, inspections=insp_map.get(int(r["id"])))
+                    for r in rows
+                ]
+            }
+        )
 
     @app.patch("/api/partner/bookings/<int:booking_id>")
     @partner_required
@@ -2478,12 +2757,61 @@ def create_app(test_config: dict | None = None) -> Flask:
                 (new_status, admin_notes, 1 if new_balance_paid else 0, now, booking_id, shop_id),
             )
         updated = _fetch_booking_by_id(conn, booking_id)
+        inspections = get_booking_inspections(conn, booking_id)
+        booking_data = _serialize_booking(updated, inspections=inspections)
         if new_status == "confirmed" and existing["status"] != "confirmed":
             try:
-                notify_customer_booking_confirmed(conn, _serialize_booking(updated))
+                notify_customer_booking_confirmed(conn, booking_data)
             except Exception:
                 pass
-        return jsonify({"booking": _serialize_booking(updated)})
+        return jsonify({"booking": booking_data})
+
+    @app.get("/api/partner/bookings/<int:booking_id>/inspections")
+    @partner_required
+    def partner_get_booking_inspections(booking_id: int):
+        conn = get_db()
+        existing = conn.execute(
+            "SELECT id FROM bookings WHERE id = ? AND shop_id = ?",
+            (booking_id, g.partner_shop["id"]),
+        ).fetchone()
+        if not existing:
+            return jsonify({"error": "Booking not found for your shop."}), 404
+        return jsonify({"inspections": get_booking_inspections(conn, booking_id)})
+
+    @app.post("/api/partner/bookings/<int:booking_id>/inspection")
+    @partner_required
+    def partner_save_booking_inspection(booking_id: int):
+        if g.partner_shop["status"] == "suspended":
+            return jsonify({"error": "Account suspended. Contact Main Admin."}), 403
+        conn = get_db()
+        existing = conn.execute(
+            "SELECT * FROM bookings WHERE id = ? AND shop_id = ?",
+            (booking_id, g.partner_shop["id"]),
+        ).fetchone()
+        if not existing:
+            return jsonify({"error": "Booking not found for your shop."}), 404
+        recorded_by = f"Partner ({g.partner_shop['shop_name']})"
+        res, err, code = _save_booking_inspection(conn, existing, recorded_by=recorded_by)
+        if err:
+            return jsonify({"error": err}), code
+        return jsonify(res), code
+
+    @app.post("/api/partner/bookings/<int:booking_id>/remind")
+    @partner_required
+    def partner_send_return_reminder(booking_id: int):
+        if g.partner_shop["status"] == "suspended":
+            return jsonify({"error": "Account suspended. Contact Main Admin."}), 403
+        conn = get_db()
+        existing = conn.execute(
+            "SELECT * FROM bookings WHERE id = ? AND shop_id = ?",
+            (booking_id, g.partner_shop["id"]),
+        ).fetchone()
+        if not existing:
+            return jsonify({"error": "Booking not found for your shop."}), 404
+        res, err, code = _trigger_booking_return_reminder(conn, existing)
+        if err:
+            return jsonify({"error": err}), code
+        return jsonify(res), code
 
     @app.get("/api/partner/bikes")
     @partner_required
@@ -2536,9 +2864,10 @@ def create_app(test_config: dict | None = None) -> Flask:
                 """
                 INSERT INTO bikes (
                     shop_id, name, slug, category, engine_cc, transmission, fuel_type,
-                    daily_rate, weekly_rate, deposit, units_count, plate_number,
+                    daily_rate, half_day_rate, discount_3day_pct, discount_7day_pct,
+                    weekly_rate, deposit, units_count, plate_number,
                     inclusions, description, image_url, status, featured, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
                 """,
                 (
                     shop_id,
@@ -2549,6 +2878,9 @@ def create_app(test_config: dict | None = None) -> Flask:
                     fields["transmission"],
                     fields["fuel_type"],
                     fields["daily_rate"],
+                    fields["half_day_rate"],
+                    fields["discount_3day_pct"],
+                    fields["discount_7day_pct"],
                     fields["weekly_rate"],
                     fields["deposit"],
                     fields["units_count"],
@@ -2592,7 +2924,9 @@ def create_app(test_config: dict | None = None) -> Flask:
                 """
                 UPDATE bikes SET
                     name = ?, slug = ?, category = ?, engine_cc = ?, transmission = ?,
-                    fuel_type = ?, daily_rate = ?, weekly_rate = ?, deposit = ?,
+                    fuel_type = ?, daily_rate = ?, half_day_rate = ?,
+                    discount_3day_pct = ?, discount_7day_pct = ?,
+                    weekly_rate = ?, deposit = ?,
                     units_count = ?, plate_number = ?, inclusions = ?, description = ?,
                     image_url = ?, status = ?
                 WHERE id = ? AND shop_id = ?
@@ -2605,6 +2939,9 @@ def create_app(test_config: dict | None = None) -> Flask:
                     fields["transmission"],
                     fields["fuel_type"],
                     fields["daily_rate"],
+                    fields["half_day_rate"],
+                    fields["discount_3day_pct"],
+                    fields["discount_7day_pct"],
                     fields["weekly_rate"],
                     fields["deposit"],
                     fields["units_count"],
@@ -2739,6 +3076,12 @@ def create_app(test_config: dict | None = None) -> Flask:
         whatsapp_number = _normalize_phone(
             payload.get("whatsapp_number") if "whatsapp_number" in payload else shop["whatsapp_number"]
         )
+        existing_messenger = (shop["messenger_url"] if "messenger_url" in shop.keys() else "") or ""
+        messenger_url = (
+            (payload.get("messenger_url") if "messenger_url" in payload else existing_messenger) or ""
+        ).strip()
+        if messenger_url and not messenger_url.lower().startswith(("http://", "https://")):
+            messenger_url = f"https://{messenger_url.lstrip('/')}"
         telegram_chat_id = (
             (payload.get("telegram_chat_id") if "telegram_chat_id" in payload else shop["telegram_chat_id"]) or ""
         ).strip()
@@ -2821,7 +3164,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                 """
                 UPDATE shops SET
                     shop_name = ?, slug = ?, owner_name = ?, phone = ?, whatsapp_number = ?,
-                    telegram_chat_id = ?, payout_method = ?, payout_number = ?, payout_account_name = ?,
+                    messenger_url = ?, telegram_chat_id = ?, payout_method = ?, payout_number = ?, payout_account_name = ?,
                     municipality = ?, address = ?, description = ?, delivery_fee = ?,
                     logo_url = ?, cover_url = ?, contract_terms = ?, password_hash = ?
                 WHERE id = ?
@@ -2832,6 +3175,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                     owner_name,
                     phone,
                     whatsapp_number,
+                    messenger_url,
                     telegram_chat_id,
                     payout_method,
                     payout_number,
@@ -3016,7 +3360,8 @@ def create_app(test_config: dict | None = None) -> Flask:
                    k.plate_number AS plate_number,
                    s.shop_name AS shop_name, s.municipality AS shop_municipality,
                    s.address AS shop_address, s.phone AS shop_phone,
-                   s.whatsapp_number AS shop_whatsapp
+                   s.whatsapp_number AS shop_whatsapp,
+                   s.messenger_url AS shop_messenger_url
             FROM bookings b
             JOIN bikes k ON k.id = b.bike_id
             JOIN shops s ON s.id = b.shop_id
@@ -3028,6 +3373,8 @@ def create_app(test_config: dict | None = None) -> Flask:
             (today_str,),
         ).fetchall()
 
+        upcoming_insp = get_inspections_for_bookings(conn, [int(r["id"]) for r in upcoming_rows])
+        due_reminders = _fetch_due_return_reminders(conn, shop_id=None)
         settings = get_settings(conn)
         return jsonify(
             {
@@ -3056,7 +3403,9 @@ def create_app(test_config: dict | None = None) -> Flask:
                     "reservation_mode": settings.get("reservation_mode", "off"),
                     "reservation_percent": float(settings.get("reservation_percent", "30") or 0),
                     "reservation_configured": is_reservation_payment_configured(settings),
+                    "due_return_count": len(due_reminders),
                 },
+                "due_return_reminders": due_reminders,
                 "revenue_by_shop": [
                     {
                         "id": r["id"],
@@ -3071,7 +3420,10 @@ def create_app(test_config: dict | None = None) -> Flask:
                     }
                     for r in revenue_by_shop
                 ],
-                "upcoming": [_serialize_booking(r) for r in upcoming_rows],
+                "upcoming": [
+                    _serialize_booking(r, inspections=upcoming_insp.get(int(r["id"])))
+                    for r in upcoming_rows
+                ],
             }
         )
 
@@ -3212,6 +3564,10 @@ def create_app(test_config: dict | None = None) -> Flask:
         booking_cnt = conn.execute("SELECT COUNT(*) FROM bookings WHERE shop_id = ?", (shop_id,)).fetchone()[0]
         with conn:
             conn.execute(
+                "DELETE FROM booking_inspections WHERE shop_id = ? OR booking_id IN (SELECT id FROM bookings WHERE shop_id = ? OR bike_id IN (SELECT id FROM bikes WHERE shop_id = ?))",
+                (shop_id, shop_id, shop_id),
+            )
+            conn.execute(
                 "DELETE FROM reviews WHERE shop_id = ? OR bike_id IN (SELECT id FROM bikes WHERE shop_id = ?)",
                 (shop_id, shop_id),
             )
@@ -3252,7 +3608,8 @@ def create_app(test_config: dict | None = None) -> Flask:
                    k.plate_number AS plate_number,
                    s.shop_name AS shop_name, s.municipality AS shop_municipality,
                    s.address AS shop_address, s.phone AS shop_phone,
-                   s.whatsapp_number AS shop_whatsapp
+                   s.whatsapp_number AS shop_whatsapp,
+                   s.messenger_url AS shop_messenger_url
             FROM bookings b
             JOIN bikes k ON k.id = b.bike_id
             JOIN shops s ON s.id = b.shop_id
@@ -3280,7 +3637,15 @@ def create_app(test_config: dict | None = None) -> Flask:
 
         sql += " ORDER BY CASE b.status WHEN 'pending' THEN 0 WHEN 'active' THEN 1 WHEN 'confirmed' THEN 2 WHEN 'completed' THEN 3 ELSE 4 END, b.pickup_date ASC, b.id DESC"
         rows = conn.execute(sql, params).fetchall()
-        return jsonify({"bookings": [_serialize_booking(r) for r in rows]})
+        insp_map = get_inspections_for_bookings(conn, [int(r["id"]) for r in rows])
+        return jsonify(
+            {
+                "bookings": [
+                    _serialize_booking(r, inspections=insp_map.get(int(r["id"])))
+                    for r in rows
+                ]
+            }
+        )
 
     @app.patch("/api/admin/bookings/<int:booking_id>")
     @admin_required
@@ -3368,12 +3733,47 @@ def create_app(test_config: dict | None = None) -> Flask:
                 ),
             )
         updated = _fetch_booking_by_id(conn, booking_id)
+        inspections = get_booking_inspections(conn, booking_id)
+        booking_data = _serialize_booking(updated, inspections=inspections)
         if new_status == "confirmed" and existing["status"] != "confirmed":
             try:
-                notify_customer_booking_confirmed(conn, _serialize_booking(updated))
+                notify_customer_booking_confirmed(conn, booking_data)
             except Exception:
                 pass
-        return jsonify({"booking": _serialize_booking(updated)})
+        return jsonify({"booking": booking_data})
+
+    @app.get("/api/admin/bookings/<int:booking_id>/inspections")
+    @admin_required
+    def admin_get_booking_inspections(booking_id: int):
+        conn = get_db()
+        existing = conn.execute("SELECT id FROM bookings WHERE id = ?", (booking_id,)).fetchone()
+        if not existing:
+            return jsonify({"error": "Booking not found."}), 404
+        return jsonify({"inspections": get_booking_inspections(conn, booking_id)})
+
+    @app.post("/api/admin/bookings/<int:booking_id>/inspection")
+    @admin_required
+    def admin_save_booking_inspection(booking_id: int):
+        conn = get_db()
+        existing = conn.execute("SELECT * FROM bookings WHERE id = ?", (booking_id,)).fetchone()
+        if not existing:
+            return jsonify({"error": "Booking not found."}), 404
+        res, err, code = _save_booking_inspection(conn, existing, recorded_by="Main Admin")
+        if err:
+            return jsonify({"error": err}), code
+        return jsonify(res), code
+
+    @app.post("/api/admin/bookings/<int:booking_id>/remind")
+    @admin_required
+    def admin_send_return_reminder(booking_id: int):
+        conn = get_db()
+        existing = conn.execute("SELECT * FROM bookings WHERE id = ?", (booking_id,)).fetchone()
+        if not existing:
+            return jsonify({"error": "Booking not found."}), 404
+        res, err, code = _trigger_booking_return_reminder(conn, existing)
+        if err:
+            return jsonify({"error": err}), code
+        return jsonify(res), code
 
     @app.get("/api/admin/bikes")
     @admin_required
@@ -3439,9 +3839,10 @@ def create_app(test_config: dict | None = None) -> Flask:
                 """
                 INSERT INTO bikes (
                     shop_id, name, slug, category, engine_cc, transmission, fuel_type,
-                    daily_rate, weekly_rate, deposit, units_count, plate_number,
+                    daily_rate, half_day_rate, discount_3day_pct, discount_7day_pct,
+                    weekly_rate, deposit, units_count, plate_number,
                     inclusions, description, image_url, status, featured, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     shop_id,
@@ -3452,6 +3853,9 @@ def create_app(test_config: dict | None = None) -> Flask:
                     fields["transmission"],
                     fields["fuel_type"],
                     fields["daily_rate"],
+                    fields["half_day_rate"],
+                    fields["discount_3day_pct"],
+                    fields["discount_7day_pct"],
                     fields["weekly_rate"],
                     fields["deposit"],
                     fields["units_count"],
@@ -3500,7 +3904,9 @@ def create_app(test_config: dict | None = None) -> Flask:
                 """
                 UPDATE bikes SET
                     shop_id = ?, name = ?, slug = ?, category = ?, engine_cc = ?, transmission = ?,
-                    fuel_type = ?, daily_rate = ?, weekly_rate = ?, deposit = ?,
+                    fuel_type = ?, daily_rate = ?, half_day_rate = ?,
+                    discount_3day_pct = ?, discount_7day_pct = ?,
+                    weekly_rate = ?, deposit = ?,
                     units_count = ?, plate_number = ?, inclusions = ?, description = ?,
                     image_url = ?, status = ?, featured = ?
                 WHERE id = ?
@@ -3514,6 +3920,9 @@ def create_app(test_config: dict | None = None) -> Flask:
                     fields["transmission"],
                     fields["fuel_type"],
                     fields["daily_rate"],
+                    fields["half_day_rate"],
+                    fields["discount_3day_pct"],
+                    fields["discount_7day_pct"],
                     fields["weekly_rate"],
                     fields["deposit"],
                     fields["units_count"],

@@ -45,6 +45,8 @@
   // Booking Modal Elements
   const bookingForm = document.getElementById("booking-form");
   const bookingBikeId = document.getElementById("booking-bike-id");
+  const bookingRentalTypeWrap = document.getElementById("booking-rental-type-wrap");
+  const bookingRentalType = document.getElementById("booking-rental-type");
   const bookingPickup = document.getElementById("booking-pickup-date");
   const bookingReturn = document.getElementById("booking-return-date");
   const bookingPickupMethod = document.getElementById("booking-pickup-method");
@@ -522,6 +524,11 @@
                 ? `<a href="${escapeHtml(waHref)}" target="_blank" rel="noopener" class="btn btn-sm btn-primary">WhatsApp Shop</a>`
                 : ""
             }
+            ${
+              activeShop.messenger_url
+                ? `<a href="${escapeHtml(activeShop.messenger_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline">💬 Messenger</a>`
+                : ""
+            }
           </div>
         </div>
         ${
@@ -723,6 +730,17 @@
           `
           : `<img src="${escapeHtml(normImg)}" alt="${escapeHtml(bike.name)}" loading="lazy">`;
 
+        const promoPills = [];
+        if (Number(bike.half_day_rate || 0) > 0) {
+          promoPills.push(`<span class="spec-pill" style="background:#fef3c7;color:#92400e;border-color:#fde68a;">⏱️ 6h: ${escapeHtml(formatMoney(bike.half_day_rate))}</span>`);
+        }
+        if (Number(bike.discount_3day_pct || 0) > 0) {
+          promoPills.push(`<span class="spec-pill" style="background:#dcfce7;color:#166534;border-color:#86efac;">🏷️ 3+ Days: ${Number(bike.discount_3day_pct)}% OFF</span>`);
+        }
+        if (Number(bike.discount_7day_pct || 0) > 0) {
+          promoPills.push(`<span class="spec-pill" style="background:#dbeafe;color:#1e40af;border-color:#93c5fd;">🏷️ 7+ Days: ${Number(bike.discount_7day_pct)}% OFF</span>`);
+        }
+
         return `
           <article class="bike-card" data-bike-id="${bike.id}">
             <div class="bike-card-media ${isPlaceholder ? "is-placeholder" : ""}">
@@ -756,6 +774,7 @@
                 <span class="spec-pill">${escapeHtml(bike.transmission)}</span>
                 <span class="spec-pill">${escapeHtml(bike.fuel_type)}</span>
               </div>
+              ${promoPills.length ? `<div class="bike-specs-row" style="margin-top:4px;">${promoPills.join("")}</div>` : ""}
               <p class="bike-card-inclusions">${escapeHtml(bike.inclusions || bike.description)}</p>
               ${bookedStrip}
               ${nextOpenRow}
@@ -842,6 +861,61 @@
     }
   }
 
+  function syncModalPromoRates(bikeObj, resetSelection) {
+    const promoEl = document.getElementById("modal-promo-rates");
+    const halfRate = Number((bikeObj && bikeObj.half_day_rate) || 0);
+    const d3 = Number((bikeObj && bikeObj.discount_3day_pct) || 0);
+    const d7 = Number((bikeObj && bikeObj.discount_7day_pct) || 0);
+
+    if (promoEl) {
+      const lines = [];
+      if (halfRate > 0) {
+        lines.push(`<div class="rate-summary-row"><span>⏱️ Half-Day (6 hrs):</span><strong>${escapeHtml(formatMoney(halfRate))}</strong></div>`);
+      }
+      if (d3 > 0) {
+        lines.push(`<div class="rate-summary-row" style="color:#166534;"><span>🏷️ 3+ Days Discount:</span><strong>${d3}% OFF</strong></div>`);
+      }
+      if (d7 > 0) {
+        lines.push(`<div class="rate-summary-row" style="color:#1e40af;"><span>🏷️ 7+ Days Discount:</span><strong>${d7}% OFF</strong></div>`);
+      }
+      if (lines.length) {
+        promoEl.innerHTML = lines.join("");
+        promoEl.classList.remove("hidden");
+      } else {
+        promoEl.innerHTML = "";
+        promoEl.classList.add("hidden");
+      }
+    }
+
+    if (bookingRentalTypeWrap && bookingRentalType) {
+      if (halfRate > 0) {
+        bookingRentalTypeWrap.classList.remove("hidden");
+        const halfOpt = bookingRentalType.querySelector('option[value="half_day"]');
+        if (halfOpt) {
+          halfOpt.textContent = `⏱️ Half-Day Express (6 Hours • ${formatMoney(halfRate)})`;
+        }
+        if (resetSelection) {
+          bookingRentalType.value = "full_day";
+        }
+      } else {
+        bookingRentalType.value = "full_day";
+        bookingRentalTypeWrap.classList.add("hidden");
+      }
+    }
+  }
+
+  function getSelectedRentalType() {
+    if (
+      bookingRentalType &&
+      bookingRentalTypeWrap &&
+      !bookingRentalTypeWrap.classList.contains("hidden") &&
+      bookingRentalType.value === "half_day"
+    ) {
+      return "half_day";
+    }
+    return "full_day";
+  }
+
   async function openBikeModal(bikeId) {
     if (!bikeId) return;
     if (bookingFormError) {
@@ -894,6 +968,7 @@
       if (incEl) incEl.textContent = localBike.inclusions || "2 Helmets";
       const rateEl = document.getElementById("modal-daily-rate");
       if (rateEl) rateEl.textContent = `${formatMoney(localBike.daily_rate || 0)} / day`;
+      syncModalPromoRates(localBike, true);
       const depEl = document.getElementById("modal-deposit-rate");
       if (depEl) depEl.textContent = formatMoney(localBike.deposit || 0);
       renderModalContractTerms(localBike);
@@ -993,6 +1068,7 @@
       renderModalContractTerms(bike);
       const rateEl = document.getElementById("modal-daily-rate");
       if (rateEl) rateEl.textContent = `${formatMoney(bike.daily_rate)} / day`;
+      syncModalPromoRates(bike, false);
       const depEl = document.getElementById("modal-deposit-rate");
       if (depEl) depEl.textContent = formatMoney(bike.deposit);
 
@@ -1050,8 +1126,14 @@
     const rDate = bookingReturn.value;
     if (!bikeId || !pDate) return;
 
-    const hasExplicitReturn = Boolean(rDate);
-    if (hasExplicitReturn && rDate < pDate) {
+    const rentalType = getSelectedRentalType();
+    if (rentalType === "half_day" && bookingReturn) {
+      bookingReturn.value = pDate;
+      syncDateWrap(bookingReturn);
+    }
+
+    const hasExplicitReturn = Boolean(bookingReturn.value);
+    if (hasExplicitReturn && bookingReturn.value < pDate) {
       bookingReturn.value = pDate;
       syncDateWrap(bookingReturn);
     }
@@ -1062,6 +1144,7 @@
       bike_id: bikeId,
       pickup_date: pDate,
       return_date: effectiveReturn,
+      rental_type: rentalType,
       pickup_method: bookingPickupMethod.value,
       extra_helmet: extraHelmetCheckbox.checked ? "1" : "0",
       top_box: topBoxCheckbox.checked ? "1" : "0",
@@ -1109,12 +1192,26 @@
       }
 
       const dayWord = q.rental_days === 1 ? "day" : "days";
+      const rentalLineLabel = q.rental_type === "half_day"
+        ? "Half-Day Express Rental (6 hrs)"
+        : `Rental (${q.rental_days} ${dayWord})`;
       let linesHtml = `
         <div class="quote-line">
-          <span>Rental (${q.rental_days} ${dayWord})</span>
+          <span>${escapeHtml(rentalLineLabel)}</span>
           <span>${escapeHtml(formatMoney(q.base_subtotal))}</span>
         </div>
       `;
+      if (Number(q.discount_saved || 0) > 0) {
+        const discLabel = q.discount_tier_label
+          ? `🏷️ ${q.discount_tier_label} Applied`
+          : "🏷️ Multi-Day Discount Saved";
+        linesHtml += `
+          <div class="quote-line" style="color:#059669;font-weight:700;">
+            <span>${escapeHtml(discLabel)}</span>
+            <span>-${escapeHtml(formatMoney(q.discount_saved))}</span>
+          </div>
+        `;
+      }
       if (q.addons_total > 0) {
         linesHtml += `
           <div class="quote-line">
@@ -2086,12 +2183,26 @@
     }, 300);
   }
 
+  if (bookingRentalType) {
+    bookingRentalType.addEventListener("change", () => {
+      if (bookingRentalType.value === "half_day" && bookingPickup && bookingReturn) {
+        bookingReturn.value = bookingPickup.value || toIsoLocal(new Date());
+        syncDateWrap(bookingReturn);
+      }
+      renderModalCalendar();
+      refreshQuote();
+    });
+  }
+
   if (bookingPickup) {
     bookingPickup.addEventListener("change", () => {
       const pVal = bookingPickup.value || toIsoLocal(new Date());
       if (bookingReturn) {
         bookingReturn.min = pVal;
-        if (bookingReturn.value && bookingReturn.value < pVal) {
+        if (getSelectedRentalType() === "half_day") {
+          bookingReturn.value = pVal;
+          syncDateWrap(bookingReturn);
+        } else if (bookingReturn.value && bookingReturn.value < pVal) {
           bookingReturn.value = pVal;
           syncDateWrap(bookingReturn);
         }
@@ -2105,6 +2216,15 @@
     bookingReturn.addEventListener("change", () => {
       if (bookingReturn.value && bookingPickup && bookingReturn.value < bookingPickup.value) {
         bookingReturn.value = bookingPickup.value;
+      }
+      if (
+        bookingRentalType &&
+        bookingPickup &&
+        bookingReturn.value &&
+        bookingReturn.value !== bookingPickup.value &&
+        bookingRentalType.value === "half_day"
+      ) {
+        bookingRentalType.value = "full_day";
       }
       syncDateWrap(bookingReturn);
       renderModalCalendar();
@@ -2470,6 +2590,7 @@
         bike_id: Number(bookingBikeId.value),
         pickup_date: bookingPickup.value,
         return_date: bookingReturn.value,
+        rental_type: getSelectedRentalType(),
         pickup_time: document.getElementById("booking-pickup-time").value,
         pickup_method: bookingPickupMethod.value,
         delivery_address: deliveryAddressInput.value.trim(),
@@ -2627,12 +2748,14 @@
         onlineBox.classList.add("hidden");
       }
     }
+    const durText = booking.duration_label || `${booking.rental_days} day(s)`;
     document.getElementById("confirm-summary").innerHTML = `
       <div><strong>Rental Shop:</strong> ${escapeHtml(booking.shop_name || "Verified Partner")} (${escapeHtml(booking.shop_municipality || "Camiguin")})</div>
       <div><strong>Motorbike:</strong> ${escapeHtml(booking.bike_name)}</div>
       ${booking.customer_address ? `<div><strong>Address:</strong> ${escapeHtml(booking.customer_address)}</div>` : ""}
-      <div><strong>Dates:</strong> ${escapeHtml(booking.pickup_date)} to ${escapeHtml(booking.return_date)} (${booking.rental_days} day(s))</div>
+      <div><strong>Dates:</strong> ${escapeHtml(booking.pickup_date)} to ${escapeHtml(booking.return_date)} (${escapeHtml(durText)})</div>
       <div><strong>Pickup:</strong> ${escapeHtml(booking.pickup_time)} &bull; ${formatStorefrontPickupLabel(booking.pickup_method, booking.delivery_address)}</div>
+      ${Number(booking.discount_saved || 0) > 0 ? `<div style="color:#059669;"><strong>Multi-Day Discount Saved:</strong> -${escapeHtml(formatMoney(booking.discount_saved))}</div>` : ""}
       <div><strong>Total Rental:</strong> ${escapeHtml(formatMoney(booking.total_amount))}</div>
       ${Number(booking.reservation_fee || 0) > 0 ? `<div><strong>Down Payment (${escapeHtml((booking.payment_channel || "gcash").toUpperCase())}):</strong> ${escapeHtml(formatMoney(booking.reservation_fee))} (${escapeHtml(paymentStatusLabel(booking.payment_status))})${booking.payment_reference ? ` &bull; Ref # ${escapeHtml(booking.payment_reference)}` : ""}</div>` : ""}
       <div><strong>Balance Due on Pickup:</strong> ${escapeHtml(formatMoney(booking.balance_due !== undefined && booking.balance_due !== null ? booking.balance_due : booking.total_amount))}</div>
@@ -2658,6 +2781,17 @@
       waBtn.classList.remove("hidden");
     } else {
       waBtn.classList.add("hidden");
+    }
+
+    const messengerBtn = document.getElementById("confirm-messenger-link");
+    if (messengerBtn) {
+      const mUrl = (booking.shop_messenger_url || shop.messenger_url || "").trim();
+      if (mUrl) {
+        messengerBtn.href = mUrl;
+        messengerBtn.classList.remove("hidden");
+      } else {
+        messengerBtn.classList.add("hidden");
+      }
     }
 
     openModal("confirmation-modal");

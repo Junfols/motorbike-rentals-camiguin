@@ -240,6 +240,19 @@
       </div>
 
       <div id="partner-kpi-grid" class="kpi-grid"></div>
+
+      <!-- 1-Hour Return Reminder & Due Back Today Card -->
+      <div id="partner-due-reminders-box" class="card hidden" style="margin-bottom:20px;border:1px solid #fed7aa;background:#fff7ed;">
+        <div class="card-header-row">
+          <div>
+            <h3 style="margin:0;color:#9a3412;">⏰ Due Back Today — 1-Hour Return Reminders</h3>
+            <p class="field-hint" style="margin:2px 0 0;color:#7c2d12;">Send a 1-tap Push, SMS, WhatsApp, or Messenger reminder before return time.</p>
+          </div>
+          <span id="partner-due-reminders-count" class="badge badge-pending">0 due</span>
+        </div>
+        <div id="partner-due-reminders-list" class="upcoming-list" style="margin-top:10px;"></div>
+      </div>
+
       <div class="card">
         <div class="card-header-row">
           <h3>Upcoming &amp; Active Rentals</h3>
@@ -369,6 +382,11 @@
             <label for="prof-whatsapp">WhatsApp Digits (e.g., 63917...)</label>
             <input type="text" id="prof-whatsapp">
           </div>
+        </div>
+        <div class="form-group">
+          <label for="prof-messenger-url">💬 Facebook Messenger Link (Optional &mdash; e.g., https://m.me/yourshoppage)</label>
+          <input type="text" id="prof-messenger-url" placeholder="https://m.me/yourshoppage">
+          <small class="field-hint">Shown on your public shop banner, booking receipts, and 1-tap Return Reminder shortcut.</small>
         </div>
         <div class="form-grid-2">
           <div class="form-group">
@@ -542,11 +560,28 @@
         </div>
       </div>
 
-      <div class="form-group">
-        <label for="p-bike-daily">Daily Rate *</label>
-        <input type="number" id="p-bike-daily" name="daily_rate" required min="1" step="1" value="450">
-        <input type="hidden" id="p-bike-weekly" name="weekly_rate" value="0">
-        <input type="hidden" id="p-bike-deposit" name="deposit" value="0">
+      <div class="form-grid-4">
+        <div class="form-group">
+          <label for="p-bike-daily">Daily Rate (24h) *</label>
+          <input type="number" id="p-bike-daily" name="daily_rate" required min="1" step="1" value="450">
+          <input type="hidden" id="p-bike-weekly" name="weekly_rate" value="0">
+          <input type="hidden" id="p-bike-deposit" name="deposit" value="0">
+        </div>
+        <div class="form-group">
+          <label for="p-bike-half-day">⏱️ Half-Day (6h) Rate</label>
+          <input type="number" id="p-bike-half-day" name="half_day_rate" min="0" step="1" value="0" placeholder="0 = Off">
+          <small class="field-hint">Optional (0 = off)</small>
+        </div>
+        <div class="form-group">
+          <label for="p-bike-disc-3">🏷️ 3+ Days Off (%)</label>
+          <input type="number" id="p-bike-disc-3" name="discount_3day_pct" min="0" max="70" step="1" value="0" placeholder="e.g., 10">
+          <small class="field-hint">e.g., 10 for 10% off</small>
+        </div>
+        <div class="form-group">
+          <label for="p-bike-disc-7">🏷️ 7+ Days Off (%)</label>
+          <input type="number" id="p-bike-disc-7" name="discount_7day_pct" min="0" max="70" step="1" value="0" placeholder="e.g., 15">
+          <small class="field-hint">e.g., 15 for 15% off</small>
+        </div>
       </div>
 
       <div class="form-grid-2">
@@ -592,8 +627,89 @@
     </form>
   </div>
 </div>
+
+<!-- Partner Before & After Handover Walkaround Inspection Modal -->
+<div id="partner-inspection-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="p-insp-modal-title">
+  <div class="modal-card modal-lg">
+    <div class="modal-header">
+      <div>
+        <h3 id="p-insp-modal-title" style="margin:0;">📸 Walkaround Handover Checklist</h3>
+        <div id="p-insp-booking-subtitle" class="text-muted" style="font-size:0.84rem;margin-top:2px;"></div>
+      </div>
+      <button type="button" class="icon-btn" data-close-modal="partner-inspection-modal" aria-label="Close">&times;</button>
+    </div>
+    <form id="partner-inspection-form" class="modal-body" enctype="multipart/form-data">
+      <input type="hidden" id="p-insp-booking-id" name="booking_id">
+      <input type="hidden" id="p-insp-stage" name="stage" value="pickup">
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;" id="p-insp-stage-tabs">
+        <button type="button" class="pill active" data-insp-stage="pickup">🛵 Pickup (Before Handover)</button>
+        <button type="button" class="pill" data-insp-stage="return">🏁 Return (After Trip)</button>
+      </div>
+
+      <div id="p-insp-compare-banner" class="info-box hidden" style="margin-bottom:12px;background:#f0fdf4;border-color:#bbf7d0;font-size:0.84rem;"></div>
+
+      <div class="form-group">
+        <label for="p-insp-fuel">⛽ Fuel Gauge Level *</label>
+        <select id="p-insp-fuel" name="fuel_level" required>
+          <option value="Full (8/8)">⛽ Full (8/8 bars)</option>
+          <option value="3/4 (6/8)">⛽ 3/4 Tank (6/8 bars)</option>
+          <option value="Half (4/8)">⛽ Half Tank (4/8 bars)</option>
+          <option value="1/4 (2/8)">⛽ 1/4 Tank (2/8 bars)</option>
+          <option value="Low (1/8)">⚠️ Low / Reserve (1/8)</option>
+        </select>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label for="p-insp-odo">🧭 Odometer Reading (km)</label>
+          <input type="text" id="p-insp-odo" name="odometer_km" placeholder="e.g., 12,450 km">
+        </div>
+        <div class="form-group">
+          <label for="p-insp-helmets">🪖 Helmets Handed Over / Returned</label>
+          <input type="number" id="p-insp-helmets" name="helmets_count" min="0" max="6" value="2">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>📷 Walkaround Photos (Up to 4 — Tap to Take Phone Photo)</label>
+        <div class="form-grid-2" style="gap:10px;">
+          <div style="padding:8px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc;">
+            <label for="p-insp-photo-1" style="font-size:0.8rem;display:block;margin-bottom:4px;">1. Front View</label>
+            <input type="file" id="p-insp-photo-1" name="photo_front" accept="image/*" capture="environment">
+          </div>
+          <div style="padding:8px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc;">
+            <label for="p-insp-photo-2" style="font-size:0.8rem;display:block;margin-bottom:4px;">2. Left Side</label>
+            <input type="file" id="p-insp-photo-2" name="photo_left" accept="image/*" capture="environment">
+          </div>
+          <div style="padding:8px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc;">
+            <label for="p-insp-photo-3" style="font-size:0.8rem;display:block;margin-bottom:4px;">3. Right Side</label>
+            <input type="file" id="p-insp-photo-3" name="photo_right" accept="image/*" capture="environment">
+          </div>
+          <div style="padding:8px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc;">
+            <label for="p-insp-photo-4" style="font-size:0.8rem;display:block;margin-bottom:4px;">4. Fuel Gauge / Odometer</label>
+            <input type="file" id="p-insp-photo-4" name="photo_fuel" accept="image/*" capture="environment">
+          </div>
+        </div>
+        <div id="p-insp-existing-photos" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"></div>
+      </div>
+
+      <div class="form-group">
+        <label for="p-insp-notes">📝 Condition / Scratches / Damage Notes</label>
+        <textarea id="p-insp-notes" name="condition_notes" rows="2" placeholder="e.g., No scratches, 2 helmets + phone mount complete, mirror good..."></textarea>
+      </div>
+
+      <div id="p-insp-error" class="alert-error hidden"></div>
+      <div class="modal-footer-actions" style="flex-wrap:wrap;gap:8px;">
+        <button type="button" class="btn btn-outline" data-close-modal="partner-inspection-modal">Cancel</button>
+        <button type="submit" class="btn btn-outline" id="p-insp-save-only-btn" data-advance="0">Save Checklist Only</button>
+        <button type="submit" class="btn btn-primary" id="p-insp-save-advance-btn" data-advance="1">Save &amp; Mark Picked Up</button>
+      </div>
+    </form>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/partner.js?v=18"></script>
+<script src="/static/js/partner.js?v=19"></script>
 {% endblock %}

@@ -236,6 +236,24 @@ def notify_customer_booking_confirmed(conn, booking: dict) -> int:
     return dispatch_push_to_customer(conn, booking.get("customer_phone", ""), payload)
 
 
+def notify_customer_return_reminder(conn, booking: dict) -> int:
+    """Push alert reminding customer 1 hour before motorbike return time."""
+    code = booking.get("booking_code") or ""
+    payload = {
+        "title": f"⏰ Return Reminder: #{code}",
+        "body": (
+            f"Your {booking.get('bike_name', 'motorbike')} is due back on "
+            f"{booking.get('return_date')} around {booking.get('pickup_time', '09:00')}. "
+            f"Tap for shop address or to request an extension."
+        ),
+        "icon": "/static/icons/icon-192.png",
+        "url": f"/customer?code={code}&phone={booking.get('customer_phone', '')}",
+        "tag": f"reminder-{code}",
+        "requireInteraction": True,
+    }
+    return dispatch_push_to_customer(conn, booking.get("customer_phone", ""), payload)
+
+
 def notify_incoming_call(conn, call: dict, booking: dict, callee_role: str) -> int:
     """Push wake-up alert for an incoming voice call."""
     code = booking.get("booking_code") or call.get("booking_code")

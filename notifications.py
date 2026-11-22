@@ -435,6 +435,55 @@ def send_test_alert(
     return out
 
 
+def build_return_reminder_text(shop: dict, booking: dict) -> str:
+    """Build a friendly pre-filled SMS / Messenger / WhatsApp return reminder message."""
+    shop_name = (shop.get("shop_name") or booking.get("shop_name") or "Motorbike Rentals Camiguin").strip()
+    shop_addr = (shop.get("address") or booking.get("shop_address") or shop.get("municipality") or "Camiguin").strip()
+    customer_name = (booking.get("customer_name") or "Rider").strip()
+    bike_name = (booking.get("bike_name") or "Motorbike").strip()
+    code = (booking.get("booking_code") or "").strip()
+    return_date = (booking.get("return_date") or "").strip()
+    return_time = (booking.get("pickup_time") or "09:00").strip()
+    return (
+        f"Hi {customer_name}! Friendly 1-hour return reminder from {shop_name} for your "
+        f"{bike_name} (Ref #{code}). Return schedule: {return_date} around {return_time} "
+        f"at {shop_addr}. Palihug siguroha nga pareho ang Unleaded fuel level ug kumpleto ang helmets. "
+        f"Reply here if you need an extension or pickup assistance. Amping sa byahe!"
+    )
+
+
+def notify_return_reminder(settings: dict, shop: dict, booking: dict) -> dict:
+    """Send return-time reminder via Email (customer) and Telegram (shop/admin log)."""
+    platform = settings.get("shop_name") or "Motorbike Rentals Camiguin"
+    reminder_msg = build_return_reminder_text(shop, booking)
+    subject = f"[{platform}] Return Reminder ({booking.get('booking_code')}) — {booking.get('bike_name')}"
+    results: dict[str, dict] = {}
+
+    if (settings.get("smtp_host") or "").strip():
+        cust_email = (booking.get("customer_email") or "").strip()
+        if cust_email:
+            ok, detail = send_email_message(settings, cust_email, subject, reminder_msg)
+            results["customer_email"] = {"ok": ok, "detail": detail}
+
+    token = (settings.get("telegram_bot_token") or "").strip()
+    partner_chat = (shop.get("telegram_chat_id") or "").strip()
+    admin_chat = (settings.get("admin_telegram_chat_id") or "").strip()
+    tg_summary = (
+        f"⏰ RETURN REMINDER LOGGED\n"
+        f"Ref: {booking.get('booking_code')} • {booking.get('bike_name')}\n"
+        f"Customer: {booking.get('customer_name')} ({booking.get('customer_phone')})\n"
+        f"Due: {booking.get('return_date')} at {booking.get('pickup_time')}"
+    )
+    if token and partner_chat:
+        ok, detail = send_telegram_message(token, partner_chat, tg_summary)
+        results["partner_telegram"] = {"ok": ok, "detail": detail}
+    elif token and admin_chat:
+        ok, detail = send_telegram_message(token, admin_chat, tg_summary)
+        results["admin_telegram"] = {"ok": ok, "detail": detail}
+
+    return results
+
+
 def dispatch_background(fn, *args) -> None:
     """Run notification callback in a daemon thread so HTTP responses never block."""
 

@@ -287,6 +287,8 @@
     document.getElementById("prof-owner-name").value = shop.owner_name || "";
     document.getElementById("prof-phone").value = shop.phone || "";
     document.getElementById("prof-whatsapp").value = shop.whatsapp_number || "";
+    const profMessengerEl = document.getElementById("prof-messenger-url");
+    if (profMessengerEl) profMessengerEl.value = shop.messenger_url || "";
     document.getElementById("prof-telegram-chat-id").value = shop.telegram_chat_id || "";
     document.getElementById("prof-alert-email-preview").value = shop.email || "";
     document.getElementById("prof-municipality").value = shop.municipality || "Mambajao";
@@ -364,10 +366,48 @@
     await Promise.all([loadDashboard(), loadBookings(), loadFleet()]);
   }
 
+  function renderDueReturnReminders(reminders) {
+    const box = document.getElementById("partner-due-reminders-box");
+    const listEl = document.getElementById("partner-due-reminders-list");
+    const countEl = document.getElementById("partner-due-reminders-count");
+    if (!box || !listEl) return;
+    if (!reminders || !reminders.length) {
+      box.classList.add("hidden");
+      listEl.innerHTML = "";
+      return;
+    }
+    box.classList.remove("hidden");
+    if (countEl) countEl.textContent = `${reminders.length} due`;
+    listEl.innerHTML = reminders
+      .map((b) => {
+        const links = b.reminder_links || {};
+        return `
+          <div class="upcoming-item" style="flex-wrap:wrap;gap:10px;background:#ffffff;border:1px solid #fed7aa;border-radius:10px;padding:10px 12px;">
+            <div style="flex:1;min-width:200px;">
+              <strong>${escapeHtml(b.bike_name)}</strong> &bull; ${escapeHtml(b.customer_name)}
+              <span class="badge badge-${escapeHtml(b.status)}" style="margin-left:6px;">${escapeHtml(statusLabel(b.status))}</span>
+              <div class="text-muted" style="font-size:0.82rem;margin-top:2px;">
+                Ref: <strong>${escapeHtml(b.booking_code)}</strong> &bull; Return: <strong>${escapeHtml(b.return_date)} (${escapeHtml(b.pickup_time)})</strong> &bull; ${escapeHtml(b.customer_phone)}
+                ${b.return_reminder_sent_at ? ` &bull; <span style="color:#059669;">✓ Reminded</span>` : ""}
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+              <button type="button" class="btn btn-sm btn-primary" data-send-reminder="${b.id}">⏰ Send Push Reminder</button>
+              ${links.sms_url ? `<a href="${escapeHtml(links.sms_url)}" class="btn btn-sm btn-outline">💬 SMS</a>` : ""}
+              ${links.whatsapp_url ? `<a href="${escapeHtml(links.whatsapp_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline">📱 WhatsApp</a>` : ""}
+              <button type="button" class="btn btn-sm btn-outline" data-copy-reminder="${escapeHtml(links.message || "")}" data-messenger-url="${escapeHtml(links.messenger_url || "")}">📋 ${links.messenger_url ? "Messenger" : "Copy Msg"}</button>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
   async function loadDashboard() {
     const data = await apiJson("/api/partner/dashboard");
     renderShopHeader(data.shop);
     updatePlatformAlertStatus(data);
+    renderDueReturnReminders(data.due_return_reminders || []);
     const k = data.kpis;
     pendingBadge.textContent = k.pending_count;
     pendingBadge.classList.toggle("hidden", k.pending_count === 0);
@@ -453,6 +493,38 @@
     renderBookings();
   }
 
+  function renderInspectionSummaryBlock(b) {
+    const insp = b.inspections || {};
+    const pickup = insp.pickup || null;
+    const ret = insp.return || null;
+    if (!pickup && !ret) return "";
+
+    const renderStage = (label, item, tintBg, tintBorder) => {
+      if (!item) return "";
+      const thumbs = (item.photo_urls || [])
+        .map(
+          (u) =>
+            `<a href="${escapeHtml(u)}" target="_blank" rel="noopener"><img src="${escapeHtml(u)}" alt="${escapeHtml(label)} photo" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #cbd5e1;"></a>`
+        )
+        .join("");
+      return `
+        <div style="flex:1;min-width:210px;background:${tintBg};border:1px solid ${tintBorder};border-radius:10px;padding:8px 10px;font-size:0.8rem;">
+          <div style="font-weight:700;margin-bottom:4px;">${label}</div>
+          <div>⛽ Fuel: <strong>${escapeHtml(item.fuel_level || "N/A")}</strong>${item.odometer_km ? ` &bull; 🧭 ${escapeHtml(item.odometer_km)}` : ""} &bull; 🪖 ${Number(item.helmets_count ?? 2)} helmet(s)</div>
+          ${item.condition_notes ? `<div class="text-muted" style="margin-top:3px;">${escapeHtml(item.condition_notes)}</div>` : ""}
+          ${thumbs ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${thumbs}</div>` : ""}
+        </div>
+      `;
+    };
+
+    return `
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
+        ${renderStage("🛵 Pickup Checklist (Before)", pickup, "#f0fdf4", "#bbf7d0")}
+        ${renderStage("🏁 Return Checklist (After)", ret, "#eff6ff", "#bfdbfe")}
+      </div>
+    `;
+  }
+
   function renderBookings() {
     if (!state.bookings.length) {
       bookingsList.innerHTML = `<div class="empty-state">No bookings match this filter yet.</div>`;
@@ -501,6 +573,13 @@
         const collectDue = b.balance_due !== undefined && b.balance_due !== null
           ? Number(b.balance_due)
           : Number(b.total_amount || 0);
+        const insp = b.inspections || {};
+        const links = b.reminder_links || {};
+        const durationBadge = b.rental_type === "half_day"
+          ? `<span class="spec-pill" style="background:#fef3c7;color:#92400e;border-color:#fde68a;">⏱️ Half-Day (6 hrs)</span>`
+          : Number(b.discount_saved || 0) > 0
+          ? `<span class="spec-pill" style="background:#dcfce7;color:#166534;border-color:#86efac;">🏷️ Saved ${escapeHtml(formatMoney(b.discount_saved))}</span>`
+          : "";
 
         return `
           <div class="admin-booking-card">
@@ -509,6 +588,7 @@
                 <span class="badge badge-dark" style="font-family:ui-monospace,monospace;letter-spacing:0.02em;font-size:0.84rem;padding:4px 10px;">${escapeHtml(b.booking_code)}</span>
                 <strong style="font-size:1.02rem;color:var(--ink);">${escapeHtml(b.bike_name)}</strong>
                 ${b.plate_number ? `<span class="spec-pill" style="padding:2px 8px;font-size:0.75rem;">Plate: ${escapeHtml(b.plate_number)}</span>` : ""}
+                ${durationBadge}
               </div>
               <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
                 ${(hasOnlineFee || payStatus !== "unpaid") ? `<span class="badge badge-${escapeHtml(payStatus)}">${escapeHtml(payLabel)}</span>` : ""}
@@ -526,7 +606,7 @@
               <div>
                 <span class="trip-detail-label">Dates</span>
                 <strong>${escapeHtml(b.pickup_date)} &rarr; ${escapeHtml(b.return_date)}</strong>
-                <div class="text-muted" style="margin-top:2px;">${b.rental_days}d &bull; ${escapeHtml(b.pickup_time)} &bull; <span style="font-weight:600;">${
+                <div class="text-muted" style="margin-top:2px;">${escapeHtml(b.duration_label || `${b.rental_days}d`)} &bull; ${escapeHtml(b.pickup_time)} &bull; <span style="font-weight:600;">${
                   b.pickup_method === "benoni_port"
                     ? "🚢 Benoni Port (+₱200)"
                     : b.pickup_method === "balbagon_port"
@@ -559,11 +639,21 @@
             </div>
 
             ${b.status !== "cancelled" ? `
-              <div style="margin:10px 0 6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                <button type="button" class="btn btn-sm btn-primary" data-call-booking="${escapeHtml(b.booking_code)}" data-call-name="${escapeHtml(b.customer_name)}" data-call-tel="${escapeHtml(b.customer_phone)}">📞 Call Customer (in app)</button>
-                <a href="/bookings/${encodeURIComponent(b.booking_code)}/contract" target="_blank" rel="noopener" class="btn btn-sm btn-outline">🖨️ Print Contract &amp; Receipt</a>
+              <div style="margin:10px 0 6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                <button type="button" class="btn btn-sm btn-primary" data-call-booking="${escapeHtml(b.booking_code)}" data-call-name="${escapeHtml(b.customer_name)}" data-call-tel="${escapeHtml(b.customer_phone)}">📞 Call</button>
+                <a href="/bookings/${encodeURIComponent(b.booking_code)}/contract" target="_blank" rel="noopener" class="btn btn-sm btn-outline">🖨️ Contract</a>
+                <button type="button" class="btn btn-sm btn-outline" data-open-inspection="${b.id}" data-insp-stage="pickup">📸 ${insp.pickup ? "✓ Pickup Photos" : "Pickup Checklist"}</button>
+                <button type="button" class="btn btn-sm btn-outline" data-open-inspection="${b.id}" data-insp-stage="return">🏁 ${insp.return ? "✓ Return Photos" : "Return Checklist"}</button>
+                ${["confirmed", "active"].includes(b.status) ? `
+                  <button type="button" class="btn btn-sm btn-outline" data-send-reminder="${b.id}">⏰ ${b.return_reminder_sent_at ? "Resend Reminder" : "Return Reminder"}</button>
+                  ${links.sms_url ? `<a href="${escapeHtml(links.sms_url)}" class="btn btn-sm btn-outline">💬 SMS</a>` : ""}
+                  ${links.whatsapp_url ? `<a href="${escapeHtml(links.whatsapp_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline">📱 WA</a>` : ""}
+                  <button type="button" class="btn btn-sm btn-outline" data-copy-reminder="${escapeHtml(links.message || "")}" data-messenger-url="${escapeHtml(links.messenger_url || "")}">📋 ${links.messenger_url ? "Messenger" : "Copy Msg"}</button>
+                ` : ""}
               </div>
             ` : ""}
+            ${b.return_reminder_sent_at ? `<div class="text-muted" style="font-size:0.78rem;color:#059669;margin-top:2px;">⏰ Return reminder sent: ${escapeHtml(b.return_reminder_sent_at)}</div>` : ""}
+            ${renderInspectionSummaryBlock(b)}
             ${b.payment_reference ? `<div class="text-muted" style="margin-top:4px;font-size:0.84rem;"><strong>${escapeHtml(payChannelLabel)} Ref #:</strong> ${escapeHtml(b.payment_reference)}</div>` : ""}
             ${b.delivery_address ? `<div class="text-muted" style="margin-top:4px;font-size:0.84rem;"><strong>Delivery to:</strong> ${escapeHtml(b.delivery_address)}${b.google_maps_url ? ` &bull; <a href="${escapeHtml(b.google_maps_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.75rem;display:inline-flex;align-items:center;gap:4px;">🗺️ Open GPS Navigation</a>` : ""}</div>` : ""}
             ${b.contract_agreed || b.signature_url || b.license_photo_url ? `
@@ -616,6 +706,16 @@
                <span class="photo-coming-soon-text">Photo Coming Soon</span>
              </div>`
           : `<img src="${escapeHtml(normalizedImg)}" alt="${escapeHtml(bike.name)}">`;
+        const promoBits = [];
+        if (Number(bike.half_day_rate || 0) > 0) {
+          promoBits.push(`⏱️ 6h: ${formatMoney(bike.half_day_rate)}`);
+        }
+        if (Number(bike.discount_3day_pct || 0) > 0) {
+          promoBits.push(`🏷️ 3d+: -${Number(bike.discount_3day_pct)}%`);
+        }
+        if (Number(bike.discount_7day_pct || 0) > 0) {
+          promoBits.push(`🏷️ 7d+: -${Number(bike.discount_7day_pct)}%`);
+        }
 
         return `
           <div class="admin-bike-card">
@@ -630,6 +730,7 @@
               </div>
               <div style="font-size:0.88rem;margin-bottom:6px;">
                 <strong>${escapeHtml(formatMoney(bike.daily_rate))}/day</strong>
+                ${promoBits.length ? `<div class="text-muted" style="font-size:0.78rem;margin-top:2px;">${escapeHtml(promoBits.join(" • "))}</div>` : ""}
               </div>
               <div class="text-muted">
                 Units: ${bike.units_count} (Booked today: ${bike.booked_units}) ${bike.plate_number ? `&bull; ${escapeHtml(bike.plate_number)}` : ""}
@@ -663,6 +764,12 @@
       document.getElementById("p-bike-units").value = bike.units_count;
       document.getElementById("p-bike-status").value = bike.status;
       document.getElementById("p-bike-daily").value = bike.daily_rate;
+      const halfDayEl = document.getElementById("p-bike-half-day");
+      if (halfDayEl) halfDayEl.value = bike.half_day_rate || 0;
+      const disc3El = document.getElementById("p-bike-disc-3");
+      if (disc3El) disc3El.value = bike.discount_3day_pct || 0;
+      const disc7El = document.getElementById("p-bike-disc-7");
+      if (disc7El) disc7El.value = bike.discount_7day_pct || 0;
       document.getElementById("p-bike-weekly").value = bike.weekly_rate;
       document.getElementById("p-bike-deposit").value = bike.deposit;
       document.getElementById("p-bike-plate").value = bike.plate_number || "";
@@ -674,6 +781,12 @@
       bikeModalTitle.textContent = "Add Motorbike";
       document.getElementById("p-bike-id").value = "";
       document.getElementById("p-bike-image-url").value = DEFAULT_BIKE_PLACEHOLDER;
+      const halfDayEl = document.getElementById("p-bike-half-day");
+      if (halfDayEl) halfDayEl.value = 0;
+      const disc3El = document.getElementById("p-bike-disc-3");
+      if (disc3El) disc3El.value = 0;
+      const disc7El = document.getElementById("p-bike-disc-7");
+      if (disc7El) disc7El.value = 0;
     }
     openModal("partner-bike-modal");
   }
@@ -872,7 +985,205 @@
     }, 220);
   });
 
+  // Walkaround Inspection Modal Logic
+  const inspForm = document.getElementById("partner-inspection-form");
+  const inspStageTabs = document.getElementById("p-insp-stage-tabs");
+  const inspError = document.getElementById("p-insp-error");
+  let activeInspBooking = null;
+  let activeInspAdvance = "0";
+
+  function populateInspectionStageForm(booking, stage) {
+    const cleanStage = stage === "return" ? "return" : "pickup";
+    document.getElementById("p-insp-booking-id").value = booking.id;
+    document.getElementById("p-insp-stage").value = cleanStage;
+    if (inspStageTabs) {
+      inspStageTabs.querySelectorAll("[data-insp-stage]").forEach((btn) => {
+        btn.classList.toggle("active", btn.getAttribute("data-insp-stage") === cleanStage);
+      });
+    }
+    const inspMap = booking.inspections || {};
+    const existing = inspMap[cleanStage] || null;
+    const pickupInsp = inspMap.pickup || null;
+
+    const compareBanner = document.getElementById("p-insp-compare-banner");
+    if (compareBanner) {
+      if (cleanStage === "return" && pickupInsp) {
+        compareBanner.innerHTML = `<strong>🛵 Recorded at Pickup (Before):</strong> ⛽ Fuel: <strong>${escapeHtml(pickupInsp.fuel_level || "N/A")}</strong>${pickupInsp.odometer_km ? ` &bull; 🧭 ${escapeHtml(pickupInsp.odometer_km)}` : ""} &bull; 🪖 ${Number(pickupInsp.helmets_count ?? 2)} helmet(s)${pickupInsp.condition_notes ? `<div style="margin-top:3px;">Notes: ${escapeHtml(pickupInsp.condition_notes)}</div>` : ""}`;
+        compareBanner.classList.remove("hidden");
+      } else {
+        compareBanner.classList.add("hidden");
+        compareBanner.innerHTML = "";
+      }
+    }
+
+    const fuelSel = document.getElementById("p-insp-fuel");
+    if (fuelSel) fuelSel.value = (existing && existing.fuel_level) || (pickupInsp && pickupInsp.fuel_level) || "Full (8/8)";
+    const odoEl = document.getElementById("p-insp-odo");
+    if (odoEl) odoEl.value = (existing && existing.odometer_km) || "";
+    const helmetsEl = document.getElementById("p-insp-helmets");
+    if (helmetsEl) helmetsEl.value = existing && existing.helmets_count !== undefined ? existing.helmets_count : 2;
+    const notesEl = document.getElementById("p-insp-notes");
+    if (notesEl) notesEl.value = (existing && existing.condition_notes) || "";
+
+    ["p-insp-photo-1", "p-insp-photo-2", "p-insp-photo-3", "p-insp-photo-4"].forEach((id) => {
+      const inp = document.getElementById(id);
+      if (inp) inp.value = "";
+    });
+
+    const existingPhotosEl = document.getElementById("p-insp-existing-photos");
+    if (existingPhotosEl) {
+      const urls = (existing && existing.photo_urls) || [];
+      existingPhotosEl.innerHTML = urls.length
+        ? urls
+            .map(
+              (u) =>
+                `<a href="${escapeHtml(u)}" target="_blank" rel="noopener"><img src="${escapeHtml(u)}" alt="Saved walkaround photo" style="width:68px;height:68px;object-fit:cover;border-radius:8px;border:1px solid #cbd5e1;"></a>`
+            )
+            .join("")
+        : `<small class="text-muted">No saved photos yet for ${cleanStage}.</small>`;
+    }
+
+    const advBtn = document.getElementById("p-insp-save-advance-btn");
+    if (advBtn) {
+      advBtn.textContent = cleanStage === "pickup" ? "Save & Mark Picked Up" : "Save & Mark Returned";
+    }
+  }
+
+  function openPartnerInspectionModal(booking, stage) {
+    activeInspBooking = booking;
+    if (inspError) inspError.classList.add("hidden");
+    const sub = document.getElementById("p-insp-booking-subtitle");
+    if (sub) {
+      sub.textContent = `${booking.booking_code} • ${booking.bike_name} • ${booking.customer_name}`;
+    }
+    populateInspectionStageForm(booking, stage || (booking.status === "active" ? "return" : "pickup"));
+    openModal("partner-inspection-modal");
+  }
+
+  if (inspStageTabs) {
+    inspStageTabs.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-insp-stage]");
+      if (!btn || !activeInspBooking) return;
+      populateInspectionStageForm(activeInspBooking, btn.getAttribute("data-insp-stage"));
+    });
+  }
+
+  if (inspForm) {
+    inspForm.addEventListener("click", (e) => {
+      const submitBtn = e.target.closest("button[type='submit']");
+      if (submitBtn && submitBtn.hasAttribute("data-advance")) {
+        activeInspAdvance = submitBtn.getAttribute("data-advance") || "0";
+      }
+    });
+    inspForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!activeInspBooking) return;
+      if (inspError) inspError.classList.add("hidden");
+      const fd = new FormData(inspForm);
+      fd.set("advance_status", activeInspAdvance);
+      const saveOnlyBtn = document.getElementById("p-insp-save-only-btn");
+      const saveAdvBtn = document.getElementById("p-insp-save-advance-btn");
+      if (saveOnlyBtn) saveOnlyBtn.disabled = true;
+      if (saveAdvBtn) saveAdvBtn.disabled = true;
+      try {
+        const res = await apiJson(`/api/partner/bookings/${activeInspBooking.id}/inspection`, {
+          method: "POST",
+          body: fd,
+        });
+        activeInspBooking = res.booking || activeInspBooking;
+        closeModal("partner-inspection-modal");
+        await Promise.all([loadDashboard(), loadBookings(), loadFleet()]);
+        showToast(
+          activeInspAdvance === "1"
+            ? "Walkaround checklist saved & booking status updated!"
+            : "Walkaround checklist & photos saved!",
+          "success"
+        );
+      } catch (err) {
+        if (inspError) {
+          inspError.textContent = err.message;
+          inspError.classList.remove("hidden");
+        }
+      } finally {
+        if (saveOnlyBtn) saveOnlyBtn.disabled = false;
+        if (saveAdvBtn) saveAdvBtn.disabled = false;
+      }
+    });
+  }
+
+  async function handlePartnerSendReminder(btn) {
+    const id = btn.getAttribute("data-send-reminder");
+    if (!id) return;
+    const origText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Sending...";
+    try {
+      const data = await apiJson(`/api/partner/bookings/${id}/remind`, { method: "POST" });
+      await Promise.all([loadDashboard(), loadBookings()]);
+      const pushNote = data.push_sent > 0 ? ` (${data.push_sent} phone push delivered)` : "";
+      showToast(`Return reminder logged & sent${pushNote}!`, "success");
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = origText;
+    }
+  }
+
+  async function handleCopyReminder(btn) {
+    const msg = btn.getAttribute("data-copy-reminder") || "";
+    const mUrl = btn.getAttribute("data-messenger-url") || "";
+    try {
+      if (msg) await navigator.clipboard.writeText(msg);
+      showToast(
+        mUrl ? "Reminder message copied! Opening Messenger..." : "Return reminder message copied!",
+        "success"
+      );
+    } catch (_) {
+      showToast("Ready to paste reminder message.", "success");
+    }
+    if (mUrl) {
+      window.open(mUrl, "_blank", "noopener");
+    }
+  }
+
+  const dueRemindersList = document.getElementById("partner-due-reminders-list");
+  if (dueRemindersList) {
+    dueRemindersList.addEventListener("click", async (event) => {
+      const remBtn = event.target.closest("[data-send-reminder]");
+      if (remBtn) {
+        await handlePartnerSendReminder(remBtn);
+        return;
+      }
+      const copyBtn = event.target.closest("[data-copy-reminder]");
+      if (copyBtn) {
+        await handleCopyReminder(copyBtn);
+      }
+    });
+  }
+
   bookingsList.addEventListener("click", async (event) => {
+    const inspBtn = event.target.closest("[data-open-inspection]");
+    if (inspBtn) {
+      const id = Number(inspBtn.getAttribute("data-open-inspection"));
+      const stage = inspBtn.getAttribute("data-insp-stage") || "pickup";
+      const booking = state.bookings.find((b) => Number(b.id) === id);
+      if (booking) openPartnerInspectionModal(booking, stage);
+      return;
+    }
+
+    const remBtn = event.target.closest("[data-send-reminder]");
+    if (remBtn) {
+      await handlePartnerSendReminder(remBtn);
+      return;
+    }
+
+    const copyRemBtn = event.target.closest("[data-copy-reminder]");
+    if (copyRemBtn) {
+      await handleCopyReminder(copyRemBtn);
+      return;
+    }
+
     const balanceBtn = event.target.closest("[data-balance-paid]");
     if (balanceBtn) {
       const id = balanceBtn.getAttribute("data-id");
@@ -1128,6 +1439,8 @@
       fd.append("owner_name", document.getElementById("prof-owner-name").value.trim());
       fd.append("phone", document.getElementById("prof-phone").value.trim());
       fd.append("whatsapp_number", document.getElementById("prof-whatsapp").value.trim());
+      const profMessengerEl = document.getElementById("prof-messenger-url");
+      if (profMessengerEl) fd.append("messenger_url", profMessengerEl.value.trim());
       fd.append("telegram_chat_id", document.getElementById("prof-telegram-chat-id").value.trim());
       fd.append("municipality", document.getElementById("prof-municipality").value);
       fd.append("delivery_fee", document.getElementById("prof-delivery-fee").value);

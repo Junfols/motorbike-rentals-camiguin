@@ -1684,13 +1684,13 @@ class MotorbikeRentalPWATests(unittest.TestCase):
     def test_qr_upload_accepts_jfif_and_highres_images_and_network_first_scripts(self):
         with self.client.get("/sw.js") as sw_resp:
             sw_text = sw_resp.get_data(as_text=True)
-        self.assertIn("motoride-pwa-v18", sw_text)
+        self.assertIn("motoride-pwa-v19", sw_text)
         self.assertIn('/static/js/', sw_text)
 
         login_resp = self.client.post("/api/admin/login", json={"password": "admin1234"})
         self.assertEqual(login_resp.status_code, 200)
         admin_html = self.client.get("/admin").get_data(as_text=True)
-        self.assertIn('/static/js/admin.js?v=18', admin_html)
+        self.assertIn('/static/js/admin.js?v=19', admin_html)
         self.assertIn('.jfif', admin_html)
 
         # Windows/Edge/Messenger saves often use .jfif -> served cleanly as image/jpeg
@@ -1730,7 +1730,7 @@ class MotorbikeRentalPWATests(unittest.TestCase):
     def test_return_date_defaults_to_select_date_prompt_without_prefill(self):
         index_html = self.client.get("/").get_data(as_text=True)
         self.assertIn('/static/css/style.css?v=18', index_html)
-        self.assertIn('/static/js/storefront.js?v=18', index_html)
+        self.assertIn('/static/js/storefront.js?v=19', index_html)
         self.assertIn('class="bike-card"', index_html)
         self.assertNotIn('<div class="loading-state">Loading motorbikes...</div>', index_html)
         self.assertIn('id="modal-availability-calendar"', index_html)
@@ -2001,7 +2001,7 @@ class MotorbikeRentalPWATests(unittest.TestCase):
 
         partner_html = self.client.get("/partner").get_data(as_text=True)
         self.assertIn('id="bike-schedule-modal"', partner_html)
-        self.assertIn('/static/js/partner.js?v=18', partner_html)
+        self.assertIn('/static/js/partner.js?v=19', partner_html)
         admin_html = self.client.get("/admin").get_data(as_text=True)
         self.assertIn('id="bike-schedule-modal"', admin_html)
 
@@ -3002,6 +3002,341 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertIn("Helmet Use &amp; Safety Policy", contract_html)
         self.assertIn("Gas / Fuel Policy (Unleaded)", contract_html)
         self.assertIn("Damage &amp; Loss Liability", contract_html)
+
+    def test_before_and_after_walkaround_inspection_photos_and_contract(self):
+        # Login as admin and create a booking
+        self.assertEqual(
+            self.client.post("/api/admin/login", json={"password": "admin1234"}).status_code,
+            200,
+        )
+        bike = self.client.get("/api/bikes").get_json()["bikes"][0]
+        p = self._future_str(26)
+        r = self._future_str(28)
+        b_res = self.client.post(
+            "/api/bookings",
+            json={
+                "bike_id": bike["id"],
+                "pickup_date": p,
+                "return_date": r,
+                "customer_name": "Elena Walkaround",
+                "customer_phone": "09178889900",
+                "license_number": "G01-25-777888",
+                "pickup_method": "shop",
+            },
+        )
+        self.assertEqual(b_res.status_code, 201)
+        booking = b_res.get_json()["booking"]
+        bid = booking["id"]
+        bcode = booking["booking_code"]
+
+        png_front = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+            b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+            b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        png_fuel = png_front + b"\x00"
+
+        # 1. Record Pickup (Before) walkaround inspection with 2 mobile camera photos & advance_status=1
+        pick_res = self.client.post(
+            f"/api/admin/bookings/{bid}/inspection",
+            data={
+                "stage": "pickup",
+                "fuel_level": "Full (8/8)",
+                "odometer_km": "12,340 km",
+                "helmets_count": "2",
+                "condition_notes": "Zero scratches, mirrors tight",
+                "advance_status": "1",
+                "photo_front": (io.BytesIO(png_front), "front.png"),
+                "photo_fuel": (io.BytesIO(png_fuel), "fuel.png"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(pick_res.status_code, 200)
+        pick_payload = pick_res.get_json()
+        self.assertTrue(pick_payload["ok"])
+        self.assertEqual(pick_payload["booking"]["status"], "active")
+        pick_insp = pick_payload["inspections"]["pickup"]
+        self.assertEqual(pick_insp["fuel_level"], "Full (8/8)")
+        self.assertEqual(pick_insp["odometer_km"], "12,340 km")
+        self.assertEqual(pick_insp["helmets_count"], 2)
+        self.assertEqual(len(pick_insp["photo_urls"]), 2)
+
+        # Uploaded inspection photos are served cleanly from DB-backed /uploads/
+        for url in pick_insp["photo_urls"]:
+            self.assertTrue(url.startswith("/uploads/inspect_pickup_"))
+            self.assertEqual(self.client.get(url).status_code, 200)
+
+        # delete_unused_uploaded_media must NOT delete referenced inspection photos
+        import db as db_mod
+        conn = db_mod.get_connection(self.db_path)
+        try:
+            db_mod.delete_unused_uploaded_media(conn, pick_insp["photo_urls"][0])
+        finally:
+            conn.close()
+        self.assertEqual(self.client.get(pick_insp["photo_urls"][0]).status_code, 200)
+
+        # 2. Record Return (After) walkaround inspection & advance_status=1 -> completed
+        ret_res = self.client.post(
+            f"/api/admin/bookings/{bid}/inspection",
+            data={
+                "stage": "return",
+                "fuel_level": "3/4 (6/8)",
+                "odometer_km": "12,465 km",
+                "helmets_count": "2",
+                "condition_notes": "Returned clean, 2 bars below full",
+                "advance_status": "1",
+                "photo_front": (io.BytesIO(png_front), "return_front.png"),
+            },
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(ret_res.status_code, 200)
+        ret_payload = ret_res.get_json()
+        self.assertEqual(ret_payload["booking"]["status"], "completed")
+        self.assertEqual(ret_payload["inspections"]["return"]["fuel_level"], "3/4 (6/8)")
+        self.assertEqual(len(ret_payload["inspections"]["return"]["photo_urls"]), 1)
+
+        # 3. Customer Lookup and Printable Contract display both Pickup & Return inspections
+        lookup = self.client.get(f"/api/bookings/lookup?code={bcode}&phone=09178889900").get_json()["booking"]
+        self.assertEqual(lookup["inspections"]["pickup"]["fuel_level"], "Full (8/8)")
+        self.assertEqual(lookup["inspections"]["return"]["fuel_level"], "3/4 (6/8)")
+
+        contract_html = self.client.get(f"/bookings/{bcode}/contract?phone=09178889900").get_data(as_text=True)
+        self.assertIn("Before &amp; After Handover Walkaround Inspection", contract_html)
+        self.assertIn("Full (8/8)", contract_html)
+        self.assertIn("3/4 (6/8)", contract_html)
+        self.assertIn("12,340 km", contract_html)
+        self.assertIn("12,465 km", contract_html)
+        self.assertIn(pick_insp["photo_urls"][0], contract_html)
+
+    def test_half_day_rates_and_multiday_tiered_discounts(self):
+        self.assertEqual(
+            self.client.post("/api/admin/login", json={"password": "admin1234"}).status_code,
+            200,
+        )
+        # Create a bike with Half-Day (6h) rate + 3-day (10%) & 7-day (20%) discounts
+        create_res = self.client.post(
+            "/api/admin/bikes",
+            json={
+                "name": "Yamaha Mio Gear Promo 125",
+                "category": "Scooter",
+                "engine_cc": 125,
+                "transmission": "Automatic",
+                "daily_rate": 500,
+                "half_day_rate": 300,
+                "discount_3day_pct": 10,
+                "discount_7day_pct": 20,
+                "units_count": 3,
+                "status": "available",
+            },
+        )
+        self.assertEqual(create_res.status_code, 201)
+        bike = create_res.get_json()["bike"]
+        self.assertEqual(bike["half_day_rate"], 300.0)
+        self.assertEqual(bike["discount_3day_pct"], 10.0)
+        self.assertEqual(bike["discount_7day_pct"], 20.0)
+
+        # Homepage SSR displays promo badges
+        home_html = self.client.get("/").get_data(as_text=True)
+        self.assertIn("6h:", home_html)
+        self.assertIn("3+ Days: 10% OFF", home_html)
+        self.assertIn("7+ Days: 20% OFF", home_html)
+
+        # Half-day quote (same day)
+        d_same = self._future_str(30)
+        q_half = self.client.get(
+            f"/api/quote?bike_id={bike['id']}&pickup_date={d_same}&return_date={d_same}&rental_type=half_day"
+        ).get_json()["quote"]
+        self.assertEqual(q_half["rental_type"], "half_day")
+        self.assertEqual(q_half["base_subtotal"], 300.0)
+        self.assertEqual(q_half["total_amount"], 300.0)
+        self.assertEqual(q_half["duration_label"], "Half-Day (6 hrs)")
+
+        # Half-day on multi-day dates gracefully falls back to full_day pricing
+        fallback_half = self.client.get(
+            f"/api/quote?bike_id={bike['id']}&pickup_date={d_same}&return_date={self._future_str(32)}&rental_type=half_day"
+        )
+        self.assertEqual(fallback_half.status_code, 200)
+        fb_quote = fallback_half.get_json()["quote"]
+        self.assertEqual(fb_quote["rental_type"], "full_day")
+        self.assertEqual(fb_quote["base_subtotal"], 1000.0)
+
+        # 3-day quote applies 10% discount (3 * 500 = 1500 -> 1350, saved 150)
+        q_3d = self.client.get(
+            f"/api/quote?bike_id={bike['id']}&pickup_date={self._future_str(31)}&return_date={self._future_str(34)}"
+        ).get_json()["quote"]
+        self.assertEqual(q_3d["rental_days"], 3)
+        self.assertEqual(q_3d["base_subtotal"], 1350.0)
+        self.assertEqual(q_3d["discount_saved"], 150.0)
+        self.assertEqual(q_3d["discount_pct"], 10.0)
+
+        # 7-day quote applies 20% discount (7 * 500 = 3500 -> 2800, saved 700)
+        q_7d = self.client.get(
+            f"/api/quote?bike_id={bike['id']}&pickup_date={self._future_str(35)}&return_date={self._future_str(42)}"
+        ).get_json()["quote"]
+        self.assertEqual(q_7d["rental_days"], 7)
+        self.assertEqual(q_7d["base_subtotal"], 2800.0)
+        self.assertEqual(q_7d["discount_saved"], 700.0)
+        self.assertEqual(q_7d["discount_pct"], 20.0)
+
+        # Book half-day & verify booking + printable contract
+        b_half = self.client.post(
+            "/api/bookings",
+            json={
+                "bike_id": bike["id"],
+                "pickup_date": d_same,
+                "return_date": d_same,
+                "rental_type": "half_day",
+                "customer_name": "Quick Rider",
+                "customer_phone": "09171112233",
+                "license_number": "D09-11-223344",
+                "pickup_method": "shop",
+            },
+        )
+        self.assertEqual(b_half.status_code, 201)
+        bh_data = b_half.get_json()["booking"]
+        self.assertEqual(bh_data["rental_type"], "half_day")
+        self.assertEqual(bh_data["total_amount"], 300.0)
+        self.assertEqual(bh_data["duration_label"], "Half-Day (6 hrs)")
+
+        # Book 3-day discounted trip & verify discount_saved on contract
+        b_3d = self.client.post(
+            "/api/bookings",
+            json={
+                "bike_id": bike["id"],
+                "pickup_date": self._future_str(31),
+                "return_date": self._future_str(34),
+                "customer_name": "Long Stay Tourist",
+                "customer_phone": "09172223344",
+                "license_number": "D09-22-334455",
+                "pickup_method": "shop",
+            },
+        )
+        self.assertEqual(b_3d.status_code, 201)
+        b3_data = b_3d.get_json()["booking"]
+        self.assertEqual(b3_data["discount_saved"], 150.0)
+        self.assertEqual(b3_data["total_amount"], 1350.0)
+        c_html = self.client.get(
+            f"/bookings/{b3_data['booking_code']}/contract?phone=09172223344"
+        ).get_data(as_text=True)
+        self.assertIn("Multi-Day Discount Applied", c_html)
+        self.assertIn("150.00", c_html)
+
+    def test_return_reminder_due_dashboard_messenger_and_push_links(self):
+        # Register & approve a partner shop and save its Facebook Messenger URL
+        partner_client = self.app.test_client()
+        reg = partner_client.post(
+            "/api/partner/register",
+            json={
+                "shop_name": "Mambajao Express Bikes",
+                "owner_name": "Rico Partner",
+                "email": "rico@expressbikes.ph",
+                "phone": "09176667788",
+                "municipality": "Mambajao",
+                "address": "Rizal St, Mambajao",
+                "password": "password123",
+            },
+        )
+        self.assertEqual(reg.status_code, 201)
+        shop_id = reg.get_json()["shop"]["id"]
+
+        # Update partner profile with Messenger URL (auto-prefixes https://)
+        prof_res = partner_client.put(
+            "/api/partner/profile",
+            json={"messenger_url": "m.me/mambajaoexpressbikes"},
+        )
+        self.assertEqual(prof_res.status_code, 200)
+        self.assertEqual(
+            prof_res.get_json()["shop"]["messenger_url"],
+            "https://m.me/mambajaoexpressbikes",
+        )
+
+        # Admin approves partner shop
+        admin_client = self.app.test_client()
+        self.assertEqual(
+            admin_client.post("/api/admin/login", json={"password": "admin1234"}).status_code,
+            200,
+        )
+        self.assertEqual(
+            admin_client.patch(f"/api/admin/shops/{shop_id}", json={"status": "approved"}).status_code,
+            200,
+        )
+
+        # Partner adds a bike
+        bike_res = partner_client.post(
+            "/api/partner/bikes",
+            json={
+                "name": "Honda Beat Fi 110",
+                "category": "Scooter",
+                "engine_cc": 110,
+                "transmission": "Automatic",
+                "daily_rate": 400,
+                "units_count": 2,
+                "status": "available",
+            },
+        )
+        self.assertEqual(bike_res.status_code, 201)
+        bike_id = bike_res.get_json()["bike"]["id"]
+
+        # Customer books returning TODAY so it shows up in due_return_reminders
+        today_iso = date.today().isoformat()
+        b_res = self.client.post(
+            "/api/bookings",
+            json={
+                "bike_id": bike_id,
+                "pickup_date": today_iso,
+                "return_date": today_iso,
+                "pickup_time": "16:00",
+                "customer_name": "Liza Returning",
+                "customer_phone": "09179990011",
+                "license_number": "G01-25-909090",
+                "pickup_method": "shop",
+            },
+        )
+        self.assertEqual(b_res.status_code, 201)
+        booking_id = b_res.get_json()["booking"]["id"]
+
+        # Partner marks booking active
+        self.assertEqual(
+            partner_client.patch(f"/api/partner/bookings/{booking_id}", json={"status": "active"}).status_code,
+            200,
+        )
+
+        # Partner & Admin dashboards both report due_return_reminders with SMS/WA/Messenger links
+        p_dash = partner_client.get("/api/partner/dashboard").get_json()
+        self.assertGreaterEqual(p_dash["kpis"]["due_return_count"], 1)
+        due_ids = [item["id"] for item in p_dash["due_return_reminders"]]
+        self.assertIn(booking_id, due_ids)
+        due_item = [item for item in p_dash["due_return_reminders"] if item["id"] == booking_id][0]
+        self.assertTrue(due_item["is_return_due_soon"])
+        self.assertTrue(due_item["reminder_links"]["sms_url"].startswith("sms:09179990011?body="))
+        self.assertIn("https://wa.me/639179990011?text=", due_item["reminder_links"]["whatsapp_url"])
+        self.assertEqual(due_item["reminder_links"]["messenger_url"], "https://m.me/mambajaoexpressbikes")
+
+        a_dash = admin_client.get("/api/admin/dashboard").get_json()
+        self.assertIn(booking_id, [item["id"] for item in a_dash["due_return_reminders"]])
+
+        # Partner triggers 1-hour return reminder (mocking push & outbound alert)
+        with patch("app.notify_customer_return_reminder", return_value=1) as mock_push, patch(
+            "app.notify_return_reminder"
+        ) as mock_alert:
+            rem_res = partner_client.post(f"/api/partner/bookings/{booking_id}/remind")
+            self.assertEqual(rem_res.status_code, 200)
+            rem_data = rem_res.get_json()
+            self.assertTrue(rem_data["ok"])
+            self.assertEqual(rem_data["push_sent"], 1)
+            self.assertTrue(bool(rem_data["booking"]["return_reminder_sent_at"]))
+            self.assertTrue(mock_push.called)
+            self.assertTrue(mock_alert.called)
+
+        # Admin can also trigger reminder
+        with patch("app.notify_customer_return_reminder", return_value=0), patch("app.notify_return_reminder"):
+            a_rem = admin_client.post(f"/api/admin/bookings/{booking_id}/remind")
+            self.assertEqual(a_rem.status_code, 200)
+
+        # Completed booking cannot be sent a return reminder (returns 400)
+        partner_client.patch(f"/api/partner/bookings/{booking_id}", json={"status": "completed"})
+        completed_rem = partner_client.post(f"/api/partner/bookings/{booking_id}/remind")
+        self.assertEqual(completed_rem.status_code, 400)
 
 
 if __name__ == "__main__":

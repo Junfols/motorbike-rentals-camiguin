@@ -1,3 +1,4 @@
+import json
 import os
 import secrets
 import sqlite3
@@ -346,6 +347,7 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             payout_account_name TEXT NOT NULL DEFAULT '',
             logo_url TEXT NOT NULL DEFAULT '',
             cover_url TEXT NOT NULL DEFAULT '',
+            messenger_url TEXT NOT NULL DEFAULT '',
             contract_terms TEXT NOT NULL DEFAULT '',
             password_hash TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'pending',
@@ -363,6 +365,9 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             transmission TEXT NOT NULL,
             fuel_type TEXT NOT NULL DEFAULT 'Gasoline',
             daily_rate REAL NOT NULL,
+            half_day_rate REAL NOT NULL DEFAULT 0,
+            discount_3day_pct REAL NOT NULL DEFAULT 0,
+            discount_7day_pct REAL NOT NULL DEFAULT 0,
             weekly_rate REAL NOT NULL DEFAULT 0,
             deposit REAL NOT NULL DEFAULT 1500,
             units_count INTEGER NOT NULL DEFAULT 1,
@@ -393,7 +398,9 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             extra_helmet INTEGER NOT NULL DEFAULT 0,
             top_box INTEGER NOT NULL DEFAULT 0,
             rental_days INTEGER NOT NULL,
+            rental_type TEXT NOT NULL DEFAULT 'full_day',
             base_subtotal REAL NOT NULL,
+            discount_saved REAL NOT NULL DEFAULT 0,
             addons_total REAL NOT NULL DEFAULT 0,
             delivery_total REAL NOT NULL DEFAULT 0,
             total_amount REAL NOT NULL,
@@ -415,6 +422,7 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             signature_url TEXT NOT NULL DEFAULT '',
             contract_agreed INTEGER NOT NULL DEFAULT 0,
             contract_signed_at TEXT DEFAULT NULL,
+            return_reminder_sent_at TEXT DEFAULT NULL,
             deposit_amount REAL NOT NULL,
             notes TEXT NOT NULL DEFAULT '',
             admin_notes TEXT NOT NULL DEFAULT '',
@@ -483,6 +491,22 @@ def _create_sqlite_schema(conn: DatabaseConnection) -> None:
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS booking_inspections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+            shop_id INTEGER NOT NULL,
+            stage TEXT NOT NULL,
+            fuel_level TEXT NOT NULL DEFAULT '',
+            odometer_km TEXT NOT NULL DEFAULT '',
+            helmets_count INTEGER NOT NULL DEFAULT 2,
+            condition_notes TEXT NOT NULL DEFAULT '',
+            photo_urls TEXT NOT NULL DEFAULT '[]',
+            recorded_by TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(booking_id, stage)
+        );
         """
     )
 
@@ -514,6 +538,7 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
             payout_account_name TEXT NOT NULL DEFAULT '',
             logo_url TEXT NOT NULL DEFAULT '',
             cover_url TEXT NOT NULL DEFAULT '',
+            messenger_url TEXT NOT NULL DEFAULT '',
             contract_terms TEXT NOT NULL DEFAULT '',
             password_hash TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'pending',
@@ -532,6 +557,9 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
             transmission TEXT NOT NULL,
             fuel_type TEXT NOT NULL DEFAULT 'Gasoline',
             daily_rate DOUBLE PRECISION NOT NULL,
+            half_day_rate DOUBLE PRECISION NOT NULL DEFAULT 0,
+            discount_3day_pct DOUBLE PRECISION NOT NULL DEFAULT 0,
+            discount_7day_pct DOUBLE PRECISION NOT NULL DEFAULT 0,
             weekly_rate DOUBLE PRECISION NOT NULL DEFAULT 0,
             deposit DOUBLE PRECISION NOT NULL DEFAULT 1500,
             units_count INTEGER NOT NULL DEFAULT 1,
@@ -563,7 +591,9 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
             extra_helmet INTEGER NOT NULL DEFAULT 0,
             top_box INTEGER NOT NULL DEFAULT 0,
             rental_days INTEGER NOT NULL,
+            rental_type TEXT NOT NULL DEFAULT 'full_day',
             base_subtotal DOUBLE PRECISION NOT NULL,
+            discount_saved DOUBLE PRECISION NOT NULL DEFAULT 0,
             addons_total DOUBLE PRECISION NOT NULL DEFAULT 0,
             delivery_total DOUBLE PRECISION NOT NULL DEFAULT 0,
             total_amount DOUBLE PRECISION NOT NULL,
@@ -585,6 +615,7 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
             signature_url TEXT NOT NULL DEFAULT '',
             contract_agreed INTEGER NOT NULL DEFAULT 0,
             contract_signed_at TEXT DEFAULT NULL,
+            return_reminder_sent_at TEXT DEFAULT NULL,
             deposit_amount DOUBLE PRECISION NOT NULL,
             notes TEXT NOT NULL DEFAULT '',
             admin_notes TEXT NOT NULL DEFAULT '',
@@ -659,6 +690,23 @@ def _create_postgres_schema(conn: DatabaseConnection) -> None:
             updated_at TEXT NOT NULL
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS booking_inspections (
+            id SERIAL PRIMARY KEY,
+            booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+            shop_id INTEGER NOT NULL,
+            stage TEXT NOT NULL,
+            fuel_level TEXT NOT NULL DEFAULT '',
+            odometer_km TEXT NOT NULL DEFAULT '',
+            helmets_count INTEGER NOT NULL DEFAULT 2,
+            condition_notes TEXT NOT NULL DEFAULT '',
+            photo_urls TEXT NOT NULL DEFAULT '[]',
+            recorded_by TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(booking_id, stage)
+        )
+        """,
     ]
     for stmt in statements:
         conn.execute(stmt)
@@ -678,6 +726,7 @@ def _create_indexes(conn: DatabaseConnection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_booking_calls_status ON booking_calls (status, shop_id, booking_code)",
         "CREATE INDEX IF NOT EXISTS idx_push_subs_role_shop ON push_subscriptions (role, shop_id)",
         "CREATE INDEX IF NOT EXISTS idx_push_subs_phone ON push_subscriptions (customer_phone)",
+        "CREATE INDEX IF NOT EXISTS idx_booking_inspections_booking ON booking_inspections (booking_id, stage)",
     ]
     for idx in indexes:
         conn.execute(idx)
@@ -820,16 +869,28 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                 conn.execute("ALTER TABLE shops ADD COLUMN logo_url TEXT NOT NULL DEFAULT ''")
             if "cover_url" not in shop_cols:
                 conn.execute("ALTER TABLE shops ADD COLUMN cover_url TEXT NOT NULL DEFAULT ''")
+            if "messenger_url" not in shop_cols:
+                conn.execute("ALTER TABLE shops ADD COLUMN messenger_url TEXT NOT NULL DEFAULT ''")
             if "contract_terms" not in shop_cols:
                 conn.execute("ALTER TABLE shops ADD COLUMN contract_terms TEXT NOT NULL DEFAULT ''")
 
             bike_cols = _table_columns(conn, "bikes")
             if "shop_id" not in bike_cols:
                 conn.execute("ALTER TABLE bikes ADD COLUMN shop_id INTEGER NOT NULL DEFAULT 1")
+            if "half_day_rate" not in bike_cols:
+                conn.execute("ALTER TABLE bikes ADD COLUMN half_day_rate REAL NOT NULL DEFAULT 0")
+            if "discount_3day_pct" not in bike_cols:
+                conn.execute("ALTER TABLE bikes ADD COLUMN discount_3day_pct REAL NOT NULL DEFAULT 0")
+            if "discount_7day_pct" not in bike_cols:
+                conn.execute("ALTER TABLE bikes ADD COLUMN discount_7day_pct REAL NOT NULL DEFAULT 0")
 
             booking_cols = _table_columns(conn, "bookings")
             if "shop_id" not in booking_cols:
                 conn.execute("ALTER TABLE bookings ADD COLUMN shop_id INTEGER NOT NULL DEFAULT 1")
+            if "rental_type" not in booking_cols:
+                conn.execute("ALTER TABLE bookings ADD COLUMN rental_type TEXT NOT NULL DEFAULT 'full_day'")
+            if "discount_saved" not in booking_cols:
+                conn.execute("ALTER TABLE bookings ADD COLUMN discount_saved REAL NOT NULL DEFAULT 0")
             if "commission_rate" not in booking_cols:
                 conn.execute("ALTER TABLE bookings ADD COLUMN commission_rate REAL NOT NULL DEFAULT 0")
             if "platform_fee" not in booking_cols:
@@ -911,12 +972,16 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                 conn.execute(
                     "ALTER TABLE bookings ADD COLUMN contract_signed_at TEXT DEFAULT NULL"
                 )
+            if "return_reminder_sent_at" not in booking_cols:
+                conn.execute(
+                    "ALTER TABLE bookings ADD COLUMN return_reminder_sent_at TEXT DEFAULT NULL"
+                )
             if "customer_address" not in booking_cols:
                 conn.execute(
                     "ALTER TABLE bookings ADD COLUMN customer_address TEXT NOT NULL DEFAULT ''"
                 )
 
-            # Ensure reviews and booking_calls tables exist in existing database
+            # Ensure reviews, booking_calls, push_subscriptions, and booking_inspections tables exist in existing database
             if conn.backend == "postgresql":
                 conn.execute(
                     """
@@ -969,6 +1034,25 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                     )
                     """
                 )
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS booking_inspections (
+                        id SERIAL PRIMARY KEY,
+                        booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+                        shop_id INTEGER NOT NULL,
+                        stage TEXT NOT NULL,
+                        fuel_level TEXT NOT NULL DEFAULT '',
+                        odometer_km TEXT NOT NULL DEFAULT '',
+                        helmets_count INTEGER NOT NULL DEFAULT 2,
+                        condition_notes TEXT NOT NULL DEFAULT '',
+                        photo_urls TEXT NOT NULL DEFAULT '[]',
+                        recorded_by TEXT NOT NULL DEFAULT '',
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        UNIQUE(booking_id, stage)
+                    )
+                    """
+                )
             else:
                 conn.execute(
                     """
@@ -1018,6 +1102,25 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
                         auth TEXT NOT NULL,
                         created_at TEXT NOT NULL,
                         updated_at TEXT NOT NULL
+                    )
+                    """
+                )
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS booking_inspections (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+                        shop_id INTEGER NOT NULL,
+                        stage TEXT NOT NULL,
+                        fuel_level TEXT NOT NULL DEFAULT '',
+                        odometer_km TEXT NOT NULL DEFAULT '',
+                        helmets_count INTEGER NOT NULL DEFAULT 2,
+                        condition_notes TEXT NOT NULL DEFAULT '',
+                        photo_urls TEXT NOT NULL DEFAULT '[]',
+                        recorded_by TEXT NOT NULL DEFAULT '',
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        UNIQUE(booking_id, stage)
                     )
                     """
                 )
@@ -1360,16 +1463,49 @@ def calculate_quote(
     extra_helmet: bool = False,
     top_box: bool = False,
     shop=None,
+    rental_type: str = "full_day",
 ) -> dict:
-    """Compute itemized booking pricing and platform commission split."""
-    rental_days = calculate_rental_days(pickup_date, return_date)
+    """Compute itemized booking pricing, optional half-day/multi-day tiered discounts, and payout split."""
+    p_dt = parse_iso_date(pickup_date)
+    r_dt = parse_iso_date(return_date)
+    if r_dt < p_dt:
+        raise ValueError("Return date cannot be earlier than pickup date.")
+    raw_delta = (r_dt - p_dt).days
+    rental_days = max(1, raw_delta)
     daily_rate = float(bike["daily_rate"])
     weekly_rate = float(bike["weekly_rate"] or 0)
     deposit = float(bike["deposit"] or 0)
+    bike_keys = bike.keys() if hasattr(bike, "keys") else ()
+    half_day_rate = float(bike["half_day_rate"] or 0) if "half_day_rate" in bike_keys else 0.0
+    discount_3day_pct = float(bike["discount_3day_pct"] or 0) if "discount_3day_pct" in bike_keys else 0.0
+    discount_7day_pct = float(bike["discount_7day_pct"] or 0) if "discount_7day_pct" in bike_keys else 0.0
+    discount_3day_pct = max(0.0, min(70.0, discount_3day_pct))
+    discount_7day_pct = max(0.0, min(70.0, discount_7day_pct))
+
+    rental_type_raw = str(rental_type or "full_day").strip().lower()
+    is_half_day = rental_type_raw in ("half_day", "half-day", "6h", "hourly") and raw_delta == 0
+    rental_type_clean = "half_day" if is_half_day else "full_day"
 
     standard_total = rental_days * daily_rate
-    base_subtotal = standard_total
-    discount_saved = 0.0
+    discount_tier_label = ""
+    applied_pct = 0.0
+    if is_half_day:
+        base_subtotal = round(half_day_rate if half_day_rate > 0 else round(daily_rate * 0.65, 0), 2)
+        discount_saved = round(max(0.0, daily_rate - base_subtotal), 2)
+        discount_tier_label = "Half-Day (6 Hours)"
+        duration_label = "Half-Day (6 hrs)"
+        effective_daily_rate = base_subtotal
+    else:
+        if rental_days >= 7 and discount_7day_pct > 0:
+            applied_pct = discount_7day_pct
+            discount_tier_label = f"{discount_7day_pct:g}% Off (7+ Days)"
+        elif rental_days >= 3 and discount_3day_pct > 0:
+            applied_pct = discount_3day_pct
+            discount_tier_label = f"{discount_3day_pct:g}% Off (3+ Days)"
+        discount_saved = round(standard_total * (applied_pct / 100.0), 2)
+        base_subtotal = round(max(0.0, standard_total - discount_saved), 2)
+        duration_label = f"{rental_days} day" if rental_days == 1 else f"{rental_days} days"
+        effective_daily_rate = round(base_subtotal / max(1, rental_days), 2)
 
     helmet_fee = float(settings.get("extra_helmet_fee", "50") or 0)
     top_box_fee = float(settings.get("top_box_fee", "100") or 0)
@@ -1422,7 +1558,15 @@ def calculate_quote(
 
     return {
         "rental_days": rental_days,
+        "rental_type": rental_type_clean,
+        "duration_label": duration_label,
         "daily_rate": daily_rate,
+        "half_day_rate": half_day_rate,
+        "discount_3day_pct": discount_3day_pct,
+        "discount_7day_pct": discount_7day_pct,
+        "discount_pct": round(applied_pct, 2),
+        "effective_daily_rate": effective_daily_rate,
+        "discount_tier_label": discount_tier_label,
         "weekly_rate": weekly_rate,
         "base_subtotal": round(base_subtotal, 2),
         "discount_saved": round(discount_saved, 2),
@@ -1854,8 +1998,8 @@ def delete_unused_uploaded_media(conn: DatabaseConnection, image_url: str | None
     still_used = (
         conn.execute("SELECT 1 FROM bikes WHERE image_url = ? LIMIT 1", (image_url,)).fetchone()
         or conn.execute(
-            "SELECT 1 FROM bookings WHERE payment_proof_url = ? LIMIT 1",
-            (image_url,),
+            "SELECT 1 FROM bookings WHERE payment_proof_url = ? OR license_photo_url = ? OR signature_url = ? LIMIT 1",
+            (image_url, image_url, image_url),
         ).fetchone()
         or conn.execute(
             "SELECT 1 FROM settings WHERE key = 'gcash_qr_url' AND value = ? LIMIT 1",
@@ -1864,6 +2008,10 @@ def delete_unused_uploaded_media(conn: DatabaseConnection, image_url: str | None
         or conn.execute(
             "SELECT 1 FROM shops WHERE logo_url = ? OR cover_url = ? LIMIT 1",
             (image_url, image_url),
+        ).fetchone()
+        or conn.execute(
+            "SELECT 1 FROM booking_inspections WHERE photo_urls LIKE ? LIMIT 1",
+            (f"%{image_url}%",),
         ).fetchone()
     )
     if not still_used:
@@ -2043,4 +2191,123 @@ def get_shop_rating_stats(conn: DatabaseConnection, shop_id: int) -> dict:
         return {"avg_rating": round(avg_val, 1), "review_count": cnt}
     except Exception:
         return {"avg_rating": 5.0, "review_count": 0}
+
+
+def _serialize_inspection_row(row) -> dict:
+    raw_photos = row["photo_urls"] or "[]"
+    try:
+        photos = json.loads(raw_photos)
+        if not isinstance(photos, list):
+            photos = []
+    except Exception:
+        photos = []
+    return {
+        "id": int(row["id"]),
+        "booking_id": int(row["booking_id"]),
+        "shop_id": int(row["shop_id"]),
+        "stage": row["stage"],
+        "fuel_level": row["fuel_level"] or "",
+        "odometer_km": row["odometer_km"] or "",
+        "helmets_count": int(row["helmets_count"] if row["helmets_count"] is not None else 2),
+        "condition_notes": row["condition_notes"] or "",
+        "photo_urls": [str(u) for u in photos if u],
+        "recorded_by": row["recorded_by"] or "",
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def upsert_booking_inspection(
+    conn: DatabaseConnection,
+    booking_id: int,
+    shop_id: int,
+    stage: str,
+    fuel_level: str = "",
+    odometer_km: str = "",
+    helmets_count: int = 2,
+    condition_notes: str = "",
+    photo_urls: list[str] | None = None,
+    recorded_by: str = "partner",
+) -> dict:
+    """Create or update a pickup/return walkaround inspection record for a booking."""
+    stage_clean = "return" if str(stage or "").strip().lower() == "return" else "pickup"
+    now = datetime.now().isoformat(timespec="seconds")
+    photos_json = json.dumps([str(u).strip() for u in (photo_urls or []) if str(u).strip()][:6])
+    helmets = max(0, min(4, int(helmets_count or 0)))
+
+    conn.execute(
+        """
+        INSERT INTO booking_inspections (
+            booking_id, shop_id, stage, fuel_level, odometer_km,
+            helmets_count, condition_notes, photo_urls, recorded_by,
+            created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (booking_id, stage) DO UPDATE SET
+            fuel_level = EXCLUDED.fuel_level,
+            odometer_km = EXCLUDED.odometer_km,
+            helmets_count = EXCLUDED.helmets_count,
+            condition_notes = EXCLUDED.condition_notes,
+            photo_urls = EXCLUDED.photo_urls,
+            recorded_by = EXCLUDED.recorded_by,
+            updated_at = EXCLUDED.updated_at
+        """,
+        (
+            int(booking_id),
+            int(shop_id),
+            stage_clean,
+            str(fuel_level or "").strip()[:60],
+            str(odometer_km or "").strip()[:40],
+            helmets,
+            str(condition_notes or "").strip()[:500],
+            photos_json,
+            str(recorded_by or "partner").strip()[:40],
+            now,
+            now,
+        ),
+    )
+    row = conn.execute(
+        "SELECT * FROM booking_inspections WHERE booking_id = ? AND stage = ?",
+        (int(booking_id), stage_clean),
+    ).fetchone()
+    return _serialize_inspection_row(row)
+
+
+def get_booking_inspections(conn: DatabaseConnection, booking_id: int) -> dict:
+    """Return {'pickup': dict|None, 'return': dict|None} for one booking."""
+    result: dict[str, dict | None] = {"pickup": None, "return": None}
+    try:
+        rows = conn.execute(
+            "SELECT * FROM booking_inspections WHERE booking_id = ?",
+            (int(booking_id),),
+        ).fetchall()
+        for r in rows:
+            st = str(r["stage"] or "").lower()
+            if st in result:
+                result[st] = _serialize_inspection_row(r)
+    except Exception:
+        pass
+    return result
+
+
+def get_inspections_for_bookings(conn: DatabaseConnection, booking_ids: list[int]) -> dict[int, dict]:
+    """Batch load inspections for multiple bookings to avoid N+1 queries."""
+    ids = [int(i) for i in booking_ids if i]
+    if not ids:
+        return {}
+    mapping: dict[int, dict] = {bid: {"pickup": None, "return": None} for bid in ids}
+    try:
+        placeholders = ",".join(["?"] * len(ids))
+        rows = conn.execute(
+            f"SELECT * FROM booking_inspections WHERE booking_id IN ({placeholders})",
+            tuple(ids),
+        ).fetchall()
+        for r in rows:
+            bid = int(r["booking_id"])
+            st = str(r["stage"] or "").lower()
+            if bid in mapping and st in ("pickup", "return"):
+                mapping[bid][st] = _serialize_inspection_row(r)
+    except Exception:
+        pass
+    return mapping
+
 

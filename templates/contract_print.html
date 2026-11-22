@@ -356,7 +356,7 @@
         <div class="doc-kv-row"><span>Plate / Unit Code:</span> <span>{{ b.plate_number }}</span></div>
         {% endif %}
         <div class="doc-kv-row"><span>Pickup Date &amp; Time:</span> <span>{{ b.pickup_date }} &bull; {{ b.pickup_time }}</span></div>
-        <div class="doc-kv-row"><span>Return Date:</span> <span>{{ b.return_date }} ({{ b.rental_days }} day{{ 's' if b.rental_days > 1 else '' }})</span></div>
+        <div class="doc-kv-row"><span>Return Date:</span> <span>{{ b.return_date }} ({{ b.duration_label or (b.rental_days ~ ' day' ~ ('s' if b.rental_days > 1 else '')) }})</span></div>
         <div class="doc-kv-row"><span>Pickup / Drop-off Point:</span> <span>{{ b.delivery_address if b.delivery_address else ('Shop Pickup' if b.pickup_method == 'shop' else (b.pickup_method|replace('_', ' ')|title)) }}</span></div>
       </div>
     </section>
@@ -371,9 +371,15 @@
         </thead>
         <tbody>
           <tr>
-            <td>Motorbike Rental ({{ b.rental_days }} day{{ 's' if b.rental_days > 1 else '' }} &bull; {{ b.bike_name }})</td>
+            <td>Motorbike Rental ({{ b.duration_label or (b.rental_days ~ ' day' ~ ('s' if b.rental_days > 1 else '')) }} &bull; {{ b.bike_name }})</td>
             <td style="text-align:right;">{{ b.currency or '₱' }}{{ "%.2f"|format(b.base_subtotal) }}</td>
           </tr>
+          {% if b.discount_saved and b.discount_saved > 0 %}
+          <tr>
+            <td style="color:#059669;font-weight:600;">🏷️ Multi-Day Discount Applied (Savings Included Above)</td>
+            <td style="text-align:right;color:#059669;font-weight:600;">-{{ b.currency or '₱' }}{{ "%.2f"|format(b.discount_saved) }}</td>
+          </tr>
+          {% endif %}
           {% if b.addons_total and b.addons_total > 0 %}
           <tr>
             <td>Add-ons (Extra Helmet / Rear Top Box)</td>
@@ -435,6 +441,53 @@
       </ul>
       {% endif %}
     </section>
+
+    {% if b.inspections and (b.inspections.pickup or b.inspections.return) %}
+    <section class="terms-box" style="background:#f8fafc;">
+      <h4>📸 Before &amp; After Handover Walkaround Inspection &amp; Fuel Checklist</h4>
+      <div class="proof-grid" style="margin-bottom:0;margin-top:8px;">
+        <div class="proof-card" style="text-align:left;background:#fff;">
+          <strong style="display:block;margin-bottom:6px;color:#065f46;">🛵 Pickup Condition (Before Handover)</strong>
+          {% if b.inspections.pickup %}
+          {% set p_insp = b.inspections.pickup %}
+          <div class="doc-kv-row"><span>Fuel Gauge:</span> <span>{{ p_insp.fuel_level or 'N/A' }}</span></div>
+          {% if p_insp.odometer_km %}<div class="doc-kv-row"><span>Odometer:</span> <span>{{ p_insp.odometer_km }}</span></div>{% endif %}
+          <div class="doc-kv-row"><span>Helmets Issued:</span> <span>{{ p_insp.helmets_count }}</span></div>
+          {% if p_insp.condition_notes %}<div style="font-size:0.78rem;color:#334155;margin-top:4px;"><strong>Notes:</strong> {{ p_insp.condition_notes }}</div>{% endif %}
+          {% if p_insp.photo_urls %}
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+            {% for purl in p_insp.photo_urls %}
+            <img src="{{ purl }}" alt="Pickup inspection photo" style="width:76px;height:62px;object-fit:cover;">
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% else %}
+          <div style="color:#64748b;font-size:0.78rem;">Pending pickup walkaround recording.</div>
+          {% endif %}
+        </div>
+
+        <div class="proof-card" style="text-align:left;background:#fff;">
+          <strong style="display:block;margin-bottom:6px;color:#1e40af;">🏁 Return Condition (After Trip)</strong>
+          {% if b.inspections.return %}
+          {% set r_insp = b.inspections.return %}
+          <div class="doc-kv-row"><span>Fuel Gauge:</span> <span>{{ r_insp.fuel_level or 'N/A' }}</span></div>
+          {% if r_insp.odometer_km %}<div class="doc-kv-row"><span>Odometer:</span> <span>{{ r_insp.odometer_km }}</span></div>{% endif %}
+          <div class="doc-kv-row"><span>Helmets Returned:</span> <span>{{ r_insp.helmets_count }}</span></div>
+          {% if r_insp.condition_notes %}<div style="font-size:0.78rem;color:#334155;margin-top:4px;"><strong>Notes:</strong> {{ r_insp.condition_notes }}</div>{% endif %}
+          {% if r_insp.photo_urls %}
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+            {% for rurl in r_insp.photo_urls %}
+            <img src="{{ rurl }}" alt="Return inspection photo" style="width:76px;height:62px;object-fit:cover;">
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% else %}
+          <div style="color:#64748b;font-size:0.78rem;">Pending return walkaround recording.</div>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+    {% endif %}
 
     <section class="proof-grid">
       <div class="proof-card">

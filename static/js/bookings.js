@@ -103,6 +103,42 @@
     }
   }
 
+  function renderCustomerInspectionsHtml(b) {
+    const insp = b.inspections || {};
+    const pickup = insp.pickup || null;
+    const ret = insp.return || null;
+    if (!pickup && !ret) return "";
+
+    const renderCard = (title, item, bg, border) => {
+      if (!item) return "";
+      const photos = (item.photo_urls || [])
+        .map(
+          (u) =>
+            `<a href="${escapeHtml(u)}" target="_blank" rel="noopener"><img src="${escapeHtml(u)}" alt="${escapeHtml(title)}" style="width:62px;height:62px;object-fit:cover;border-radius:8px;border:1px solid #cbd5e1;"></a>`
+        )
+        .join("");
+      return `
+        <div style="flex:1;min-width:220px;background:${bg};border:1px solid ${border};border-radius:10px;padding:10px 12px;font-size:0.84rem;">
+          <strong style="display:block;margin-bottom:4px;">${title}</strong>
+          <div>⛽ Fuel Gauge: <strong>${escapeHtml(item.fuel_level || "N/A")}</strong>${item.odometer_km ? ` &bull; 🧭 ${escapeHtml(item.odometer_km)}` : ""}</div>
+          <div class="text-muted" style="font-size:0.78rem;margin-top:2px;">🪖 Helmets: ${Number(item.helmets_count ?? 2)}${item.created_at ? ` &bull; Recorded ${escapeHtml(item.created_at)}` : ""}</div>
+          ${item.condition_notes ? `<div style="margin-top:4px;color:#334155;">📝 ${escapeHtml(item.condition_notes)}</div>` : ""}
+          ${photos ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">${photos}</div>` : ""}
+        </div>
+      `;
+    };
+
+    return `
+      <div style="margin-top:12px;">
+        <div style="font-weight:700;font-size:0.86rem;margin-bottom:6px;color:var(--ink);">📸 Before &amp; After Handover Inspection Checklist</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          ${renderCard("🛵 Pickup Condition (Before)", pickup, "#f0fdf4", "#bbf7d0")}
+          ${renderCard("🏁 Return Condition (After)", ret, "#eff6ff", "#bfdbfe")}
+        </div>
+      </div>
+    `;
+  }
+
   function renderLookupResult(b) {
     activeBooking = b;
     const canCancel = b.status === "pending";
@@ -112,6 +148,13 @@
           `Hi ${b.shop_name || shop.shop_name || "Motorbike Rentals Camiguin"}, following up on booking ${b.booking_code} (${b.bike_name}).`
         )}`
       : "";
+    const messengerLink = (b.shop_messenger_url || shop.messenger_url || "").trim();
+    const durText = b.duration_label || `${b.rental_days}d`;
+    const durationBadge = b.rental_type === "half_day"
+      ? `<span class="spec-pill" style="background:#fef3c7;color:#92400e;border-color:#fde68a;">⏱️ Half-Day (6 hrs)</span>`
+      : Number(b.discount_saved || 0) > 0
+      ? `<span class="spec-pill" style="background:#dcfce7;color:#166534;border-color:#86efac;">🏷️ Saved ${escapeHtml(formatMoney(b.discount_saved))}</span>`
+      : "";
 
     lookupResult.innerHTML = `
       <div class="trip-card">
@@ -120,6 +163,7 @@
             <span class="trip-detail-label">Booking Reference</span>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;">
               <span class="badge badge-dark" style="font-family:ui-monospace,monospace;letter-spacing:0.02em;font-size:0.95rem;padding:4px 12px;">${escapeHtml(b.booking_code)}</span>
+              ${durationBadge}
             </div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -149,7 +193,7 @@
           </div>
           <div>
             <span class="trip-detail-label">Rental Dates</span>
-            <strong>${escapeHtml(b.pickup_date)} &rarr; ${escapeHtml(b.return_date)} (${b.rental_days}d)</strong>
+            <strong>${escapeHtml(b.pickup_date)} &rarr; ${escapeHtml(b.return_date)} (${escapeHtml(durText)})</strong>
           </div>
           <div>
             <span class="trip-detail-label">Pickup</span>
@@ -170,6 +214,7 @@
           <div>
             <span class="trip-detail-label">Total Rental</span>
             <strong>${escapeHtml(formatMoney(b.total_amount))}</strong>
+            ${Number(b.discount_saved || 0) > 0 ? `<div style="font-size:0.76rem;color:#059669;font-weight:600;">Saved ${escapeHtml(formatMoney(b.discount_saved))}</div>` : ""}
           </div>
           <div>
             <span class="trip-detail-label">Balance Due on Pickup</span>
@@ -190,7 +235,8 @@
 
         ${(b.payment_reference || b.payment_proof_url) ? `<p class="text-muted"><strong>Down Payment:</strong> ${escapeHtml((b.payment_channel || "gcash").toUpperCase())}${b.payment_reference ? ` &bull; Ref # ${escapeHtml(b.payment_reference)}` : ""}${b.payment_proof_url ? ` &bull; <a href="${escapeHtml(b.payment_proof_url)}" target="_blank" rel="noopener" class="payment-proof-link">View Receipt</a>` : ""}</p>` : ""}
         ${b.delivery_address ? `<p class="text-muted"><strong>Delivery Address:</strong> ${escapeHtml(b.delivery_address)}${b.google_maps_url ? ` &bull; <a href="${escapeHtml(b.google_maps_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.75rem;display:inline-flex;align-items:center;gap:4px;">🗺️ Open in Google Maps</a>` : ""}</p>` : ""}
-        ${b.admin_notes ? `<div class="info-box"><h4>Shop Note</h4><p>${escapeHtml(b.admin_notes)}</p></div>` : ""}
+        ${renderCustomerInspectionsHtml(b)}
+        ${b.admin_notes ? `<div class="info-box" style="margin-top:10px;"><h4>Shop Note</h4><p>${escapeHtml(b.admin_notes)}</p></div>` : ""}
 
         <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;">
           ${
@@ -217,6 +263,11 @@
           ${
             waLink
               ? `<a href="${escapeHtml(waLink)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">Message Shop on WhatsApp</a>`
+              : ""
+          }
+          ${
+            messengerLink
+              ? `<a href="${escapeHtml(messengerLink)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">💬 Message on Messenger</a>`
               : ""
           }
           ${
