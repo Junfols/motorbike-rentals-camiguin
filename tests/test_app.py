@@ -2382,6 +2382,11 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertIn('Cross-Island Trans-Mountain Highway', index_html)
         self.assertIn('Mantigue Island &amp; East Coast Trail', index_html)
         self.assertIn('id="reviews-section"', index_html)
+        self.assertIn('reviews-section hidden', index_html)
+        self.assertNotIn('Mark D. (Manila)', index_html)
+        self.assertNotIn('Jerome M.', index_html)
+        self.assertNotIn('Alyssa T.', index_html)
+        self.assertEqual(self.client.get("/api/reviews").get_json()["reviews"], [])
         self.assertIn('Verified Tourist Reviews', index_html)
         self.assertIn('bike-rating-pill', index_html)
         self.assertIn('id="booking-customer-address"', index_html)
@@ -2448,11 +2453,16 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertTrue(rev_data["success"])
         self.assertEqual(rev_data["review"]["rating"], 5)
 
+        # Once a real review exists, #reviews-section is shown at the bottom of the homepage
+        index_after_rev = self.client.get("/").get_data(as_text=True)
+        self.assertNotIn('reviews-section hidden', index_after_rev)
+        self.assertIn('Had an unforgettable time exploring Camiguin!', index_after_rev)
+
         # Test GET /api/reviews
         get_revs = self.client.get("/api/reviews")
         self.assertEqual(get_revs.status_code, 200)
         revs_list = get_revs.get_json()["reviews"]
-        self.assertTrue(len(revs_list) >= 1)
+        self.assertEqual(len(revs_list), 1)
 
         # Test GET /api/bikes/1 includes reviews and rating stats
         bike_resp = self.client.get("/api/bikes/1")

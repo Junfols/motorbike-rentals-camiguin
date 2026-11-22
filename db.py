@@ -1024,25 +1024,21 @@ def init_db(db_path: str | None = None, db_url: str | None = None, seed_demo: bo
 
             _create_indexes(conn)
 
-            # Seed initial reviews if empty (only on initial demo seed)
-            rev_cnt = conn.execute("SELECT COUNT(*) FROM reviews").fetchone()[0]
-            if seed_demo and not demo_seeded and rev_cnt == 0:
-                first_bike = conn.execute("SELECT id, shop_id FROM bikes ORDER BY id ASC LIMIT 1").fetchone()
-                if first_bike:
-                    fb_id = int(first_bike["id"])
-                    fs_id = int(first_bike["shop_id"])
-                    starter_reviews = [
-                        (None, fb_id, fs_id, "Mark D. (Manila)", 5, "Super smooth rental! We rode around the entire 64km circumferential road. Consumed less than 1 bar of fuel. Clean helmets and quick release!", now),
-                        (None, fb_id, fs_id, "Rochelle M. (Cebu)", 5, "Very easy to handle and park near White Island jump-off and Sunken Cemetery. Key handover was ready at the port!", now),
-                        (None, fb_id, fs_id, "Michael & Anne (Germany)", 5, "Extremely comfortable for our 4-day Camiguin tour! Fast WhatsApp response and digital contract was super convenient.", now),
-                        (None, fb_id, fs_id, "Jay-Ar S. (Davao)", 5, "Great uphill power going to Katibawasan and Tuasan Falls. Clean motor and reliable brakes. 10/10 service!", now),
-                    ]
-                    for rev in starter_reviews:
-                        conn.execute(
-                            "INSERT INTO reviews (booking_id, bike_id, shop_id, customer_name, rating, comment, is_approved, created_at) "
-                            "VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
-                            rev,
-                        )
+            # Remove any built-in sample/demo reviews so only genuine customer reviews appear
+            conn.execute(
+                """
+                DELETE FROM reviews
+                WHERE booking_id IS NULL
+                  AND customer_name IN (
+                      'Mark D. (Manila)',
+                      'Rochelle M. (Cebu)',
+                      'Michael & Anne (Germany)',
+                      'Jay-Ar S. (Davao)',
+                      'Jerome M.',
+                      'Alyssa T.'
+                  )
+                """
+            )
 
             # Clear legacy is_main flags so all partner shops are treated equally
             conn.execute("UPDATE shops SET is_main = 0 WHERE is_main != 0")

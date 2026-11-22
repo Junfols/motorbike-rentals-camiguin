@@ -515,15 +515,15 @@
   </div>
 </section>
 
-<!-- Verified Tourist Reviews Section -->
-<section id="reviews-section" class="section container reviews-section">
+<!-- Verified Tourist Reviews Section (Shown at the bottom only when real reviews exist) -->
+<section id="reviews-section" class="section container reviews-section{% if not recent_reviews %} hidden{% endif %}">
   <div class="reviews-header text-center">
     <span class="badge badge-accent">Rider Feedback ⭐</span>
     <h2 class="section-title">Verified Tourist Reviews</h2>
     <p class="section-subtitle">Real experiences and 5-star ratings from travelers exploring Camiguin on two wheels.</p>
   </div>
 
-  <div class="reviews-grid">
+  <div id="reviews-grid" class="reviews-grid">
     {% if recent_reviews %}
       {% for rev in recent_reviews %}
       <div class="review-card">
@@ -544,29 +544,6 @@
         {% endif %}
       </div>
       {% endfor %}
-    {% else %}
-      <div class="review-card">
-        <div class="review-card-top">
-          <div class="review-author-avatar">J</div>
-          <div class="review-meta">
-            <strong class="review-author-name">Jerome M.</strong>
-            <small class="text-muted">Honda Click 125i &bull; Verified Renter</small>
-          </div>
-          <div class="review-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
-        </div>
-        <p class="review-comment">&ldquo;Motorbike was delivered right on time to Benoni Port as soon as we got off the ferry! Super smooth ride doing the 64km circumferential road around Camiguin.&rdquo;</p>
-      </div>
-      <div class="review-card">
-        <div class="review-card-top">
-          <div class="review-author-avatar">A</div>
-          <div class="review-meta">
-            <strong class="review-author-name">Alyssa T.</strong>
-            <small class="text-muted">Yamaha NMAX 155 &bull; Verified Renter</small>
-          </div>
-          <div class="review-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
-        </div>
-        <p class="review-comment">&ldquo;Renting the NMAX made climbing the steep road up Katibawasan Falls and Ardent Hot Springs effortless, even with two of us and backpacks. Highly recommended!&rdquo;</p>
-      </div>
     {% endif %}
   </div>
 </section>
