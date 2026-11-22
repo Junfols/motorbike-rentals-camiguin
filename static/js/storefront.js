@@ -162,29 +162,24 @@
     if (channelMayaWrap) channelMayaWrap.classList.toggle("hidden", !hasMaya);
     if (channelShopWrap) channelShopWrap.classList.toggle("hidden", isReq);
 
+    const defaultChannel = hasGcash ? "gcash" : hasMaya ? "maya" : "pay_at_shop";
     let current = getSelectedPaymentChannel();
-    if (resetDefault || wasHidden) {
-      current = "paymongo";
+    if (resetDefault || wasHidden || current === "paymongo") {
+      current = defaultChannel;
       selectPaymentChannel(current);
     } else if (isReq && current === "pay_at_shop") {
-      current = "paymongo";
+      current = defaultChannel;
       selectPaymentChannel(current);
     } else if (current === "gcash" && !hasGcash) {
-      current = "paymongo";
+      current = hasMaya ? "maya" : "pay_at_shop";
       selectPaymentChannel(current);
     } else if (current === "maya" && !hasMaya) {
-      current = "paymongo";
+      current = hasGcash ? "gcash" : "pay_at_shop";
       selectPaymentChannel(current);
     }
 
-    // Toggle sub-sections depending on whether PayMongo, Manual QR, or Shop pickup is active
-    if (current === "paymongo") {
-      if (paymongoInfoBox) paymongoInfoBox.classList.remove("hidden");
-      if (paymentProofFields) paymentProofFields.classList.add("hidden");
-      if (paymentQrBox) paymentQrBox.classList.add("hidden");
-      if (paymentGcashRow) paymentGcashRow.classList.add("hidden");
-      if (paymentMayaRow) paymentMayaRow.classList.add("hidden");
-    } else if (current === "gcash") {
+    // Toggle sub-sections depending on whether Manual GCash/Maya or Shop pickup is active
+    if (current === "gcash") {
       if (paymongoInfoBox) paymongoInfoBox.classList.add("hidden");
       if (paymentProofFields) paymentProofFields.classList.remove("hidden");
       if (paymentQrBox && paymentQrImg) {

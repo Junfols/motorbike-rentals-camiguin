@@ -205,12 +205,6 @@
               : ""
           }
           ${
-            b.payment_checkout_url && b.payment_status !== "verified" && b.status !== "cancelled"
-              ? `<a href="${escapeHtml(b.payment_checkout_url)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm" style="background:#008060;border-color:#008060;">⚡ Pay Online (QR Ph / GCash)</a>
-                 <button type="button" class="btn btn-sm btn-outline" id="sync-pm-btn" data-booking-id="${b.id}" data-code="${escapeHtml(b.booking_code)}" data-phone="${escapeHtml(b.customer_phone)}">Sync Payment Status</button>`
-              : ""
-          }
-          ${
             canCancel
               ? `<button type="button" class="btn btn-danger btn-sm" id="cancel-trip-btn" data-code="${escapeHtml(b.booking_code)}" data-phone="${escapeHtml(b.customer_phone)}">Cancel Request</button>`
               : ""
