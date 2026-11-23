@@ -3638,3 +3638,178 @@ img.bike-placeholder-svg {
   }
 }
 
+/* =====================================================================
+   Shareable App QR Code Widget (Customer, Shop Partner & Admin Dashboards)
+   ===================================================================== */
+.app-qr-card {
+  margin-top: 20px;
+  border: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.app-qr-head {
+  margin-bottom: 14px;
+}
+
+.app-qr-title-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.app-qr-brand-icon {
+  border-radius: 10px;
+  flex-shrink: 0;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.14);
+}
+
+.app-qr-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.app-qr-title-row h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.app-qr-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+.app-qr-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.app-qr-layout {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.app-qr-frame {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 2px solid #0f172a;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+  flex-shrink: 0;
+}
+
+.app-qr-frame img {
+  display: block;
+  width: 184px;
+  height: 184px;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.app-qr-frame-caption {
+  margin-top: 8px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.app-qr-details {
+  flex: 1;
+  min-width: 230px;
+}
+
+.app-qr-mode-heading {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.app-qr-mode-desc {
+  margin: 0 0 12px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.app-qr-url-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 7px 11px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.78rem;
+  color: #0f172a;
+  word-break: break-all;
+  margin-bottom: 14px;
+}
+
+.app-qr-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.app-qr-fullscreen-body {
+  text-align: center;
+  padding-top: 8px;
+}
+
+.app-qr-fullscreen-frame {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  border-radius: 20px;
+  background: #ffffff;
+  border: 3px solid #0f172a;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+  margin: 12px 0;
+}
+
+.app-qr-fullscreen-frame img {
+  display: block;
+  width: min(270px, 72vw);
+  height: min(270px, 72vw);
+  background: #ffffff;
+}
+
+@media (max-width: 600px) {
+  .app-qr-layout {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .app-qr-frame {
+    align-self: center;
+  }
+
+  .app-qr-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+

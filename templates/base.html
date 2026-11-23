@@ -32,7 +32,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css?v=18">
+  <link rel="stylesheet" href="/static/css/style.css?v=22">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   {% block head_extra %}{% endblock %}
@@ -203,6 +203,37 @@
     </div>
   </div>
 
+  <!-- Fullscreen Shareable App QR Modal -->
+  <div id="app-qr-fullscreen-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="qr-fullscreen-title">
+    <div class="modal-card modal-sm">
+      <div class="modal-header">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <img src="/static/icons/icon-192.png?v=20" alt="" width="32" height="32" style="border-radius:8px;">
+          <h3 id="qr-fullscreen-title" style="margin:0;">Scan QR Code</h3>
+        </div>
+        <button type="button" class="icon-btn" data-close-modal="app-qr-fullscreen-modal" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body app-qr-fullscreen-body">
+        <p id="qr-fullscreen-desc" class="text-muted" style="margin:0 0 8px;font-size:0.86rem;"></p>
+        <div class="app-qr-fullscreen-frame">
+          <img id="qr-fullscreen-img" src="/api/qr.svg?target=customer" alt="App QR Code" width="270" height="270">
+          <span class="app-qr-frame-caption">Point camera to scan</span>
+        </div>
+        <div class="app-qr-url-chip" style="justify-content:center;width:100%;">
+          <span id="qr-fullscreen-url"></span>
+        </div>
+        <div class="app-qr-actions" style="justify-content:center;">
+          <button type="button" id="qr-fullscreen-download-btn" class="btn btn-primary btn-sm">
+            &#11015;&#65039; Download QR Card
+          </button>
+          <button type="button" id="qr-fullscreen-share-btn" class="btn btn-outline btn-sm">
+            &#128228; Share App
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   {% if active_nav in ('partner', 'rider', 'shop', 'admin') %}
   <!-- Manage Motorbike Availability & Blocked Dates Modal -->
   <div id="bike-schedule-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="sched-modal-title">
@@ -285,7 +316,7 @@
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
   <script id="shop-config-data" type="application/json">{{ shop | tojson }}</script>
-  <script src="/static/js/pwa.js?v=21"></script>
+  <script src="/static/js/pwa.js?v=22"></script>
   <script src="/static/js/calls.js?v=18"></script>
   <script src="/static/js/push.js?v=18"></script>
   {% block scripts %}{% endblock %}

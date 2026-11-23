@@ -758,6 +758,305 @@
     };
   }
 
+  // =====================================================================
+  // Shareable App QR Code Controller (Customer, Shop Partner & Admin)
+  // =====================================================================
+  let partnerQrShopState = null;
+
+  function getAppQrMeta(mode) {
+    const origin = window.location.origin.replace(/\/+$/, "");
+    const appName = shopConfig.shop_name || "Motorbike Rentals Camiguin";
+    if (mode === "partner") {
+      return {
+        mode: "partner",
+        heading: "Shop Partner Portal & Registration",
+        posterTitle: "Partner With Us",
+        desc: "Motorbike rental shop owners in Camiguin can scan this QR to register their shop, upload scooters, and receive bookings.",
+        frameCaption: "Scan to join as partner",
+        url: `${origin}/shop`,
+        svgSrc: "/api/qr.svg?target=partner",
+        pngSrc: "/api/qr.png?target=partner",
+        downloadUrl: "/api/qr.png?target=partner&download=1",
+        filename: "motorentals-partner-qr-card.png",
+        shareTitle: `${appName} — Partner Shop Portal`,
+        shareText: `List your motorbike rental shop on ${appName}! Scan or open this link to register:`,
+      };
+    }
+    if (mode === "shop" && partnerQrShopState && partnerQrShopState.slug) {
+      const safeSlug = encodeURIComponent(partnerQrShopState.slug);
+      const shopTitle = partnerQrShopState.shop_name || "Our Motorbike Shop";
+      return {
+        mode: "shop",
+        heading: `${shopTitle} — Direct Booking QR`,
+        posterTitle: shopTitle,
+        desc: `Tourists who scan this QR go straight to ${shopTitle}'s live fleet page to browse motorbikes and book online.`,
+        frameCaption: "Scan to book our bikes",
+        url: `${origin}/shop/${safeSlug}`,
+        svgSrc: `/api/qr.svg?target=shop&slug=${safeSlug}`,
+        pngSrc: `/api/qr.png?target=shop&slug=${safeSlug}`,
+        downloadUrl: `/api/qr.png?target=shop&slug=${safeSlug}&download=1`,
+        filename: `motorentals-${partnerQrShopState.slug}-qr-card.png`,
+        shareTitle: `${shopTitle} on ${appName}`,
+        shareText: `Book motorbikes directly from ${shopTitle} in Camiguin:`,
+      };
+    }
+    return {
+      mode: "customer",
+      heading: "Customer Booking & App Install",
+      posterTitle: "Scan to Rent a Motorbike",
+      desc: "Tourists scan this QR to browse available Camiguin motorbikes, check prices & availability, book online, or install the MotoRentals app.",
+      frameCaption: "Scan with phone camera",
+      url: `${origin}/`,
+      svgSrc: "/api/qr.svg?target=customer",
+      pngSrc: "/api/qr.png?target=customer",
+      downloadUrl: "/api/qr.png?target=customer&download=1",
+      filename: "motorentals-customer-app-qr-card.png",
+      shareTitle: `${appName} (MotoRentals App)`,
+      shareText: `Rent motorbikes across Camiguin Island with ${appName}! Open or install the app here:`,
+    };
+  }
+
+  function loadImageAsync(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  }
+
+  async function downloadBrandedQrPoster(meta) {
+    const appName = shopConfig.shop_name || "Motorbike Rentals Camiguin";
+    try {
+      const [qrImg, iconImg] = await Promise.all([
+        loadImageAsync(meta.pngSrc),
+        loadImageAsync("/static/icons/icon-192.png?v=20").catch(() => null),
+      ]);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 900;
+      canvas.height = 1120;
+      const ctx = canvas.getContext("2d");
+
+      // Background navy card header + clean white body
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, 900, 1120);
+
+      const grad = ctx.createLinearGradient(0, 0, 900, 290);
+      grad.addColorStop(0, "#0f172a");
+      grad.addColorStop(1, "#1e293b");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 900, 285);
+
+      // Orange accent strip
+      ctx.fillStyle = "#f97316";
+      ctx.fillRect(0, 277, 900, 10);
+
+      // Brand icon
+      if (iconImg) {
+        ctx.drawImage(iconImg, 394, 34, 112, 112);
+      }
+
+      // App Name & Poster Subtitle
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.font = "800 36px 'Plus Jakarta Sans', system-ui, sans-serif";
+      ctx.fillText(appName, 450, 198);
+
+      ctx.fillStyle = "#fdba74";
+      ctx.font = "700 24px 'Plus Jakarta Sans', system-ui, sans-serif";
+      ctx.fillText(meta.posterTitle, 450, 240);
+
+      // Framed QR code
+      const qrBoxX = 185;
+      const qrBoxY = 335;
+      const qrBoxSize = 530;
+      ctx.fillStyle = "#ffffff";
+      ctx.strokeStyle = "#0f172a";
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(qrBoxX, qrBoxY, qrBoxSize, qrBoxSize, 28);
+      } else {
+        ctx.rect(qrBoxX, qrBoxY, qrBoxSize, qrBoxSize);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(qrImg, qrBoxX + 35, qrBoxY + 35, qrBoxSize - 70, qrBoxSize - 70);
+
+      // Footer instruction + URL
+      ctx.fillStyle = "#0f172a";
+      ctx.font = "800 28px 'Plus Jakarta Sans', system-ui, sans-serif";
+      ctx.fillText("POINT YOUR PHONE CAMERA TO SCAN", 450, 935);
+
+      ctx.fillStyle = "#475569";
+      ctx.font = "600 22px ui-monospace, Menlo, Consolas, monospace";
+      const displayUrl = meta.url.replace(/^https?:\/\//, "");
+      ctx.fillText(displayUrl, 450, 985);
+
+      ctx.fillStyle = "#ea580c";
+      ctx.font = "700 20px 'Plus Jakarta Sans', system-ui, sans-serif";
+      ctx.fillText("Camiguin Island • Verified Local Motorbike Rental Shops", 450, 1052);
+
+      const dataUrl = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = meta.filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      showToast("QR Card saved! Ready to share or print.", "success");
+    } catch (_) {
+      window.location.assign(meta.downloadUrl);
+    }
+  }
+
+  async function shareAppQrLink(meta) {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: meta.shareTitle,
+          text: meta.shareText,
+          url: meta.url,
+        });
+        return;
+      } catch (err) {
+        if (err && err.name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(`${meta.shareText} ${meta.url}`);
+      showToast("Share link copied! Paste in Messenger, WhatsApp, or SMS.", "success");
+    } catch (_) {
+      showToast(meta.url, "info");
+    }
+  }
+
+  let activeFullscreenQrMeta = null;
+
+  function openFullscreenQrModal(meta) {
+    activeFullscreenQrMeta = meta;
+    const titleEl = document.getElementById("qr-fullscreen-title");
+    const descEl = document.getElementById("qr-fullscreen-desc");
+    const imgEl = document.getElementById("qr-fullscreen-img");
+    const urlEl = document.getElementById("qr-fullscreen-url");
+    if (titleEl) titleEl.textContent = meta.heading;
+    if (descEl) descEl.textContent = meta.desc;
+    if (imgEl) {
+      imgEl.src = meta.svgSrc;
+      imgEl.alt = meta.heading;
+    }
+    if (urlEl) urlEl.textContent = meta.url;
+    openModal("app-qr-fullscreen-modal");
+  }
+
+  function renderQrWidgetState(widget, mode) {
+    const meta = getAppQrMeta(mode);
+    widget.dataset.currentQrMode = meta.mode;
+    widget.querySelectorAll("[data-qr-mode]").forEach((btn) => {
+      btn.classList.toggle("active", btn.getAttribute("data-qr-mode") === meta.mode);
+    });
+    const imgEl = widget.querySelector("[data-qr-img]");
+    const capEl = widget.querySelector("[data-qr-frame-caption]");
+    const headEl = widget.querySelector("[data-qr-heading]");
+    const descEl = widget.querySelector("[data-qr-desc]");
+    const urlEl = widget.querySelector("[data-qr-url-text]");
+    if (imgEl) {
+      imgEl.src = meta.svgSrc;
+      imgEl.alt = meta.heading;
+    }
+    if (capEl) capEl.textContent = meta.frameCaption;
+    if (headEl) headEl.textContent = meta.heading;
+    if (descEl) descEl.textContent = meta.desc;
+    if (urlEl) urlEl.textContent = meta.url;
+  }
+
+  function initAppShareQrWidgets() {
+    const widgets = document.querySelectorAll("[data-app-qr-widget]");
+    if (!widgets.length) return;
+
+    widgets.forEach((widget) => {
+      renderQrWidgetState(widget, widget.dataset.currentQrMode || "customer");
+
+      widget.querySelectorAll("[data-qr-mode]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          renderQrWidgetState(widget, btn.getAttribute("data-qr-mode") || "customer");
+        });
+      });
+
+      const fsBtn = widget.querySelector("[data-qr-fullscreen-btn]");
+      if (fsBtn) {
+        fsBtn.addEventListener("click", () => {
+          openFullscreenQrModal(getAppQrMeta(widget.dataset.currentQrMode || "customer"));
+        });
+      }
+
+      const dlBtn = widget.querySelector("[data-qr-download-btn]");
+      if (dlBtn) {
+        dlBtn.addEventListener("click", () => {
+          downloadBrandedQrPoster(getAppQrMeta(widget.dataset.currentQrMode || "customer"));
+        });
+      }
+
+      const shareBtn = widget.querySelector("[data-qr-share-btn]");
+      if (shareBtn) {
+        shareBtn.addEventListener("click", () => {
+          shareAppQrLink(getAppQrMeta(widget.dataset.currentQrMode || "customer"));
+        });
+      }
+
+      const copyBtn = widget.querySelector("[data-qr-copy-btn]");
+      if (copyBtn) {
+        copyBtn.addEventListener("click", async () => {
+          const meta = getAppQrMeta(widget.dataset.currentQrMode || "customer");
+          try {
+            await navigator.clipboard.writeText(meta.url);
+            showToast("App link copied!", "success");
+          } catch (_) {
+            showToast(meta.url, "info");
+          }
+        });
+      }
+    });
+
+    const modalDlBtn = document.getElementById("qr-fullscreen-download-btn");
+    if (modalDlBtn && !modalDlBtn.dataset.bound) {
+      modalDlBtn.dataset.bound = "1";
+      modalDlBtn.addEventListener("click", () => {
+        downloadBrandedQrPoster(activeFullscreenQrMeta || getAppQrMeta("customer"));
+      });
+    }
+    const modalShareBtn = document.getElementById("qr-fullscreen-share-btn");
+    if (modalShareBtn && !modalShareBtn.dataset.bound) {
+      modalShareBtn.dataset.bound = "1";
+      modalShareBtn.addEventListener("click", () => {
+        shareAppQrLink(activeFullscreenQrMeta || getAppQrMeta("customer"));
+      });
+    }
+  }
+
+  function configurePartnerShareQr(shop) {
+    if (!shop || !shop.slug) return;
+    partnerQrShopState = {
+      slug: shop.slug,
+      shop_name: shop.shop_name || "My Rental Shop",
+    };
+    document.querySelectorAll("[data-app-qr-widget]").forEach((widget) => {
+      const shopTab = widget.querySelector("[data-qr-shop-tab]");
+      if (shopTab) {
+        shopTab.classList.remove("hidden");
+      }
+      if (widget.dataset.currentQrMode === "shop") {
+        renderQrWidgetState(widget, "shop");
+      }
+    });
+  }
+
+  initAppShareQrWidgets();
+
   window.MotoRide = {
     get shop() {
       return shopConfig;
@@ -770,6 +1069,7 @@
     renderAvailabilityCalendarHtml,
     renderAdminBikeScheduleSummary,
     createBikeScheduleController,
+    configurePartnerShareQr,
     paymentStatusLabel,
     showToast,
     openModal,

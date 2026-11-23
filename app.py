@@ -1,4 +1,5 @@
 import base64
+import io
 import json
 import os
 import re
@@ -6,6 +7,8 @@ import secrets
 from datetime import date, datetime
 from functools import wraps
 from urllib.parse import quote as url_quote, urlparse
+
+import segno
 
 from flask import (
     Flask,
@@ -999,6 +1002,40 @@ def create_app(test_config: dict | None = None) -> Flask:
             conn.execute("SELECT 1").fetchone()
             backend = conn.backend
         return jsonify({"status": "ok", "backend": backend, "date": date.today().isoformat()})
+
+    def _resolve_app_qr_target() -> tuple[str, str]:
+        origin = request.url_root.rstrip("/")
+        target = (request.args.get("target") or "customer").strip().lower()
+        slug = re.sub(r"[^a-zA-Z0-9_-]", "", (request.args.get("slug") or "").strip())[:80]
+        if target in ("partner", "shop_portal", "register"):
+            return f"{origin}/shop", "motorentals-partner-qr"
+        if target == "shop" and slug:
+            return f"{origin}/shop/{slug}", f"motorentals-{slug}-qr"
+        return f"{origin}/", "motorentals-customer-app-qr"
+
+    @app.get("/api/qr.svg")
+    def app_qr_svg():
+        qr_url, _ = _resolve_app_qr_target()
+        qr = segno.make(qr_url, error="m")
+        buf = io.BytesIO()
+        qr.save(buf, kind="svg", scale=8, border=3, dark="#0f172a", light="#ffffff", xmldecl=False)
+        resp = Response(buf.getvalue(), mimetype="image/svg+xml; charset=utf-8")
+        resp.headers["Cache-Control"] = "public, max-age=3600"
+        resp.headers["X-QR-Target-URL"] = qr_url
+        return resp
+
+    @app.get("/api/qr.png")
+    def app_qr_png():
+        qr_url, filename = _resolve_app_qr_target()
+        qr = segno.make(qr_url, error="m")
+        buf = io.BytesIO()
+        qr.save(buf, kind="png", scale=10, border=3, dark="#0f172a", light="#ffffff")
+        resp = Response(buf.getvalue(), mimetype="image/png")
+        resp.headers["Cache-Control"] = "public, max-age=3600"
+        resp.headers["X-QR-Target-URL"] = qr_url
+        if (request.args.get("download") or "").strip().lower() in ("1", "true", "yes"):
+            resp.headers["Content-Disposition"] = f'attachment; filename="{filename}.png"'
+        return resp
 
     @app.get("/api/settings")
     def public_settings():

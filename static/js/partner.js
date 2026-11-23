@@ -268,6 +268,9 @@
     }
     const ovPreviewLink = document.getElementById("overview-preview-shop-link");
     if (ovPreviewLink) ovPreviewLink.href = publicPath;
+    if (MotoRide && typeof MotoRide.configurePartnerShareQr === "function") {
+      MotoRide.configurePartnerShareQr(shop);
+    }
 
     if (shop.status === "pending") {
       statusBanner.className = "status-notice pending";

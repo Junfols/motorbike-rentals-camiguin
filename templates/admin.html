@@ -84,6 +84,10 @@
           <div id="upcoming-rides-list" class="upcoming-list"></div>
         </div>
       </div>
+
+      {% set qr_role = 'admin' %}
+      {% set qr_anchor_id = 'admin-share-qr-card' %}
+      {% include '_share_qr_card.html' %}
     </div>
 
     <!-- Tab 2: Partner Shops -->

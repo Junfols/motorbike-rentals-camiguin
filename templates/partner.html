@@ -232,6 +232,9 @@
             <button type="button" id="overview-copy-link-btn" class="btn btn-primary btn-sm">
               &#128279; Copy Link for FB Page
             </button>
+            <a href="#partner-share-qr-card" class="btn btn-outline btn-sm">
+              &#128241; Share QR
+            </a>
             <a id="overview-preview-shop-link" href="/" target="_blank" rel="noopener" class="btn btn-outline btn-sm">
               View Public Shop &rarr;
             </a>
@@ -267,6 +270,10 @@
         </div>
         <div id="partner-reviews-list" class="upcoming-list"></div>
       </div>
+
+      {% set qr_role = 'partner' %}
+      {% set qr_anchor_id = 'partner-share-qr-card' %}
+      {% include '_share_qr_card.html' %}
     </div>
 
     <!-- Tab 2: Bookings -->
@@ -711,5 +718,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/partner.js?v=19"></script>
+<script src="/static/js/partner.js?v=22"></script>
 {% endblock %}

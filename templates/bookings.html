@@ -36,6 +36,10 @@
     </div>
     <div id="saved-trips-list" class="saved-trips-list"></div>
   </section>
+
+  {% set qr_role = 'customer' %}
+  {% set qr_anchor_id = 'customer-share-qr-card' %}
+  {% include '_share_qr_card.html' %}
 </section>
 
 <!-- View Digital Rental Contract & ID Modal -->

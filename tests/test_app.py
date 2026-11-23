@@ -1686,11 +1686,11 @@ class MotorbikeRentalPWATests(unittest.TestCase):
     def test_qr_upload_accepts_jfif_and_highres_images_and_network_first_scripts(self):
         with self.client.get("/sw.js") as sw_resp:
             sw_text = sw_resp.get_data(as_text=True)
-        self.assertIn("motoride-pwa-v21", sw_text)
+        self.assertIn("motoride-pwa-v22", sw_text)
         self.assertIn('/static/js/', sw_text)
         home_html = self.client.get("/").get_data(as_text=True)
         self.assertIn("window.__deferredInstallPrompt", home_html)
-        self.assertIn("/static/js/pwa.js?v=21", home_html)
+        self.assertIn("/static/js/pwa.js?v=22", home_html)
 
         login_resp = self.client.post("/api/admin/login", json={"password": "admin1234"})
         self.assertEqual(login_resp.status_code, 200)
@@ -1734,7 +1734,7 @@ class MotorbikeRentalPWATests(unittest.TestCase):
 
     def test_return_date_defaults_to_select_date_prompt_without_prefill(self):
         index_html = self.client.get("/").get_data(as_text=True)
-        self.assertIn('/static/css/style.css?v=18', index_html)
+        self.assertIn('/static/css/style.css?v=22', index_html)
         self.assertIn('/static/js/storefront.js?v=19', index_html)
         self.assertIn('class="bike-card"', index_html)
         self.assertNotIn('<div class="loading-state">Loading motorbikes...</div>', index_html)
@@ -2006,7 +2006,7 @@ class MotorbikeRentalPWATests(unittest.TestCase):
 
         partner_html = self.client.get("/partner").get_data(as_text=True)
         self.assertIn('id="bike-schedule-modal"', partner_html)
-        self.assertIn('/static/js/partner.js?v=19', partner_html)
+        self.assertIn('/static/js/partner.js?v=22', partner_html)
         admin_html = self.client.get("/admin").get_data(as_text=True)
         self.assertIn('id="bike-schedule-modal"', admin_html)
 
@@ -3366,6 +3366,51 @@ class MotorbikeRentalPWATests(unittest.TestCase):
             self.assertEqual(vc.get("/api/health").status_code, 200)
             with vc.get("/static/css/style.css") as css_resp:
                 self.assertEqual(css_resp.status_code, 200)
+
+    def test_app_share_qr_endpoints_and_dashboard_widgets(self):
+        # 1) Customer App QR SVG & PNG
+        cust_svg = self.client.get("/api/qr.svg?target=customer")
+        self.assertEqual(cust_svg.status_code, 200)
+        self.assertIn("image/svg+xml", cust_svg.content_type)
+        self.assertTrue(cust_svg.headers.get("X-QR-Target-URL", "").endswith("/"))
+        self.assertIn("<svg", cust_svg.get_data(as_text=True))
+
+        # 2) Partner Portal QR PNG with download disposition
+        part_png = self.client.get("/api/qr.png?target=partner&download=1")
+        self.assertEqual(part_png.status_code, 200)
+        self.assertEqual(part_png.mimetype, "image/png")
+        self.assertTrue(part_png.data.startswith(b"\x89PNG\r\n\x1a\n"))
+        self.assertTrue(part_png.headers.get("X-QR-Target-URL", "").endswith("/shop"))
+        self.assertIn("motorentals-partner-qr.png", part_png.headers.get("Content-Disposition", ""))
+
+        # 3) Partner direct shop slug QR sanitizes characters and stays on app origin
+        shop_svg = self.client.get("/api/qr.svg?target=shop&slug=rafols-bikes/../../evil")
+        self.assertEqual(shop_svg.status_code, 200)
+        self.assertTrue(shop_svg.headers.get("X-QR-Target-URL", "").endswith("/shop/rafols-bikesevil"))
+
+        # 4) Unknown target falls back safely to homepage (no arbitrary open-URL QR generation)
+        fallback_svg = self.client.get("/api/qr.svg?target=https://evil.example")
+        self.assertEqual(fallback_svg.status_code, 200)
+        self.assertTrue(fallback_svg.headers.get("X-QR-Target-URL", "").endswith("/"))
+        self.assertNotIn("evil.example", fallback_svg.headers.get("X-QR-Target-URL", ""))
+
+        # 5) Customer (/customer & /bookings), Shop Partner (/partner), and Admin (/admin) dashboards render Share QR widget
+        for route, role_attr, anchor_id in (
+            ("/customer", 'data-qr-role="customer"', 'id="customer-share-qr-card"'),
+            ("/bookings", 'data-qr-role="customer"', 'id="customer-share-qr-card"'),
+            ("/partner", 'data-qr-role="partner"', 'id="partner-share-qr-card"'),
+            ("/admin", 'data-qr-role="admin"', 'id="admin-share-qr-card"'),
+        ):
+            html = self.client.get(route).get_data(as_text=True)
+            self.assertIn("data-app-qr-widget", html)
+            self.assertIn(role_attr, html)
+            self.assertIn(anchor_id, html)
+            self.assertIn("/api/qr.svg?target=customer", html)
+            self.assertIn('id="app-qr-fullscreen-modal"', html)
+
+        # Partner dashboard includes My Shop Direct QR tab
+        partner_html = self.client.get("/partner").get_data(as_text=True)
+        self.assertIn("data-qr-shop-tab", partner_html)
 
 
 if __name__ == "__main__":

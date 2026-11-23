@@ -4,3 +4,4 @@ psycopg[binary]>=3.2,<4.0
 gunicorn>=21.2; sys_platform != "win32"
 pywebpush>=1.14.0
 cryptography>=42.0.0
+segno>=1.6.1
