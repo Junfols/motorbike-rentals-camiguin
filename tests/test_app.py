@@ -1686,8 +1686,11 @@ class MotorbikeRentalPWATests(unittest.TestCase):
     def test_qr_upload_accepts_jfif_and_highres_images_and_network_first_scripts(self):
         with self.client.get("/sw.js") as sw_resp:
             sw_text = sw_resp.get_data(as_text=True)
-        self.assertIn("motoride-pwa-v20", sw_text)
+        self.assertIn("motoride-pwa-v21", sw_text)
         self.assertIn('/static/js/', sw_text)
+        home_html = self.client.get("/").get_data(as_text=True)
+        self.assertIn("window.__deferredInstallPrompt", home_html)
+        self.assertIn("/static/js/pwa.js?v=21", home_html)
 
         login_resp = self.client.post("/api/admin/login", json={"password": "admin1234"})
         self.assertEqual(login_resp.status_code, 200)

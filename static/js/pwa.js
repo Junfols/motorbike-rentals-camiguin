@@ -94,52 +94,192 @@
   window.addEventListener("offline", syncOnlineState);
   syncOnlineState();
 
-  // PWA Service Worker registration
+  // PWA Service Worker registration (immediate so beforeinstallprompt fires faster)
   if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch((err) => {
-        console.warn("Service worker registration skipped:", err);
-      });
+    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch((err) => {
+      console.warn("Service worker registration skipped:", err);
     });
   }
 
-  // PWA Install Prompt handling
-  let deferredPrompt = null;
+  // PWA Install Prompt handling (direct 1-tap install when supported)
+  let deferredPrompt = window.__deferredInstallPrompt || null;
+  let waitingForPromptResolve = null;
   const installBtn = document.getElementById("install-app-btn");
   const mobileInstallBtn = document.getElementById("mobile-install-nav-btn");
   const nativeCtaBox = document.getElementById("native-install-cta-box");
   const triggerNativeInstallBtn = document.getElementById("trigger-native-install");
+  const inAppBrowserBox = document.getElementById("inapp-browser-install-box");
+  const openInChromeBtn = document.getElementById("open-in-chrome-install-btn");
+  const copyInstallLinkBtn = document.getElementById("copy-install-link-btn");
+  const installModalHint = document.getElementById("install-modal-hint");
 
-  window.addEventListener("beforeinstallprompt", (event) => {
-    event.preventDefault();
-    deferredPrompt = event;
-    if (nativeCtaBox) {
+  const ua = navigator.userAgent || "";
+  const isIOS = /iPad|iPhone|iPod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/i.test(ua);
+  const isInAppBrowser = /FBAN|FBAV|FB_IAB|Instagram|Messenger|Line\/|MicroMessenger/i.test(ua);
+
+  function isStandaloneMode() {
+    return (
+      (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+      window.navigator.standalone === true
+    );
+  }
+
+  function setInstallButtonsVisible(visible) {
+    [installBtn, mobileInstallBtn].forEach((btn) => {
+      if (!btn) return;
+      btn.classList.toggle("hidden", !visible);
+    });
+  }
+
+  function syncInstallReadyUi() {
+    if (isStandaloneMode()) {
+      setInstallButtonsVisible(false);
+      return;
+    }
+    if (deferredPrompt && nativeCtaBox) {
       nativeCtaBox.classList.remove("hidden");
     }
     if (installBtn) {
-      installBtn.querySelector("span").textContent = "Install App";
+      const label = installBtn.querySelector("span");
+      if (label) label.textContent = "Install App";
     }
-  });
+  }
+
+  function captureInstallPrompt(event) {
+    event.preventDefault();
+    deferredPrompt = event;
+    window.__deferredInstallPrompt = event;
+    syncInstallReadyUi();
+    if (waitingForPromptResolve) {
+      const resolveFn = waitingForPromptResolve;
+      waitingForPromptResolve = null;
+      resolveFn(event);
+    }
+  }
+
+  window.addEventListener("beforeinstallprompt", captureInstallPrompt);
 
   window.addEventListener("appinstalled", () => {
     deferredPrompt = null;
+    window.__deferredInstallPrompt = null;
     if (nativeCtaBox) nativeCtaBox.classList.add("hidden");
+    setInstallButtonsVisible(false);
     closeModal("install-modal");
-    showToast("App installed on your device!", "success");
+    showToast("MotoRentals installed on your device!", "success");
   });
 
-  async function handleInstallClick() {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const choice = await deferredPrompt.userChoice;
-      deferredPrompt = null;
-      if (nativeCtaBox) nativeCtaBox.classList.add("hidden");
-      if (choice && choice.outcome === "accepted") {
-        showToast("Installing app...", "success");
-      }
-    } else {
-      openModal("install-modal");
+  syncInstallReadyUi();
+
+  function waitBrieflyForInstallPrompt(timeoutMs) {
+    if (deferredPrompt || window.__deferredInstallPrompt) {
+      deferredPrompt = deferredPrompt || window.__deferredInstallPrompt;
+      return Promise.resolve(deferredPrompt);
     }
+    if (isIOS || isInAppBrowser) {
+      return Promise.resolve(null);
+    }
+    return new Promise((resolve) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          waitingForPromptResolve = null;
+          resolve(deferredPrompt || window.__deferredInstallPrompt || null);
+        }
+      }, timeoutMs);
+      waitingForPromptResolve = (ev) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(ev);
+        }
+      };
+    });
+  }
+
+  function prepareFallbackInstallModal() {
+    if (inAppBrowserBox) {
+      inAppBrowserBox.classList.toggle("hidden", !isInAppBrowser);
+    }
+    if (openInChromeBtn) {
+      if (isAndroid) {
+        const cleanHostPath = `${window.location.host}${window.location.pathname}${window.location.search}`;
+        openInChromeBtn.href = `intent://${cleanHostPath}#Intent;scheme=https;package=com.android.chrome;end`;
+        openInChromeBtn.classList.remove("hidden");
+      } else {
+        openInChromeBtn.classList.add("hidden");
+      }
+    }
+    if (installModalHint) {
+      if (isInAppBrowser) {
+        installModalHint.textContent = "Opened inside Facebook / Messenger? Open in Chrome first for direct 1-tap install.";
+      } else if (isIOS) {
+        installModalHint.textContent = "On iPhone/iPad Safari, tap Share then 'Add to Home Screen' to install.";
+      } else {
+        installModalHint.textContent = "Already installed on your Home Screen, or tap your browser menu below to install.";
+      }
+    }
+    document.querySelectorAll("[data-install-platform]").forEach((box) => {
+      const plat = box.getAttribute("data-install-platform");
+      if (isIOS) {
+        box.classList.toggle("hidden", plat !== "ios");
+      } else if (isAndroid) {
+        box.classList.toggle("hidden", plat !== "android");
+      } else {
+        box.classList.remove("hidden");
+      }
+    });
+  }
+
+  async function triggerNativeInstallPrompt(promptEvent) {
+    try {
+      await promptEvent.prompt();
+      const choice = await promptEvent.userChoice;
+      deferredPrompt = null;
+      window.__deferredInstallPrompt = null;
+      if (nativeCtaBox) nativeCtaBox.classList.add("hidden");
+      closeModal("install-modal");
+      if (choice && choice.outcome === "accepted") {
+        showToast("Installing MotoRentals app...", "success");
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function handleInstallClick() {
+    if (isStandaloneMode()) {
+      showToast("MotoRentals is already installed!", "success");
+      return;
+    }
+    deferredPrompt = deferredPrompt || window.__deferredInstallPrompt;
+    if (deferredPrompt) {
+      const triggered = await triggerNativeInstallPrompt(deferredPrompt);
+      if (triggered) return;
+    }
+
+    // Wait briefly in case Chrome is still finishing beforeinstallprompt on first page load
+    const readyPrompt = await waitBrieflyForInstallPrompt(900);
+    if (readyPrompt) {
+      const triggered = await triggerNativeInstallPrompt(readyPrompt);
+      if (triggered) return;
+    }
+
+    prepareFallbackInstallModal();
+    openModal("install-modal");
+  }
+
+  if (copyInstallLinkBtn) {
+    copyInstallLinkBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        showToast("Link copied! Paste in Chrome to install directly.", "success");
+      } catch (_) {
+        showToast(window.location.href, "info");
+      }
+    });
   }
 
   if (installBtn) installBtn.addEventListener("click", handleInstallClick);

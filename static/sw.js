@@ -1,4 +1,4 @@
-const CACHE_VERSION = "motoride-pwa-v20";
+const CACHE_VERSION = "motoride-pwa-v21";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -9,7 +9,7 @@ const PRECACHE_URLS = [
   "/offline",
   "/manifest.webmanifest",
   "/static/css/style.css?v=18",
-  "/static/js/pwa.js?v=18",
+  "/static/js/pwa.js?v=21",
   "/static/js/calls.js?v=18",
   "/static/js/push.js?v=18",
   "/static/js/storefront.js?v=19",
