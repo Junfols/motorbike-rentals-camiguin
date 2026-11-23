@@ -937,7 +937,10 @@
 
   let activeFullscreenQrMeta = null;
 
-  function openFullscreenQrModal(meta) {
+  function renderFullscreenQrModal(mode) {
+    const effectiveMode =
+      mode === "shop" && !(partnerQrShopState && partnerQrShopState.slug) ? "customer" : mode || "customer";
+    const meta = getAppQrMeta(effectiveMode);
     activeFullscreenQrMeta = meta;
     const titleEl = document.getElementById("qr-fullscreen-title");
     const descEl = document.getElementById("qr-fullscreen-desc");
@@ -950,6 +953,14 @@
       imgEl.alt = meta.heading;
     }
     if (urlEl) urlEl.textContent = meta.url;
+    document.querySelectorAll("[data-modal-qr-mode]").forEach((btn) => {
+      btn.classList.toggle("active", btn.getAttribute("data-modal-qr-mode") === meta.mode);
+    });
+  }
+
+  function openFullscreenQrModal(metaOrMode) {
+    const mode = typeof metaOrMode === "string" ? metaOrMode : (metaOrMode && metaOrMode.mode) || "customer";
+    renderFullscreenQrModal(mode);
     openModal("app-qr-fullscreen-modal");
   }
 
@@ -975,6 +986,56 @@
   }
 
   function initAppShareQrWidgets() {
+    // Global 1-tap QR buttons (header QR button on every page + Partner showcase button)
+    document.querySelectorAll("[data-open-app-qr]").forEach((btn) => {
+      if (btn.dataset.qrBound) return;
+      btn.dataset.qrBound = "1";
+      btn.addEventListener("click", () => {
+        const requested = btn.getAttribute("data-open-app-qr") || "";
+        const defaultMode =
+          requested ||
+          (partnerQrShopState && partnerQrShopState.slug ? "shop" : "customer");
+        openFullscreenQrModal(defaultMode);
+      });
+    });
+
+    // Mode switch tabs inside the Fullscreen QR Modal
+    document.querySelectorAll("[data-modal-qr-mode]").forEach((tab) => {
+      if (tab.dataset.qrBound) return;
+      tab.dataset.qrBound = "1";
+      tab.addEventListener("click", () => {
+        renderFullscreenQrModal(tab.getAttribute("data-modal-qr-mode") || "customer");
+      });
+    });
+
+    const modalDlBtn = document.getElementById("qr-fullscreen-download-btn");
+    if (modalDlBtn && !modalDlBtn.dataset.bound) {
+      modalDlBtn.dataset.bound = "1";
+      modalDlBtn.addEventListener("click", () => {
+        downloadBrandedQrPoster(activeFullscreenQrMeta || getAppQrMeta("customer"));
+      });
+    }
+    const modalShareBtn = document.getElementById("qr-fullscreen-share-btn");
+    if (modalShareBtn && !modalShareBtn.dataset.bound) {
+      modalShareBtn.dataset.bound = "1";
+      modalShareBtn.addEventListener("click", () => {
+        shareAppQrLink(activeFullscreenQrMeta || getAppQrMeta("customer"));
+      });
+    }
+    const modalCopyBtn = document.getElementById("qr-fullscreen-copy-btn");
+    if (modalCopyBtn && !modalCopyBtn.dataset.bound) {
+      modalCopyBtn.dataset.bound = "1";
+      modalCopyBtn.addEventListener("click", async () => {
+        const meta = activeFullscreenQrMeta || getAppQrMeta("customer");
+        try {
+          await navigator.clipboard.writeText(meta.url);
+          showToast("App link copied!", "success");
+        } catch (_) {
+          showToast(meta.url, "info");
+        }
+      });
+    }
+
     const widgets = document.querySelectorAll("[data-app-qr-widget]");
     if (!widgets.length) return;
 
@@ -1021,21 +1082,6 @@
         });
       }
     });
-
-    const modalDlBtn = document.getElementById("qr-fullscreen-download-btn");
-    if (modalDlBtn && !modalDlBtn.dataset.bound) {
-      modalDlBtn.dataset.bound = "1";
-      modalDlBtn.addEventListener("click", () => {
-        downloadBrandedQrPoster(activeFullscreenQrMeta || getAppQrMeta("customer"));
-      });
-    }
-    const modalShareBtn = document.getElementById("qr-fullscreen-share-btn");
-    if (modalShareBtn && !modalShareBtn.dataset.bound) {
-      modalShareBtn.dataset.bound = "1";
-      modalShareBtn.addEventListener("click", () => {
-        shareAppQrLink(activeFullscreenQrMeta || getAppQrMeta("customer"));
-      });
-    }
   }
 
   function configurePartnerShareQr(shop) {
@@ -1044,6 +1090,10 @@
       slug: shop.slug,
       shop_name: shop.shop_name || "My Rental Shop",
     };
+    const modalShopTab = document.querySelector("[data-modal-qr-shop-tab]");
+    if (modalShopTab) {
+      modalShopTab.classList.remove("hidden");
+    }
     document.querySelectorAll("[data-app-qr-widget]").forEach((widget) => {
       const shopTab = widget.querySelector("[data-qr-shop-tab]");
       if (shopTab) {
