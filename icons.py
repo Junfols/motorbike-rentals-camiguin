@@ -148,18 +148,23 @@ def _render_pixel(nx: float, ny: float, size: int, maskable: bool) -> tuple[int,
 
 def ensure_icons(force: bool = False) -> None:
     """Create SVG and PNG PWA icons if they do not already exist."""
-    os.makedirs(ICONS_DIR, exist_ok=True)
     svg_path = os.path.join(ICONS_DIR, "icon.svg")
-    if force or not os.path.exists(svg_path):
-        with open(svg_path, "w", encoding="utf-8") as f:
-            f.write(SVG_ICON)
-
     targets = [
         ("icon-192.png", 192, False),
         ("icon-512.png", 512, False),
         ("icon-maskable.png", 512, True),
         ("apple-touch-icon.png", 180, False),
     ]
+    if not force and os.path.exists(svg_path) and all(
+        os.path.exists(os.path.join(ICONS_DIR, filename)) for filename, _, _ in targets
+    ):
+        return
+
+    os.makedirs(ICONS_DIR, exist_ok=True)
+    if force or not os.path.exists(svg_path):
+        with open(svg_path, "w", encoding="utf-8") as f:
+            f.write(SVG_ICON)
+
     for filename, size, maskable in targets:
         out_path = os.path.join(ICONS_DIR, filename)
         if force or not os.path.exists(out_path):

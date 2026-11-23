@@ -3338,6 +3338,30 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         completed_rem = partner_client.post(f"/api/partner/bookings/{booking_id}/remind")
         self.assertEqual(completed_rem.status_code, 400)
 
+    def test_vercel_serverless_config_and_readonly_safe_startup(self):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        vercel_cfg_path = os.path.join(repo_root, "vercel.json")
+        self.assertTrue(os.path.exists(vercel_cfg_path))
+        with open(vercel_cfg_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        self.assertEqual(cfg.get("regions"), ["sin1"])
+        app_fn = cfg.get("functions", {}).get("app.py", {})
+        self.assertGreaterEqual(app_fn.get("maxDuration", 0), 15)
+        exclude = app_fn.get("excludeFiles", "")
+        self.assertNotIn("static", exclude)
+        self.assertNotIn("templates", exclude)
+
+        with patch.dict(os.environ, {"VERCEL": "1"}, clear=False):
+            os.environ.pop("MOTORIDE_DATA_DIR", None)
+            os.environ.pop("MOTORIDE_DB_PATH", None)
+            v_app = create_app({"TESTING": True, "DATABASE_URL": ""})
+            self.assertTrue(v_app.config["UPLOAD_FOLDER"].startswith("/tmp/motoride"))
+            self.assertTrue(v_app.config["DB_PATH"].startswith("/tmp/motoride"))
+            vc = v_app.test_client()
+            self.assertEqual(vc.get("/api/health").status_code, 200)
+            with vc.get("/static/css/style.css") as css_resp:
+                self.assertEqual(css_resp.status_code, 200)
+
 
 if __name__ == "__main__":
     unittest.main()

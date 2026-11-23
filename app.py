@@ -573,7 +573,10 @@ def create_app(test_config: dict | None = None) -> Flask:
     )
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
-    data_dir = os.environ.get("MOTORIDE_DATA_DIR")
+    is_vercel = bool(os.environ.get("VERCEL"))
+    data_dir = os.environ.get("MOTORIDE_DATA_DIR") or (
+        "/tmp/motoride" if is_vercel else None
+    )
     if data_dir:
         os.makedirs(data_dir, exist_ok=True)
     default_db = os.path.join(data_dir, "motoride.db") if data_dir else DEFAULT_DB_PATH
@@ -590,7 +593,11 @@ def create_app(test_config: dict | None = None) -> Flask:
         db_url = (test_config or {}).get("DATABASE_URL") or get_database_url() or ""
 
     upload_dir = (test_config or {}).get("UPLOAD_FOLDER") or default_uploads
-    os.makedirs(upload_dir, exist_ok=True)
+    try:
+        os.makedirs(upload_dir, exist_ok=True)
+    except OSError:
+        upload_dir = "/tmp/motoride/uploads"
+        os.makedirs(upload_dir, exist_ok=True)
 
     if not (test_config or {}).get("SKIP_ICONS"):
         ensure_icons(force=False)
