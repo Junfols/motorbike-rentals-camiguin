@@ -1,4 +1,4 @@
-const CACHE_VERSION = "motoride-pwa-v19";
+const CACHE_VERSION = "motoride-pwa-v20";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -15,9 +15,9 @@ const PRECACHE_URLS = [
   "/static/js/storefront.js?v=19",
   "/static/js/bookings.js?v=19",
   "/static/js/partner.js?v=19",
-  "/static/icons/icon-192.png",
-  "/static/icons/icon-512.png",
-  "/static/icons/icon.svg"
+  "/static/icons/icon-192.png?v=20",
+  "/static/icons/icon-512.png?v=20",
+  "/static/icons/icon.svg?v=20"
 ];
 
 self.addEventListener("install", (event) => {
@@ -155,8 +155,8 @@ self.addEventListener("push", (event) => {
   const title = data.title || "Motorbike Rentals Camiguin";
   const options = {
     body: data.body || "",
-    icon: data.icon || "/static/icons/icon-192.png",
-    badge: "/static/icons/icon.svg",
+    icon: data.icon || "/static/icons/icon-192.png?v=20",
+    badge: "/static/icons/icon.svg?v=20",
     tag: data.tag || "motoride-notification",
     data: { url: data.url || "/" },
     vibrate: [250, 100, 250, 100, 400],

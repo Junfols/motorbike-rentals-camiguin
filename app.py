@@ -883,12 +883,16 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.get("/manifest.webmanifest")
     def manifest(admin_app: bool = False):
         shop = get_settings(get_db())
-        shop_name = shop.get("shop_name", "Motorbike Rentals Camiguin")
-        short_name = (
-            shop_name
-            if len(shop_name) <= 15
-            else (shop_name.split()[-1] if len(shop_name.split()[-1]) <= 15 else shop_name[:12].strip())
-        )
+        shop_name = (shop.get("shop_name") or "Motorbike Rentals Camiguin").strip()
+        if shop_name.lower() == "motorbike rentals camiguin":
+            short_name = "MotoRentals"
+        elif len(shop_name) <= 15:
+            short_name = shop_name
+        elif "motorbike" in shop_name.lower():
+            short_name = "MotoRentals"
+        else:
+            short_name = shop_name[:12].strip()
+        icon_ver = "v=20"
         payload = {
             "id": "/",
             "name": shop_name,
@@ -906,25 +910,25 @@ def create_app(test_config: dict | None = None) -> Flask:
             "categories": ["travel", "lifestyle", "navigation"],
             "icons": [
                 {
-                    "src": "/static/icons/icon-192.png",
+                    "src": f"/static/icons/icon-192.png?{icon_ver}",
                     "sizes": "192x192",
                     "type": "image/png",
                     "purpose": "any",
                 },
                 {
-                    "src": "/static/icons/icon-512.png",
+                    "src": f"/static/icons/icon-512.png?{icon_ver}",
                     "sizes": "512x512",
                     "type": "image/png",
                     "purpose": "any",
                 },
                 {
-                    "src": "/static/icons/icon-maskable.png",
+                    "src": f"/static/icons/icon-maskable.png?{icon_ver}",
                     "sizes": "512x512",
                     "type": "image/png",
                     "purpose": "maskable",
                 },
                 {
-                    "src": "/static/icons/icon.svg",
+                    "src": f"/static/icons/icon.svg?{icon_ver}",
                     "sizes": "any",
                     "type": "image/svg+xml",
                     "purpose": "any",
@@ -935,19 +939,19 @@ def create_app(test_config: dict | None = None) -> Flask:
                     "name": "Browse Motorbikes",
                     "short_name": "Fleet",
                     "url": "/#fleet",
-                    "icons": [{"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"}],
+                    "icons": [{"src": f"/static/icons/icon-192.png?{icon_ver}", "sizes": "192x192", "type": "image/png"}],
                 },
                 {
                     "name": "My Bookings",
                     "short_name": "My Trips",
                     "url": "/bookings",
-                    "icons": [{"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"}],
+                    "icons": [{"src": f"/static/icons/icon-192.png?{icon_ver}", "sizes": "192x192", "type": "image/png"}],
                 },
                 {
                     "name": "Shop Portal",
                     "short_name": "Shop",
                     "url": "/shop",
-                    "icons": [{"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"}],
+                    "icons": [{"src": f"/static/icons/icon-192.png?{icon_ver}", "sizes": "192x192", "type": "image/png"}],
                 },
             ],
         }

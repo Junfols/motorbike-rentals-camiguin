@@ -1,17 +1,58 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0f172a"/>
-      <stop offset="100%" stop-color="#1e293b"/>
+    <linearGradient id="navyBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#132038"/>
+      <stop offset="100%" stop-color="#0b1324"/>
     </linearGradient>
-    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#fb923c"/>
+    <linearGradient id="sunGrad" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="45%" stop-color="#fb923c"/>
       <stop offset="100%" stop-color="#ea580c"/>
     </linearGradient>
+    <clipPath id="badgeClip">
+      <circle cx="256" cy="256" r="186"/>
+    </clipPath>
   </defs>
-  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <circle cx="256" cy="256" r="168" fill="none" stroke="url(#accent)" stroke-width="26"/>
-  <circle cx="256" cy="256" r="108" fill="none" stroke="#334155" stroke-width="10"/>
-  <path d="M156 322 L196 196 L256 266 L316 196 L356 322" fill="none" stroke="#ffffff" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="256" cy="144" r="18" fill="#fb923c"/>
+  <rect width="512" height="512" rx="112" fill="url(#navyBg)"/>
+  <circle cx="256" cy="256" r="218" fill="#17253d" opacity="0.55"/>
+  <g clip-path="url(#badgeClip)">
+    <circle cx="256" cy="256" r="186" fill="url(#sunGrad)"/>
+    <!-- Camiguin twin volcano peaks -->
+    <path d="M56 266 L152 152 L192 146 L236 186 L284 134 L318 134 L452 266 Z" fill="#2c3a4f"/>
+    <path d="M152 152 L176 178 L142 222 L114 236 Z" fill="#465770" opacity="0.65"/>
+    <path d="M284 134 L306 162 L276 208 L252 214 Z" fill="#465770" opacity="0.7"/>
+    <!-- Tropical palm silhouette -->
+    <path d="M366 266 Q374 232 390 208" fill="none" stroke="#162235" stroke-width="9" stroke-linecap="round"/>
+    <path d="M390 208 Q364 196 346 212 Q368 208 390 212 Z" fill="#162235"/>
+    <path d="M390 208 Q376 184 358 186 Q378 194 390 208 Z" fill="#162235"/>
+    <path d="M390 208 Q412 184 426 196 Q408 198 390 210 Z" fill="#162235"/>
+    <path d="M390 208 Q420 204 432 220 Q412 214 390 212 Z" fill="#162235"/>
+    <!-- Curved white island road reflection -->
+    <path d="M62 372 Q256 344 450 372 L450 456 L62 456 Z" fill="#ffffff"/>
+    <path d="M210 380 Q320 374 410 418 L340 450 L185 430 Z" fill="#cbd5e1" opacity="0.65"/>
+    <path d="M62 368 Q256 344 450 368" fill="none" stroke="#0f172a" stroke-width="10" stroke-linecap="round"/>
+  </g>
+  <!-- Sporty scooter silhouette -->
+  <g stroke="#0f172a" stroke-width="10" stroke-linejoin="round" stroke-linecap="round">
+    <!-- Rear & front wheels -->
+    <circle cx="164" cy="330" r="42" fill="#1e293b"/>
+    <circle cx="164" cy="330" r="22" fill="#ffffff" stroke="#ea580c" stroke-width="8"/>
+    <circle cx="352" cy="330" r="42" fill="#1e293b"/>
+    <circle cx="352" cy="330" r="22" fill="#ffffff" stroke="#ea580c" stroke-width="8"/>
+    <!-- Exhaust -->
+    <path d="M120 296 L194 334 L184 350 L114 310 Z" fill="#e2e8f0"/>
+    <!-- Main scooter body -->
+    <path d="M132 248 L224 252 Q246 278 274 282 L300 250 L282 214 Q282 198 308 198 L340 220 L360 254 Q362 276 336 286 L312 346 L232 346 L186 322 L126 274 Z" fill="#ffffff"/>
+    <!-- Seat -->
+    <path d="M148 242 Q204 236 254 268 L244 278 Q196 258 144 256 Z" fill="#1e293b"/>
+    <!-- Orange visor & trim -->
+    <path d="M308 196 L326 184 L348 220 L330 224 Z" fill="#f97316"/>
+    <path d="M332 232 L356 244 L350 258 L328 246 Z" fill="#f97316"/>
+    <path d="M214 304 L286 312 L278 326 L210 318 Z" fill="#f97316"/>
+    <!-- Front fender -->
+    <path d="M324 286 Q364 276 384 300 L352 302 Z" fill="#ffffff"/>
+    <!-- Handlebar & mirror -->
+    <path d="M262 204 L298 198 L286 178" fill="none" stroke="#ffffff" stroke-width="10"/>
+    <ellipse cx="268" cy="172" rx="14" ry="9" fill="#ffffff"/>
+  </g>
 </svg>

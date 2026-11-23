@@ -59,6 +59,8 @@ class MotorbikeRentalPWATests(unittest.TestCase):
         self.assertEqual(manifest_resp.status_code, 200)
         self.assertIn("application/manifest+json", manifest_resp.content_type)
         manifest = manifest_resp.get_json()
+        self.assertEqual(manifest["name"], "Motorbike Rentals Camiguin")
+        self.assertEqual(manifest["short_name"], "MotoRentals")
         self.assertEqual(manifest["display"], "standalone")
         self.assertTrue(any(icon["sizes"] == "192x192" for icon in manifest["icons"]))
         self.assertTrue(any(icon["sizes"] == "512x512" for icon in manifest["icons"]))
@@ -1684,7 +1686,7 @@ class MotorbikeRentalPWATests(unittest.TestCase):
     def test_qr_upload_accepts_jfif_and_highres_images_and_network_first_scripts(self):
         with self.client.get("/sw.js") as sw_resp:
             sw_text = sw_resp.get_data(as_text=True)
-        self.assertIn("motoride-pwa-v19", sw_text)
+        self.assertIn("motoride-pwa-v20", sw_text)
         self.assertIn('/static/js/', sw_text)
 
         login_resp = self.client.post("/api/admin/login", json={"password": "admin1234"})
