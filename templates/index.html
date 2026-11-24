@@ -11,7 +11,7 @@
     {% set og_desc = featured_shop.description or ('Book verified motorbikes directly from ' ~ featured_shop.shop_name ~ ' in ' ~ featured_shop.municipality ~ ', Camiguin Island.') %}
     {% set og_url = base_origin ~ '/shop/' ~ featured_shop.slug %}
   {% else %}
-    {% set og_img_abs = base_origin ~ '/static/icons/icon-512.png' %}
+    {% set og_img_abs = base_origin ~ '/static/assets/camiguin-hero.jpg?v=24' %}
     {% set og_title = shop.shop_name ~ ' — Island Motorbike Marketplace' %}
     {% set og_desc = shop.tagline %}
     {% set og_url = base_origin ~ '/' %}
@@ -31,6 +31,7 @@
 {% block content %}
 <section class="hero-section">
   <div class="hero-bg">
+    <img src="/static/assets/camiguin-hero.jpg?v=24" alt="Camiguin Island volcanic peaks, palm-lined coastal road, and White Island sandbar at sunset" class="hero-img" fetchpriority="high">
     <div class="hero-overlay"></div>
   </div>
 

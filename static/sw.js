@@ -1,4 +1,4 @@
-const CACHE_VERSION = "motoride-pwa-v23";
+const CACHE_VERSION = "motoride-pwa-v24";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -8,13 +8,14 @@ const PRECACHE_URLS = [
   "/bookings",
   "/offline",
   "/manifest.webmanifest",
-  "/static/css/style.css?v=23",
+  "/static/css/style.css?v=24",
   "/static/js/pwa.js?v=23",
   "/static/js/calls.js?v=18",
   "/static/js/push.js?v=18",
   "/static/js/storefront.js?v=19",
   "/static/js/bookings.js?v=19",
   "/static/js/partner.js?v=22",
+  "/static/assets/camiguin-hero.jpg?v=24",
   "/static/icons/icon-192.png?v=20",
   "/static/icons/icon-512.png?v=20",
   "/static/icons/icon.svg?v=20"
